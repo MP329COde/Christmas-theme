@@ -281,3 +281,10 @@ button.danger:active {
 #status:not(:empty) {
   opacity: 1;
 }
+
+.hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}

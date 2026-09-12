@@ -71,6 +71,36 @@ test('garland style select defaults to multicolor and can be changed', async ({ 
   await expect(select).toHaveValue('cool');
 });
 
+test('max snow depth slider updates the displayed value', async ({ page }) => {
+  const slider = page.locator('[data-testid="max-snow-height"]');
+  await expect(page.locator('#max-snow-height-value')).toHaveText('60 px');
+  await slider.fill('300');
+  await expect(page.locator('#max-snow-height-value')).toHaveText('300 px');
+});
+
+test('flake size and decoration size sliders update their readouts', async ({ page }) => {
+  await page.locator('[data-testid="flake-scale"]').fill('250');
+  await expect(page.locator('#flake-scale-value')).toHaveText('250%');
+  await page.locator('[data-testid="decor-scale"]').fill('50');
+  await expect(page.locator('#decor-scale-value')).toHaveText('50%');
+});
+
+test('scene toggles (tree lights, stockings, mantel swag) default on and respond', async ({ page }) => {
+  for (const testid of ['tree-lights-toggle', 'stockings-toggle', 'mantel-garland-toggle']) {
+    const toggle = page.locator(`[data-testid="${testid}"]`);
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+  }
+});
+
+test('fps cap defaults to unlimited and can be changed', async ({ page }) => {
+  const select = page.locator('[data-testid="fps-limit"]');
+  await expect(select).toHaveValue('0');
+  await select.selectOption('120');
+  await expect(select).toHaveValue('120');
+});
+
 test('volume slider updates label and persists across reload', async ({ page }) => {
   const slider = page.locator('[data-testid="volume"]');
   await slider.fill('80');

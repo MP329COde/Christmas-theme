@@ -25,7 +25,14 @@ const DEFAULT_SETTINGS = {
   fireplaceDecoration: true,
   snowWind: 0.3,
   snowAccumulate: true,
+  maxSnowHeight: 60,
+  flakeScale: 1,
   garlandStyle: 'multicolor',
+  treeLights: true,
+  stockings: true,
+  mantelGarland: true,
+  decorScale: 1,
+  fpsLimit: 0,
   soundVolume: 0.4,
   autostart: false,
 };
@@ -79,6 +86,29 @@ export function onSettingsChanged(callback) {
     .then((fn) => {
       unlisten = fn;
     });
+  return () => unlisten();
+}
+
+// The overlay publishes its measured frame rate / frame cost so the
+// settings window can display it. Broadcast straight over the Tauri event
+// bus rather than through a Rust command: it fires twice a second and has
+// no business touching the backend.
+export function publishStats(stats) {
+  if (!isTauri) return;
+  try {
+    window.__TAURI__.event.emit('overlay-stats', stats);
+  } catch {
+    /* the overlay must never break because stats couldn't be sent */
+  }
+}
+
+/// Settings-window side of the above.
+export function onStats(callback) {
+  if (!isTauri) return () => {};
+  let unlisten = () => {};
+  window.__TAURI__.event
+    .listen('overlay-stats', (event) => callback(event.payload))
+    .then((fn) => { unlisten = fn; });
   return () => unlisten();
 }
 

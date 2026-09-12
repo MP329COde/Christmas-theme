@@ -26,9 +26,19 @@
       <input type="range" id="snow-wind" data-testid="snow-wind" min="0" max="100" step="5" />
     </section>
 
+    <section>
+      <label for="flake-scale">Flake size <span id="flake-scale-value">100%</span></label>
+      <input type="range" id="flake-scale" data-testid="flake-scale" min="40" max="250" step="10" />
+    </section>
+
     <section class="toggle-row">
       <label for="accumulate-toggle">Accumulate on ground</label>
       <input type="checkbox" id="accumulate-toggle" data-testid="accumulate-toggle" />
+    </section>
+
+    <section>
+      <label for="max-snow-height">Max snow depth <span id="max-snow-height-value">60 px</span></label>
+      <input type="range" id="max-snow-height" data-testid="max-snow-height" min="0" max="300" step="10" />
     </section>
 
     <h2>Decorations</h2>
@@ -58,8 +68,28 @@
     </section>
 
     <section class="toggle-row">
+      <label for="tree-lights-toggle">💡 String lights on trees</label>
+      <input type="checkbox" id="tree-lights-toggle" data-testid="tree-lights-toggle" />
+    </section>
+
+    <section class="toggle-row">
       <label for="fireplace-toggle">🔥 Fireplace</label>
       <input type="checkbox" id="fireplace-toggle" data-testid="fireplace-toggle" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="stockings-toggle">🧦 Stockings on the mantel</label>
+      <input type="checkbox" id="stockings-toggle" data-testid="stockings-toggle" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="mantel-garland-toggle">🌿 Pine swag on the mantel</label>
+      <input type="checkbox" id="mantel-garland-toggle" data-testid="mantel-garland-toggle" />
+    </section>
+
+    <section>
+      <label for="decor-scale">Decoration size <span id="decor-scale-value">100%</span></label>
+      <input type="range" id="decor-scale" data-testid="decor-scale" min="50" max="200" step="10" />
     </section>
 
     <h2>Sound</h2>
@@ -68,6 +98,22 @@
       <label for="volume">Ambient volume <span id="volume-value">40%</span></label>
       <input type="range" id="volume" data-testid="volume" min="0" max="100" step="5" />
     </section>
+
+    <h2>Performance</h2>
+
+    <section>
+      <label for="fps-limit">Frame rate cap</label>
+      <select id="fps-limit" data-testid="fps-limit">
+        <option value="0">Unlimited (match display)</option>
+        <option value="144">144 fps</option>
+        <option value="120">120 fps</option>
+        <option value="60">60 fps</option>
+        <option value="30">30 fps (battery saver)</option>
+      </select>
+      <p class="hint" data-testid="fps-readout" id="fps-readout">Waiting for the overlay…</p>
+    </section>
+
+    <h2>System</h2>
 
     <section class="toggle-row">
       <label for="autostart-toggle">Start automatically with system</label>

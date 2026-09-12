@@ -296,6 +296,32 @@ app look far less finished than intended:
   still native `<input>` elements styled with `appearance: none`, so they stay keyboard
   accessible and directly clickable by the Playwright suite.
 
+## Added since (reference-matched scene, 120fps budget, more controls)
+
+Rebuilt against photo references of a decorated living room and a snowy chalet.
+
+- **Scene**: conifers are now a dense mass of individually drawn boughs (curved stems
+  with needle pairs) rather than stacked triangles, carrying warm string lights, baubles
+  with specular highlights, snow-laden branch tips and a glowing star. The fireplace is
+  warm irregular limestone with per-stone tone and mottling, a chunky timber mantel, a
+  pine swag with cones and berries draped over it, stockings hung beneath, a red firebrick
+  firebox with grate and logs, and light spilling into the room.
+- **120fps budget.** The renderer was restructured around it: everything static is baked
+  once into offscreen canvases, the flame is a pre-rendered 36-frame loop, glows are
+  reusable tinted sprites, snow crystals are a strip of pre-rotated frames, and the
+  settled snow bank is its own canvas rebuilt only when a flake actually lands. The hot
+  loop issues drawImage calls and creates **zero** gradients per frame. Measured at
+  1920x1080: **0.57ms/frame at 120 flakes, 0.98ms at 300** — against the 8.33ms a 120fps
+  frame allows, so 8-15x headroom. `tests/overlay.spec.js` asserts the frame cost stays
+  under 4ms so a future change can't quietly regress it.
+- **Frame rate is adjustable** (`fpsLimit`): unlimited (match the display — what a 120Hz
+  ProMotion panel needs to actually run at 120), 144, 120, 60, or 30 for battery. The
+  overlay publishes its measured fps and frame cost over the event bus and the settings
+  window shows them live, so the number is verifiable rather than asserted.
+- **More controls**: max snow depth (0-300px), flake size (40-250%), decoration size
+  (50-200%), string lights on trees, stockings, mantel swag — alongside the existing
+  density, wind, accumulation and garland palette.
+
 ## Contributing
 
 Issues and PRs welcome. Please:

@@ -1,16 +1,29 @@
-import { listThemes, getSettings, saveSettings, disableEverything } from '../shared/bridge.js';
+import {
+  listThemes, getSettings, saveSettings, disableEverything, onStats,
+} from '../shared/bridge.js';
 
 const themeSelect = document.getElementById('theme-select');
 const densityInput = document.getElementById('snow-density');
 const densityValue = document.getElementById('snow-density-value');
 const windInput = document.getElementById('snow-wind');
 const windValue = document.getElementById('snow-wind-value');
+const flakeScaleInput = document.getElementById('flake-scale');
+const flakeScaleValue = document.getElementById('flake-scale-value');
 const accumulateToggle = document.getElementById('accumulate-toggle');
+const maxSnowInput = document.getElementById('max-snow-height');
+const maxSnowValue = document.getElementById('max-snow-height-value');
 const dockToggle = document.getElementById('dock-toggle');
 const treesToggle = document.getElementById('trees-toggle');
 const garlandsToggle = document.getElementById('garlands-toggle');
 const garlandStyleSelect = document.getElementById('garland-style');
+const treeLightsToggle = document.getElementById('tree-lights-toggle');
 const fireplaceToggle = document.getElementById('fireplace-toggle');
+const stockingsToggle = document.getElementById('stockings-toggle');
+const mantelGarlandToggle = document.getElementById('mantel-garland-toggle');
+const decorScaleInput = document.getElementById('decor-scale');
+const decorScaleValue = document.getElementById('decor-scale-value');
+const fpsLimitSelect = document.getElementById('fps-limit');
+const fpsReadout = document.getElementById('fps-readout');
 const volumeInput = document.getElementById('volume');
 const volumeValue = document.getElementById('volume-value');
 const autostartToggle = document.getElementById('autostart-toggle');
@@ -54,12 +67,19 @@ async function persist() {
     snowDensity: Number(densityInput.value),
     snowWind: Number(windInput.value) / 100,
     snowAccumulate: accumulateToggle.checked,
+    maxSnowHeight: Number(maxSnowInput.value),
+    flakeScale: Number(flakeScaleInput.value) / 100,
     dockDecoration: dockToggle.checked,
     taskbarDecoration: dockToggle.checked,
     treesDecoration: treesToggle.checked,
     garlandsDecoration: garlandsToggle.checked,
     garlandStyle: garlandStyleSelect.value,
+    treeLights: treeLightsToggle.checked,
     fireplaceDecoration: fireplaceToggle.checked,
+    stockings: stockingsToggle.checked,
+    mantelGarland: mantelGarlandToggle.checked,
+    decorScale: Number(decorScaleInput.value) / 100,
+    fpsLimit: Number(fpsLimitSelect.value),
     soundVolume: Number(volumeInput.value) / 100,
     autostart: autostartToggle.checked,
   };
@@ -83,16 +103,27 @@ async function init() {
   windInput.value = Math.round(settings.snowWind * 100);
   windValue.textContent = `${Math.round(settings.snowWind * 100)}%`;
   accumulateToggle.checked = settings.snowAccumulate;
+  maxSnowInput.value = settings.maxSnowHeight;
+  maxSnowValue.textContent = `${settings.maxSnowHeight} px`;
+  flakeScaleInput.value = Math.round(settings.flakeScale * 100);
+  flakeScaleValue.textContent = `${Math.round(settings.flakeScale * 100)}%`;
   dockToggle.checked = settings.dockDecoration;
   treesToggle.checked = settings.treesDecoration;
   garlandsToggle.checked = settings.garlandsDecoration;
   garlandStyleSelect.value = settings.garlandStyle;
+  treeLightsToggle.checked = settings.treeLights;
   fireplaceToggle.checked = settings.fireplaceDecoration;
+  stockingsToggle.checked = settings.stockings;
+  mantelGarlandToggle.checked = settings.mantelGarland;
+  decorScaleInput.value = Math.round(settings.decorScale * 100);
+  decorScaleValue.textContent = `${Math.round(settings.decorScale * 100)}%`;
+  fpsLimitSelect.value = String(settings.fpsLimit);
   volumeInput.value = Math.round(settings.soundVolume * 100);
   volumeValue.textContent = `${Math.round(settings.soundVolume * 100)}%`;
   autostartToggle.checked = settings.autostart;
 
-  for (const slider of [densityInput, windInput, volumeInput]) syncRangeFill(slider);
+  for (const slider of [densityInput, windInput, volumeInput, maxSnowInput,
+    flakeScaleInput, decorScaleInput]) syncRangeFill(slider);
   applyThemeColors(currentTheme());
 }
 
@@ -113,7 +144,29 @@ windInput.addEventListener('input', () => {
 });
 windInput.addEventListener('change', persist);
 
+maxSnowInput.addEventListener('input', () => {
+  maxSnowValue.textContent = `${maxSnowInput.value} px`;
+  syncRangeFill(maxSnowInput);
+});
+maxSnowInput.addEventListener('change', persist);
+
+flakeScaleInput.addEventListener('input', () => {
+  flakeScaleValue.textContent = `${flakeScaleInput.value}%`;
+  syncRangeFill(flakeScaleInput);
+});
+flakeScaleInput.addEventListener('change', persist);
+
+decorScaleInput.addEventListener('input', () => {
+  decorScaleValue.textContent = `${decorScaleInput.value}%`;
+  syncRangeFill(decorScaleInput);
+});
+decorScaleInput.addEventListener('change', persist);
+
 accumulateToggle.addEventListener('change', persist);
+treeLightsToggle.addEventListener('change', persist);
+stockingsToggle.addEventListener('change', persist);
+mantelGarlandToggle.addEventListener('change', persist);
+fpsLimitSelect.addEventListener('change', persist);
 dockToggle.addEventListener('change', persist);
 treesToggle.addEventListener('change', persist);
 garlandsToggle.addEventListener('change', persist);
@@ -131,6 +184,13 @@ autostartToggle.addEventListener('change', persist);
 disableBtn.addEventListener('click', async () => {
   await disableEverything();
   setStatus('Everything disabled');
+});
+
+// Live frame-rate readout straight from the overlay, so the cap setting
+// and the 120fps target are something you can see rather than take on
+// trust. Only ever arrives when running inside Tauri.
+onStats(({ fps, frameMs, particles }) => {
+  fpsReadout.textContent = `${fps} fps · ${frameMs} ms/frame · ${particles} flakes`;
 });
 
 init();

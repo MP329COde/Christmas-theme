@@ -40,3 +40,23 @@ test('canvas renders non-transparent pixels after a few frames', async ({ page }
   });
   expect(hasContent).toBe(true);
 });
+
+test('fps limiter throttles the render loop', async ({ page }) => {
+  await page.evaluate(() => window.snowOverlay.setFpsLimit(30));
+  await page.waitForTimeout(2200);
+  const { fps } = await page.evaluate(() => window.snowOverlay.getStats());
+  // Generous window: the headless display runs at 60Hz, so a 30 cap should
+  // land near 30 and must not be running free at 60.
+  expect(fps).toBeGreaterThan(20);
+  expect(fps).toBeLessThan(45);
+});
+
+test('a full scene frame stays well inside the 120fps budget', async ({ page }) => {
+  await page.evaluate(() => window.snowOverlay.setFpsLimit(0));
+  await page.evaluate(() => window.snowOverlay.setDensity(300));
+  await page.waitForTimeout(2500);
+  const { frameMs } = await page.evaluate(() => window.snowOverlay.getStats());
+  // 120fps allows 8.33ms per frame. Fail well before that so a future
+  // change that quietly makes rendering expensive is caught here.
+  expect(frameMs).toBeLessThan(4);
+});
