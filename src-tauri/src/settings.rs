@@ -2,7 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+// #[serde(default)] at the container level means a settings.json saved by
+// an older version of the app (missing newly-added fields below) still
+// loads fine, filling in Default::default() for whatever's missing,
+// instead of failing to parse and silently discarding the user's saved
+// choices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppSettings {
     #[serde(rename = "themeId")]
     pub theme_id: String,
@@ -12,6 +18,12 @@ pub struct AppSettings {
     pub dock_decoration: bool,
     #[serde(rename = "taskbarDecoration")]
     pub taskbar_decoration: bool,
+    #[serde(rename = "treesDecoration")]
+    pub trees_decoration: bool,
+    #[serde(rename = "garlandsDecoration")]
+    pub garlands_decoration: bool,
+    #[serde(rename = "fireplaceDecoration")]
+    pub fireplace_decoration: bool,
     #[serde(rename = "soundVolume")]
     pub sound_volume: f32,
     pub autostart: bool,
@@ -24,6 +36,9 @@ impl Default for AppSettings {
             snow_density: 120,
             dock_decoration: true,
             taskbar_decoration: true,
+            trees_decoration: true,
+            garlands_decoration: true,
+            fireplace_decoration: true,
             sound_volume: 0.4,
             autostart: false,
         }

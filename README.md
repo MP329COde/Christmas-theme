@@ -13,10 +13,20 @@ snow overlay isn't a security risk).
 
 ## Features (V1)
 
-- **Snow overlay**: one transparent, borderless, always-on-top, click-through window per
-  connected monitor (multi-monitor setups get snow on every screen), with animated,
-  density-configurable falling snow and optional accumulation at the bottom of the screen.
-  Changing the theme or density in the settings window updates all overlay windows live.
+- **Snow overlay**: one transparent, borderless, click-through window per connected
+  monitor (multi-monitor setups get snow on every screen), with animated,
+  density-configurable falling snow and optional accumulation at the bottom of the
+  screen. Snowflakes render as either soft dots or faceted, gently-rotating six-branch
+  crystals for visual variety. The overlay sits at the *bottom* of the window stack (like
+  a live wallpaper), so it never gets in the way of using other applications — it shows
+  on bare desktop space and is naturally covered by whatever window is in front.
+  Changing the theme, density, or decoration toggles in the settings window updates all
+  overlay windows live, with no restart needed.
+- **Desktop decorations**, drawn on the overlay (one full scene per launch, not repeated
+  on every monitor in a multi-monitor setup): a pine tree with ornaments and a star
+  topper in each bottom corner, a twinkling light garland strung across the top of the
+  screen, and an animated fireplace with a flickering flame at bottom-center. Each is an
+  independent toggle in settings.
 - **Dock/taskbar decoration**: **not implemented yet** — the toggle exists in settings and
   is persisted, but nothing currently draws on the Dock or taskbar. See
   [Known limitations](#known-limitations) for the plan and why this is harder than it looks,
@@ -26,9 +36,9 @@ snow overlay isn't a security risk).
   are active. Reusable for future seasonal themes, and extensible by dropping extra
   `*.json` files into the app's config directory under `themes/`.
 - **Ambient sound**: optional fireplace crackle / sleigh bells, volume-controlled, muted by default volume choice per theme.
-- **Settings window**: theme picker, snow density slider, dock/taskbar toggle, volume
-  slider, autostart toggle, and a "disable everything" button that removes all
-  persisted state.
+- **Settings window**: theme picker, snow density slider, dock/taskbar toggle, tree/garland/
+  fireplace toggles, volume slider, autostart toggle, and a "disable everything" button
+  that removes all persisted state.
 
 ## Architecture at a glance
 
@@ -228,6 +238,20 @@ app look far less finished than intended:
   wallpaper: visible on empty desktop space, naturally covered by whatever window
   you're using) and removed `visible_on_all_workspaces`, so it no longer follows you
   into another virtual desktop or over a fullscreen app either.
+
+## Added since (visual pass)
+
+- **Nicer snowflakes**: about a third of flakes now render as faceted, gently-rotating
+  six-branch crystal outlines (`drawFlake` in `src/overlay/snow.js`) instead of every
+  flake being a plain soft dot.
+- **Desktop decorations**: `src/overlay/decor.js` adds a twinkling light garland
+  (`drawGarland`), a pine tree with ornaments and a star topper in each bottom corner
+  (`drawTrees`), and an animated fireplace with a flickering flame (`drawFireplace`).
+  Each has its own settings toggle (`treesDecoration`, `garlandsDecoration`,
+  `fireplaceDecoration` in `AppSettings`) and only renders on one overlay window
+  (`overlay-0`, checked via `window.__TAURI__.window.getCurrentWindow().label`) so a
+  multi-monitor setup gets one decorated scene, not the same trees repeated on every
+  screen.
 
 ## Contributing
 

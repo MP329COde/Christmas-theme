@@ -41,6 +41,15 @@ test('dock toggle responds to clicks', async ({ page }) => {
   await expect(toggle).not.toBeChecked();
 });
 
+test('decoration toggles (trees, garlands, fireplace) default on and respond to clicks', async ({ page }) => {
+  for (const testid of ['trees-toggle', 'garlands-toggle', 'fireplace-toggle']) {
+    const toggle = page.locator(`[data-testid="${testid}"]`);
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+  }
+});
+
 test('volume slider updates label and persists across reload', async ({ page }) => {
   const slider = page.locator('[data-testid="volume"]');
   await slider.fill('80');

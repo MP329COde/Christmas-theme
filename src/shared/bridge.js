@@ -20,6 +20,9 @@ const DEFAULT_SETTINGS = {
   snowDensity: 120,
   dockDecoration: true,
   taskbarDecoration: true,
+  treesDecoration: true,
+  garlandsDecoration: true,
+  fireplaceDecoration: true,
   soundVolume: 0.4,
   autostart: false,
 };

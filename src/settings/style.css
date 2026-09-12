@@ -27,6 +27,15 @@ h1 {
   margin-bottom: 20px;
 }
 
+h2 {
+  color: var(--accent);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+  margin: 22px 0 10px;
+}
+
 section {
   margin-bottom: 18px;
   display: flex;

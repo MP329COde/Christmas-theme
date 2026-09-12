@@ -1,4 +1,4 @@
-// Lightweight snow particle renderer. No Tauri-only APIs are used in the
+// Snow + desktop decorations renderer. No Tauri-only APIs are used in the
 // render path itself, so this file is directly testable via Playwright by
 // loading index.html from a plain static server (see docs/ARCHITECTURE.md,
 // section 5). Loading the initial theme/settings and reacting to live
@@ -6,6 +6,7 @@
 // Tauri.
 
 import { getSettings, listThemes, onSettingsChanged } from '../shared/bridge.js';
+import { drawGarland, drawTrees, drawFireplace, DEFAULT_GARLAND_COLORS } from './decor.js';
 
 const canvas = document.getElementById('snow');
 const ctx = canvas.getContext('2d');
@@ -19,9 +20,17 @@ let config = {
   color: '#ffffff',
 };
 
+// Decorations are independent of the snow theme config: they come from
+// AppSettings (user toggles), not the theme file, and only render on one
+// overlay window — see isPrimaryOverlay() below — so a multi-monitor setup
+// gets one decorated "scene", not the same trees repeated on every screen.
+let decorConfig = { trees: true, garlands: true, fireplace: true };
+let themeColors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
+
 let accumulation = []; // per-column snow height, only used when accumulate=true
 let running = true;
 let rafId = null;
+const clock = { start: performance.now() };
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -32,6 +41,7 @@ window.addEventListener('resize', resize);
 resize();
 
 function makeFlake() {
+  const isCrystal = Math.random() < 0.35; // a minority render as a faceted crystal instead of a soft dot
   return {
     x: Math.random() * canvas.width,
     y: Math.random() * -canvas.height,
@@ -39,6 +49,9 @@ function makeFlake() {
     speed: 0.6 + Math.random() * 1.4,
     drift: Math.random() * Math.PI * 2,
     opacity: 0.5 + Math.random() * 0.5,
+    isCrystal,
+    rotation: Math.random() * Math.PI,
+    spin: (Math.random() - 0.5) * 0.02,
   };
 }
 
@@ -72,14 +85,63 @@ export function start() {
   }
 }
 
+/// Draws one snowflake. Small flakes stay cheap soft dots; larger ones get
+/// a faceted six-branch crystal outline for a more "real snowflake" look,
+/// gently rotating as they fall.
+function drawFlake(f) {
+  ctx.globalAlpha = f.opacity;
+  ctx.fillStyle = config.color;
+
+  if (!f.isCrystal || f.r < 1.6) {
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.rotation);
+  ctx.strokeStyle = config.color;
+  ctx.lineWidth = Math.max(0.6, f.r * 0.18);
+  ctx.lineCap = 'round';
+  const branchLen = f.r * 2.2;
+  for (let b = 0; b < 6; b++) {
+    ctx.save();
+    ctx.rotate((Math.PI / 3) * b);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -branchLen);
+    ctx.moveTo(0, -branchLen * 0.55);
+    ctx.lineTo(branchLen * 0.28, -branchLen * 0.75);
+    ctx.moveTo(0, -branchLen * 0.55);
+    ctx.lineTo(-branchLen * 0.28, -branchLen * 0.75);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function tick() {
   if (!running) return;
+  const time = (performance.now() - clock.start) / 1000;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (decorConfig.garlands) {
+    drawGarland(ctx, canvas.width, time, DEFAULT_GARLAND_COLORS);
+  }
+  if (decorConfig.trees) {
+    drawTrees(ctx, canvas.width, canvas.height, themeColors);
+  }
+  if (decorConfig.fireplace) {
+    drawFireplace(ctx, canvas.width, canvas.height, time);
+  }
 
   for (const f of flakes) {
     f.y += f.speed;
     f.drift += 0.01;
     f.x += Math.sin(f.drift) * config.wind;
+    f.rotation += f.spin;
 
     const col = Math.max(0, Math.min(accumulation.length - 1, Math.floor(f.x / 4)));
     const groundY = config.accumulate
@@ -93,11 +155,7 @@ function tick() {
       Object.assign(f, makeFlake(), { y: -10 });
     }
 
-    ctx.globalAlpha = f.opacity;
-    ctx.fillStyle = config.color;
-    ctx.beginPath();
-    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-    ctx.fill();
+    drawFlake(f);
   }
   ctx.globalAlpha = 1;
 
@@ -122,8 +180,24 @@ tick();
 // Expose for Playwright / manual debugging without a module bundler step.
 window.snowOverlay = { setDensity, setConfig, getParticleCount, start, stop };
 
-// Apply the theme's snow settings, but let a user-chosen density override
-// the theme's own default so the settings window's slider stays authoritative.
+/// Only one overlay window (per app launch, whichever monitor got
+/// "overlay-0") draws the trees/garland/fireplace scene. With one overlay
+/// window per monitor, drawing the same full-size decorations on every
+/// screen would look like duplicated clutter rather than one decorated
+/// desktop. Falls back to true when not running inside Tauri (standalone
+/// page / Playwright), so the decorations stay visible and testable there.
+function isPrimaryOverlay() {
+  if (typeof window.__TAURI__ === 'undefined') return true;
+  try {
+    return window.__TAURI__.window.getCurrentWindow().label === 'overlay-0';
+  } catch {
+    return true;
+  }
+}
+
+// Apply the theme's snow settings and the user's decoration toggles. A
+// user-chosen density overrides the theme's own default so the settings
+// window's slider stays authoritative.
 function applyThemeAndSettings(theme, settings) {
   if (!theme) return;
   setConfig({
@@ -132,6 +206,13 @@ function applyThemeAndSettings(theme, settings) {
     flakeSize: theme.snow.flakeSize,
     accumulate: theme.snow.accumulate,
   });
+  themeColors = theme.colors;
+  const primary = isPrimaryOverlay();
+  decorConfig = {
+    trees: primary && (settings?.treesDecoration ?? true),
+    garlands: primary && (settings?.garlandsDecoration ?? true),
+    fireplace: primary && (settings?.fireplaceDecoration ?? true),
+  };
 }
 
 async function initFromBackend() {

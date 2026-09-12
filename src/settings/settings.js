@@ -4,6 +4,9 @@ const themeSelect = document.getElementById('theme-select');
 const densityInput = document.getElementById('snow-density');
 const densityValue = document.getElementById('snow-density-value');
 const dockToggle = document.getElementById('dock-toggle');
+const treesToggle = document.getElementById('trees-toggle');
+const garlandsToggle = document.getElementById('garlands-toggle');
+const fireplaceToggle = document.getElementById('fireplace-toggle');
 const volumeInput = document.getElementById('volume');
 const volumeValue = document.getElementById('volume-value');
 const autostartToggle = document.getElementById('autostart-toggle');
@@ -38,6 +41,9 @@ async function persist() {
     snowDensity: Number(densityInput.value),
     dockDecoration: dockToggle.checked,
     taskbarDecoration: dockToggle.checked,
+    treesDecoration: treesToggle.checked,
+    garlandsDecoration: garlandsToggle.checked,
+    fireplaceDecoration: fireplaceToggle.checked,
     soundVolume: Number(volumeInput.value) / 100,
     autostart: autostartToggle.checked,
   };
@@ -59,6 +65,9 @@ async function init() {
   densityInput.value = settings.snowDensity;
   densityValue.textContent = settings.snowDensity;
   dockToggle.checked = settings.dockDecoration;
+  treesToggle.checked = settings.treesDecoration;
+  garlandsToggle.checked = settings.garlandsDecoration;
+  fireplaceToggle.checked = settings.fireplaceDecoration;
   volumeInput.value = Math.round(settings.soundVolume * 100);
   volumeValue.textContent = `${Math.round(settings.soundVolume * 100)}%`;
   autostartToggle.checked = settings.autostart;
@@ -77,6 +86,9 @@ densityInput.addEventListener('input', () => {
 densityInput.addEventListener('change', persist);
 
 dockToggle.addEventListener('change', persist);
+treesToggle.addEventListener('change', persist);
+garlandsToggle.addEventListener('change', persist);
+fireplaceToggle.addEventListener('change', persist);
 
 volumeInput.addEventListener('input', () => {
   volumeValue.textContent = `${volumeInput.value}%`;
