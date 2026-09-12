@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Grants the settings window and every per-monitor snow overlay window access to core APIs (events, window control) and the app's own commands (list_themes, get_settings, save_settings, disable_everything). Without a capabilities file, Tauri v2 denies ALL IPC calls for every window by default — this was previously missing entirely, which is why settings/themes silently never reached the backend.",
+  "windows": ["settings", "overlay-*"],
+  "permissions": ["core:default"]
+}

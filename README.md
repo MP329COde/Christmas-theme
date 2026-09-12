@@ -215,6 +215,19 @@ app look far less finished than intended:
   monitor (`available_monitors()`), and the backend emits a `settings-changed` event on
   every save that all overlay windows listen for and apply immediately — see
   `spawn_overlay_windows` and `save_settings` in `src-tauri/src/main.rs`.
+- **No `capabilities/` file existed at all**, which in Tauri v2 means every window is
+  denied *every* IPC call by default — not just restricted, completely blocked, themes
+  and settings included. This is a separate issue from the `withGlobalTauri` one above:
+  even once the frontend could reach the IPC layer, the IPC layer itself had nothing
+  granting it permission to go through. Added `src-tauri/capabilities/default.json`
+  granting the settings window and every `overlay-*` window `core:default` (covers
+  event listening, window control, and the app's own commands).
+- **The overlay was `always_on_top`, floating above every other application** —
+  the opposite of what a desktop decoration should do, and the direct cause of it
+  getting in the way of using other apps. Changed to `always_on_bottom` (like a live
+  wallpaper: visible on empty desktop space, naturally covered by whatever window
+  you're using) and removed `visible_on_all_workspaces`, so it no longer follows you
+  into another virtual desktop or over a fullscreen app either.
 
 ## Contributing
 

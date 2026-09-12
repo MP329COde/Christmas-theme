@@ -98,6 +98,13 @@ fn disable_everything(state: State<Mutex<AppState>>) -> Result<(), String> {
 /// cover that monitor. A single window sized to the primary monitor only
 /// covered one screen; iterating `available_monitors()` is what makes the
 /// snow show up on every display in a multi-monitor setup.
+///
+/// Deliberately `always_on_bottom`, not `always_on_top`: this is meant to
+/// behave like a live wallpaper (visible on empty desktop space, quietly
+/// covered by whatever window you're actually using), not a layer that
+/// floats above every other app and gets in the way of using them. It's
+/// also not marked visible-on-all-workspaces, so it doesn't follow you
+/// into another Space/virtual desktop or over a fullscreen app.
 fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
     let monitors = app.available_monitors()?;
     for (i, monitor) in monitors.iter().enumerate() {
@@ -106,9 +113,8 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
             .title("Snow Overlay")
             .transparent(true)
             .decorations(false)
-            .always_on_top(true)
+            .always_on_bottom(true)
             .skip_taskbar(true)
-            .visible_on_all_workspaces(true)
             .focused(false)
             .visible(true)
             .inner_size(monitor.size().width as f64, monitor.size().height as f64)
@@ -123,10 +129,9 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
         window.set_position(*monitor.position())?;
         window.set_size(*monitor.size())?;
 
-        // Critical: without this, the overlay (being always-on-top and
-        // covering the whole screen) captures every click, making the
-        // settings window and the rest of the desktop unusable underneath
-        // it. This makes the overlay purely visual — all clicks pass
+        // Critical regardless of z-order: without this, the overlay (which
+        // covers the whole screen) still captures every click and desktop
+        // icon interaction. This makes it purely visual — all clicks pass
         // through to whatever is beneath it.
         window.set_ignore_cursor_events(true)?;
     }
