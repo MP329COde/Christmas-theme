@@ -88,6 +88,9 @@ section:hover {
 }
 
 .toggle-row {
+  /* Usable both as the section itself and as a row nested inside one
+     (the Dock row, which carries a status line under it). */
+  display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;

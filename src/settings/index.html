@@ -43,9 +43,12 @@
 
     <h2>Decorations</h2>
 
-    <section class="toggle-row">
-      <label for="dock-toggle">Decorate Dock / Taskbar</label>
-      <input type="checkbox" id="dock-toggle" data-testid="dock-toggle" />
+    <section>
+      <div class="toggle-row">
+        <label for="dock-toggle">Decorate Dock / Taskbar</label>
+        <input type="checkbox" id="dock-toggle" data-testid="dock-toggle" />
+      </div>
+      <p class="hint" id="dock-status" data-testid="dock-status">Checking the Dock / taskbar…</p>
     </section>
 
     <section class="toggle-row">
@@ -90,6 +93,45 @@
     <section>
       <label for="decor-scale">Decoration size <span id="decor-scale-value">100%</span></label>
       <input type="range" id="decor-scale" data-testid="decor-scale" min="50" max="200" step="10" />
+    </section>
+
+    <h2>Lights &amp; sky</h2>
+
+    <section>
+      <label for="light-animation">Light animation</label>
+      <select id="light-animation" data-testid="light-animation">
+        <option value="twinkle">Twinkle (slow fade)</option>
+        <option value="sparkle">Sparkle (random flashes)</option>
+        <option value="chase">Chase (running light)</option>
+        <option value="wave">Wave (travelling swell)</option>
+        <option value="steady">Steady</option>
+      </select>
+      <p class="hint">Drives every string at once: top garland, trees, mantel and the Dock.</p>
+    </section>
+
+    <section>
+      <label for="light-intensity">Light intensity <span id="light-intensity-value">100%</span></label>
+      <input type="range" id="light-intensity" data-testid="light-intensity" min="20" max="200" step="10" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="aurora-toggle">🌌 Aurora curtains</label>
+      <input type="checkbox" id="aurora-toggle" data-testid="aurora-toggle" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="stars-toggle">⭐ Stars &amp; shooting stars</label>
+      <input type="checkbox" id="stars-toggle" data-testid="stars-toggle" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="icicles-toggle">🧊 Icicles (glint &amp; drips)</label>
+      <input type="checkbox" id="icicles-toggle" data-testid="icicles-toggle" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="glitter-toggle">✨ Glitter on settled snow</label>
+      <input type="checkbox" id="glitter-toggle" data-testid="glitter-toggle" />
     </section>
 
     <h2>Sound</h2>

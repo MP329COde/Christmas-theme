@@ -12,6 +12,7 @@
 
 import { getSettings, listThemes, onSettingsChanged, publishStats } from '../shared/bridge.js';
 import { drawGarland, drawTrees, drawFireplace, GARLAND_PALETTES } from './decor.js';
+import { drawSky, drawGlitter, drawIcicles, invalidateLights } from './lights.js';
 
 const canvas = document.getElementById('snow');
 const ctx = canvas.getContext('2d');
@@ -49,6 +50,12 @@ let decorConfig = {
   stockings: true,
   mantelGarland: true,
   decorScale: 1,
+  lightAnimation: 'twinkle',
+  lightIntensity: 1,
+  aurora: true,
+  stars: true,
+  icicles: true,
+  snowGlitter: true,
 };
 let themeColors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
 
@@ -154,6 +161,10 @@ function resize() {
   canvas.height = window.innerHeight;
   accumulation = new Array(Math.ceil(canvas.width / 4)).fill(0);
   bankDirty = true;
+  // Every light layer bakes sprites cut to the current size; a resize has
+  // to throw those away or the fringe and star field stay sized for the
+  // old window.
+  invalidateLights();
 }
 window.addEventListener('resize', resize);
 
@@ -323,6 +334,11 @@ function rebuildBank() {
 function render(time) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Sky first: aurora and stars sit behind the snow and the scene.
+  if (decorConfig.aurora || decorConfig.stars) {
+    drawSky(ctx, canvas.width, canvas.height, time, decorConfig);
+  }
+
   // Step every flake first, then draw in depth order: distant snow sits
   // behind the trees and fireplace, close snow passes in front of them.
   // Two slow sines beating against each other: the wind surges and eases
@@ -335,9 +351,15 @@ function render(time) {
   }
   ctx.globalAlpha = 1;
 
+  if (decorConfig.icicles) {
+    drawIcicles(ctx, canvas.width, canvas.height, time, decorConfig);
+  }
   if (decorConfig.garlands) {
     const palette = GARLAND_PALETTES[decorConfig.garlandStyle] ?? GARLAND_PALETTES.multicolor;
-    drawGarland(ctx, canvas.width, time, palette);
+    drawGarland(ctx, canvas.width, time, palette, {
+      animation: decorConfig.lightAnimation,
+      lightIntensity: decorConfig.lightIntensity,
+    });
   }
   if (decorConfig.trees) {
     drawTrees(ctx, canvas.width, canvas.height, themeColors, time, decorConfig);
@@ -358,6 +380,11 @@ function render(time) {
       bankLastBuilt = time;
     }
     if (bankCanvas) ctx.drawImage(bankCanvas, 0, 0);
+    // Glitter goes on top of the bank, since it is light bouncing off the
+    // surface we just drew.
+    if (decorConfig.snowGlitter) {
+      drawGlitter(ctx, canvas.width, canvas.height, time, accumulation, decorConfig);
+    }
   }
 }
 
@@ -443,6 +470,15 @@ function applyThemeAndSettings(theme, settings) {
     stockings: settings?.stockings ?? true,
     mantelGarland: settings?.mantelGarland ?? true,
     decorScale: settings?.decorScale ?? 1,
+    lightAnimation: settings?.lightAnimation ?? 'twinkle',
+    lightIntensity: settings?.lightIntensity ?? 1,
+    // Sky and ambient light layers run on every monitor, not just the
+    // primary one: an aurora across all four screens is the point,
+    // whereas four copies of the same fireplace would be clutter.
+    aurora: settings?.aurora ?? true,
+    stars: settings?.stars ?? true,
+    icicles: settings?.icicles ?? true,
+    snowGlitter: settings?.snowGlitter ?? true,
   };
 }
 

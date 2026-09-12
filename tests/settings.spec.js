@@ -101,6 +101,35 @@ test('fps cap defaults to unlimited and can be changed', async ({ page }) => {
   await expect(select).toHaveValue('120');
 });
 
+test('light animation select defaults to twinkle and can be changed', async ({ page }) => {
+  const select = page.locator('[data-testid="light-animation"]');
+  await expect(select).toHaveValue('twinkle');
+  await select.selectOption('chase');
+  await expect(select).toHaveValue('chase');
+});
+
+test('light intensity slider updates its readout', async ({ page }) => {
+  await expect(page.locator('#light-intensity-value')).toHaveText('100%');
+  await page.locator('[data-testid="light-intensity"]').fill('200');
+  await expect(page.locator('#light-intensity-value')).toHaveText('200%');
+});
+
+test('sky and light toggles default on and respond to clicks', async ({ page }) => {
+  for (const testid of ['aurora-toggle', 'stars-toggle', 'icicles-toggle', 'glitter-toggle']) {
+    const toggle = page.locator(`[data-testid="${testid}"]`);
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+  }
+});
+
+test('dock status line explains what was detected', async ({ page }) => {
+  // Outside Tauri the bridge reports that detection is desktop-app only —
+  // the point of the assertion is that the toggle is never silent.
+  await expect(page.locator('[data-testid="dock-status"]'))
+    .toHaveText(/desktop app|Detected on|No Dock/);
+});
+
 test('volume slider updates label and persists across reload', async ({ page }) => {
   const slider = page.locator('[data-testid="volume"]');
   await slider.fill('80');

@@ -77,7 +77,7 @@ function makeCanvas(w, h) {
 /// A soft radial glow of a given color, baked once and reused. Drawing a
 /// light means blitting this with an alpha — no per-frame gradient.
 const glowCache = new Map();
-function glowSprite(color, size = 64) {
+export function glowSprite(color, size = 64) {
   const key = `${color}|${size}`;
   let sprite = glowCache.get(key);
   if (sprite) return sprite;
@@ -159,13 +159,51 @@ function bough(c, x, y, len, angle, width, color, rand) {
 }
 
 // ---------------------------------------------------------------------------
+// light animation
+// ---------------------------------------------------------------------------
+
+/// How bright bulb `index` is at `time`, under the chosen animation mode.
+/// Shared by the top garland, the tree strings and the mantel swag so a
+/// change of mode drives every light in the scene at once, the way one
+/// controller drives a whole house.
+///
+/// Pure arithmetic per bulb, no allocation: the modes cost nothing beyond
+/// the blit the caller was going to make anyway.
+export function bulbLevel(mode, time, index, phase = 0, count = 1) {
+  switch (mode) {
+    case 'steady':
+      // Never fully flat: even mains-powered warm white breathes a little.
+      return 0.92 + 0.08 * Math.sin(time * 0.9 + phase);
+    case 'chase': {
+      // A lit head running along the string, wrapping at the end.
+      const head = (time * 3.4) % count;
+      let d = Math.abs(index - head);
+      d = Math.min(d, count - d);
+      return 0.16 + 0.84 * Math.max(0, 1 - d / 3.2);
+    }
+    case 'wave':
+      // A phase offset per bulb turns the shared sine into a travelling swell.
+      return 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(time * 2.4 - index * 0.55));
+    case 'sparkle': {
+      // Mostly off, with short bright flashes — the "twinkle" setting on a
+      // real light string, as opposed to a slow fade.
+      const f = Math.sin(time * 2.7 + phase * 3.1);
+      return 0.2 + 0.8 * Math.max(0, f) ** 6;
+    }
+    case 'twinkle':
+    default:
+      return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 1.7 + phase));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // garland (top of screen)
 // ---------------------------------------------------------------------------
 
 /// A hung cable with bulbs. The wire is one cheap stroked path; each bulb
 /// is a baked glow sprite plus a tiny shaded body, so the whole string
 /// costs a couple of dozen blits instead of a couple of dozen gradients.
-export function drawGarland(ctx, width, time, colors) {
+export function drawGarland(ctx, width, time, colors, opts = {}) {
   const spacing = 54;
   const count = Math.max(2, Math.round(width / spacing));
   const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 + Math.sin(t * Math.PI) * 26;
@@ -190,15 +228,16 @@ export function drawGarland(ctx, width, time, colors) {
     const capY = wireY(t);
     const y = capY + 11;
     const color = colors[i % colors.length];
-    const lit = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 1.7 + i * 1.37));
+    const lit = bulbLevel(opts.animation, time, i, i * 1.37, count + 1);
+    const gain = opts.lightIntensity ?? 1;
 
     ctx.fillStyle = '#22262d';
     ctx.fillRect(x - 2, capY, 4, 5);
 
     const glow = glowSprite(color);
-    const gs = 40 * lit;
+    const gs = 40 * lit * (0.8 + 0.2 * gain);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.85 * lit;
+    ctx.globalAlpha = Math.min(1, 0.85 * lit * gain);
     ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -446,6 +485,8 @@ export function drawTrees(ctx, width, height, colors, time, opts = {}) {
 
   const bulb = glowSprite('#ffdba0', 48);
   const starGlow = glowSprite(colors.accent, 96);
+  const mode = opts.lightAnimation;
+  const gain = opts.lightIntensity ?? 1;
 
   for (const [tree, mirrored] of [[left, false], [right, true]]) {
     const originX = mirrored ? width - margin - tree.sprite.width : margin;
@@ -464,18 +505,23 @@ export function drawTrees(ctx, width, height, colors, time, opts = {}) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < tree.lights.length; i++) {
       const l = tree.lights[i];
-      // Slow shared breathing plus a per-bulb offset: real string lights
-      // shimmer slightly out of step rather than pulsing in unison.
-      const lit = 0.55 + 0.45 * Math.sin(time * 1.3 + l.phase);
-      const s = 14 + 10 * lit;
-      ctx.globalAlpha = 0.5 + 0.5 * lit;
+      // Driven by the same controller as the top garland, so "chase" or
+      // "sparkle" runs through the whole scene rather than one string.
+      const lit = bulbLevel(mode, time, i, l.phase, tree.lights.length);
+      const s = (14 + 10 * lit) * (0.85 + 0.15 * gain);
+      ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * lit) * gain);
       ctx.drawImage(bulb, l.x - s / 2, l.y - s / 2, s, s);
     }
 
-    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1);
+    // The topper pulses on a slower, independent beat and throws light
+    // onto the branches under it.
+    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1) + 0.08 * Math.sin(time * 6.3);
     const ss = 90 * twinkle;
-    ctx.globalAlpha = 0.85 * twinkle;
+    ctx.globalAlpha = Math.min(1, 0.85 * twinkle * gain);
     ctx.drawImage(starGlow, tree.star.x - ss / 2, tree.star.y - ss / 2, ss, ss);
+    const halo = 210 * twinkle;
+    ctx.globalAlpha = Math.min(1, 0.16 * twinkle * gain);
+    ctx.drawImage(starGlow, tree.star.x - halo / 2, tree.star.y - halo * 0.3, halo, halo);
 
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
@@ -858,6 +904,7 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
     fireCache = { key, ...baked, flame: bakeFlameSheet(fw, fh, scale) };
   }
   const { sprite, geom, lights, flame } = fireCache;
+  const gain = opts.lightIntensity ?? 1;
   const x = width / 2 - geom.w / 2;
   const y = height - geom.h;
 
@@ -872,7 +919,7 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
   const spill = glowSprite('#ff8c32', 128);
   ctx.globalCompositeOperation = 'lighter';
   const ss = 720 * scale * breathe;
-  ctx.globalAlpha = 0.3 * breathe;
+  ctx.globalAlpha = Math.min(1, 0.3 * breathe * gain);
   ctx.drawImage(spill, fireX - ss / 2, fireY - ss * 0.52, ss, ss * 0.75);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -883,10 +930,11 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
   if (lights.length) {
     const bulb = glowSprite('#ffd79a', 48);
     ctx.globalCompositeOperation = 'lighter';
-    for (const l of lights) {
-      const lit = 0.55 + 0.45 * Math.sin(time * 1.5 + l.phase);
+    for (let i = 0; i < lights.length; i++) {
+      const l = lights[i];
+      const lit = bulbLevel(opts.lightAnimation, time, i, l.phase, lights.length);
       const s = 13 + 9 * lit;
-      ctx.globalAlpha = 0.5 + 0.5 * lit;
+      ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * lit) * gain);
       ctx.drawImage(bulb, x + l.x - s / 2, y + l.y - s / 2, s, s);
     }
     ctx.globalAlpha = 1;

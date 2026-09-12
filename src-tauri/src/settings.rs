@@ -52,6 +52,22 @@ pub struct AppSettings {
     /// Pine swag draped over the mantel.
     #[serde(rename = "mantelGarland")]
     pub mantel_garland: bool,
+    /// Light animation driving every string in the scene at once:
+    /// "twinkle" | "sparkle" | "chase" | "wave" | "steady".
+    #[serde(rename = "lightAnimation")]
+    pub light_animation: String,
+    /// Global brightness multiplier for every animated light (0.2 - 2.0).
+    #[serde(rename = "lightIntensity")]
+    pub light_intensity: f32,
+    /// Aurora curtains drifting across the sky.
+    pub aurora: bool,
+    /// Twinkling star field and the occasional shooting star.
+    pub stars: bool,
+    /// Icicle fringe along the top edge, with a travelling glint and drips.
+    pub icicles: bool,
+    /// Specular sparkles on the surface of the settled snow.
+    #[serde(rename = "snowGlitter")]
+    pub snow_glitter: bool,
     /// Frame rate cap. 0 means uncapped — render at the display's refresh
     /// rate, which is the default and what a 120Hz panel needs to actually
     /// reach 120fps. A cap only ever lowers it, to save battery.
@@ -81,6 +97,12 @@ impl Default for AppSettings {
             tree_lights: true,
             stockings: true,
             mantel_garland: true,
+            light_animation: "twinkle".into(),
+            light_intensity: 1.0,
+            aurora: true,
+            stars: true,
+            icicles: true,
+            snow_glitter: true,
             fps_limit: 0,
             sound_volume: 0.4,
             autostart: false,

@@ -6,16 +6,23 @@ mod settings;
 mod theme;
 
 use audio::AmbientPlayer;
+use decoration::DockStrip;
 use serde::Serialize;
 use settings::AppSettings;
+use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, EventTarget, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use theme::Theme;
 
 struct AppState {
     settings_path: std::path::PathBuf,
     themes_dir: std::path::PathBuf,
     player: Option<AmbientPlayer>,
+    /// Last strip pushed to each dock window. The dock geometry is polled
+    /// on a timer (the shells emit no reliable "I moved" notification), so
+    /// this is what keeps that poll from re-emitting an identical payload
+    /// once a second forever.
+    dock_strips: HashMap<String, Option<DockStrip>>,
 }
 
 /// Payload broadcast to every window whenever settings are saved, so the
@@ -76,21 +83,138 @@ fn save_settings(
     }
 
     let theme = resolve_theme(&all_themes(&state.themes_dir), &settings.theme_id);
+    let dock_enabled = settings.dock_decoration || settings.taskbar_decoration;
     let _ = app.emit(
         "settings-changed",
         SettingsChanged { settings, theme },
     );
+    // Released before syncing: sync_dock_windows locks the same state to
+    // compare against the last pushed geometry.
+    drop(state);
+    sync_dock_windows(&app, dock_enabled);
     Ok(())
 }
 
 #[tauri::command]
-fn disable_everything(state: State<Mutex<AppState>>) -> Result<(), String> {
-    let state = state.lock().unwrap();
-    AppSettings::wipe(&state.settings_path).map_err(|e| e.to_string())?;
-    if let Some(player) = &state.player {
+fn disable_everything(
+    app: tauri::AppHandle,
+    state: State<Mutex<AppState>>,
+) -> Result<(), String> {
+    let state_guard = state.lock().unwrap();
+    AppSettings::wipe(&state_guard.settings_path).map_err(|e| e.to_string())?;
+    if let Some(player) = &state_guard.player {
         player.stop();
     }
+    drop(state_guard);
+    // "No residual trace" includes screen furniture: take the dock
+    // decoration down immediately rather than at next launch.
+    sync_dock_windows(&app, false);
     Ok(())
+}
+
+/// One hidden decoration window per monitor, created up-front on the main
+/// thread. The polling task below only ever moves, shows and hides them:
+/// building a window from a background thread is not safe on every
+/// platform, whereas position/size/visibility changes are proxied through
+/// the event loop and are.
+fn spawn_dock_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let count = app.available_monitors()?.len();
+    for i in 0..count {
+        let label = format!("dock-{i}");
+        let window =
+            WebviewWindowBuilder::new(app, &label, WebviewUrl::App("dock/index.html".into()))
+                .title("Dock Decoration")
+                .transparent(true)
+                .decorations(false)
+                // Unlike the snow overlay (a live wallpaper, deliberately
+                // at the bottom), this one has to sit above the desktop
+                // to decorate the shell bar at all. It's a thin strip in
+                // screen furniture no app window occupies, and it's
+                // click-through, so it stays out of the way.
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .focused(false)
+                .visible(false)
+                .inner_size(16.0, 16.0)
+                .build()?;
+        window.set_ignore_cursor_events(true)?;
+    }
+    Ok(())
+}
+
+/// Places (or hides) every dock decoration window to match the current
+/// Dock/taskbar geometry. Called at startup, after every settings save,
+/// and from the poll loop so moving the Dock, resizing it or plugging in
+/// a monitor is picked up without a restart.
+fn sync_dock_windows(app: &tauri::AppHandle, enabled: bool) {
+    let Ok(monitors) = app.available_monitors() else {
+        return;
+    };
+    for (i, monitor) in monitors.iter().enumerate() {
+        let label = format!("dock-{i}");
+        let Some(window) = app.get_webview_window(&label) else {
+            continue;
+        };
+        let strip = if enabled {
+            decoration::detect(monitor)
+        } else {
+            None
+        };
+
+        let changed = {
+            let state = app.state::<Mutex<AppState>>();
+            let mut state = state.lock().unwrap();
+            let previous = state.dock_strips.get(&label).copied().flatten();
+            if previous == strip {
+                false
+            } else {
+                state.dock_strips.insert(label.clone(), strip);
+                true
+            }
+        };
+        if !changed {
+            continue;
+        }
+
+        match strip {
+            Some(s) => {
+                let _ = window.set_position(tauri::PhysicalPosition::new(s.x, s.y));
+                let _ = window.set_size(tauri::PhysicalSize::new(s.width, s.height));
+                let _ = window.set_ignore_cursor_events(true);
+                let _ = app.emit_to(EventTarget::webview_window(&label), "dock-geometry", s);
+                let _ = window.show();
+            }
+            None => {
+                let _ = window.hide();
+            }
+        }
+    }
+}
+
+/// What the settings window shows next to the Dock toggle: the strips we
+/// actually found, or why we found none. Silence here was the whole
+/// problem with the previous scaffold.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DockStatus {
+    strips: Vec<DockStrip>,
+    reason: Option<&'static str>,
+}
+
+#[tauri::command]
+fn dock_status(app: tauri::AppHandle) -> DockStatus {
+    let strips: Vec<DockStrip> = app
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(decoration::detect)
+        .collect();
+    let reason = if strips.is_empty() {
+        Some(decoration::unavailable_reason())
+    } else {
+        None
+    };
+    DockStatus { strips, reason }
 }
 
 /// Creates one transparent, click-through, always-on-top snow overlay
@@ -162,9 +286,37 @@ fn main() {
                 settings_path,
                 themes_dir,
                 player,
+                dock_strips: HashMap::new(),
             }));
 
             spawn_overlay_windows(app.handle())?;
+            spawn_dock_windows(app.handle())?;
+
+            let initial = AppSettings::load(
+                &app.state::<Mutex<AppState>>().lock().unwrap().settings_path.clone(),
+            );
+            sync_dock_windows(app.handle(), initial.dock_decoration || initial.taskbar_decoration);
+
+            // Poll for Dock/taskbar geometry changes. Neither macOS nor
+            // Windows offers a dependable notification for "the Dock moved
+            // or was resized", so a low-frequency poll on the main thread
+            // is the reliable option; at 1.2s it is invisible in a CPU
+            // profile and picks up a moved Dock, a resized taskbar or a
+            // newly connected monitor on its own.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(1200));
+                let h = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let enabled = {
+                        let state = h.state::<Mutex<AppState>>();
+                        let path = state.lock().unwrap().settings_path.clone();
+                        let s = AppSettings::load(&path);
+                        s.dock_decoration || s.taskbar_decoration
+                    };
+                    sync_dock_windows(&h, enabled);
+                });
+            });
 
             Ok(())
         })
@@ -172,7 +324,8 @@ fn main() {
             list_themes,
             get_settings,
             save_settings,
-            disable_everything
+            disable_everything,
+            dock_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running christmas-theme app");

@@ -32,6 +32,12 @@ const DEFAULT_SETTINGS = {
   stockings: true,
   mantelGarland: true,
   decorScale: 1,
+  lightAnimation: 'twinkle',
+  lightIntensity: 1,
+  aurora: true,
+  stars: true,
+  icicles: true,
+  snowGlitter: true,
   fpsLimit: 0,
   soundVolume: 0.4,
   autostart: false,
@@ -62,6 +68,16 @@ export async function saveSettings(settings) {
     return window.__TAURI__.core.invoke('save_settings', { settings });
   }
   localStorage.setItem('christmas-theme-settings', JSON.stringify(settings));
+}
+
+/// Where the Dock/taskbar strip was found, or why it wasn't. The settings
+/// window shows this next to the toggle so "it's on but nothing happens"
+/// is always explained rather than silent.
+export async function dockStatus() {
+  if (isTauri) {
+    return window.__TAURI__.core.invoke('dock_status');
+  }
+  return { strips: [], reason: 'Dock/taskbar decoration only runs in the desktop app.' };
 }
 
 export async function disableEverything() {

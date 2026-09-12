@@ -27,26 +27,53 @@ snow overlay isn't a security risk).
   topper in each bottom corner, a twinkling light garland strung across the top of the
   screen, and an animated fireplace with a flickering flame at bottom-center. Each is an
   independent toggle in settings.
-- **Dock/taskbar decoration**: **not implemented yet** — the toggle exists in settings and
-  is persisted, but nothing currently draws on the Dock or taskbar. See
-  [Known limitations](#known-limitations) for the plan and why this is harder than it looks,
-  especially on macOS.
+- **Animated light layers**, all toggleable and all driven by one "light animation"
+  setting (twinkle / sparkle / chase / wave / steady) so the top garland, the tree
+  strings, the mantel swag and the Dock all run the same show: drifting **aurora**
+  curtains, a twinkling **star field** with the occasional shooting star, an **icicle
+  fringe** with a glint travelling along it and meltwater drips, **glitter** flashing on
+  the settled snow, flickering candles, a looping fire and rising embers. A single
+  "light intensity" slider scales the lot.
+- **Dock/taskbar decoration** — snow ledge, pine swag, lights and icicles along the macOS
+  Dock or the Windows taskbar, on every monitor that has one. It finds the bar by
+  subtracting the monitor's *work area* from its full bounds, which needs **no
+  Accessibility permission and no private API on macOS**, and tracks the Dock being
+  moved, resized or a monitor being plugged in. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-docktaskbar-decoration--implemented)
+  and [Known limitations](#known-limitations) for the one macOS caveat.
 - **JSON theme system**: versioned schema (`themes/*.json`), 8 built-in themes shipped,
   covering colors, snow density/wind/accumulation, ambient sound, and which decorations
   are active. Reusable for future seasonal themes, and extensible by dropping extra
   `*.json` files into the app's config directory under `themes/`.
 - **Ambient sound**: optional fireplace crackle / sleigh bells, volume-controlled, muted by default volume choice per theme.
-- **Settings window**: theme picker, snow density slider, dock/taskbar toggle, tree/garland/
-  fireplace toggles, volume slider, autostart toggle, and a "disable everything" button
-  that removes all persisted state.
+- **Settings window**: theme picker; snow density, wind, flake size, accumulation and max
+  snow depth; dock/taskbar toggle with a **status line saying what was actually detected**;
+  tree/garland/fireplace/stocking/swag toggles and decoration size; light animation,
+  light intensity, aurora/stars/icicles/glitter toggles; frame-rate cap with a **live
+  fps and ms-per-frame readout**; volume; autostart; and a "disable everything" button
+  that removes all persisted state and takes the decorations down immediately.
+
+## Screenshots
+
+All four are captured by the Playwright CLI (`node scripts/dev-server.js`, then the
+capture script in the commit that added them), not mocked up.
+
+| | |
+|---|---|
+| ![Desktop scene](docs/screenshots/overlay-scene.png) | The overlay at 1920×1080 over a dark wallpaper: aurora, star field, icicle fringe, light garland, two decorated conifers, the fireplace with lit candles, and depth-sorted snow. |
+| ![Dock strip](docs/screenshots/dock-bottom.png) | The Dock/taskbar strip: snow ledge, pine swag, animated bulbs and icicles. |
+| ![Dock strip, left edge](docs/screenshots/dock-left.png) | The same renderer with the bar docked to the left edge. |
+| ![Settings](docs/screenshots/settings-window.png) | The settings window. |
 
 ## Architecture at a glance
 
 - **Tauri v2** (Rust core + OS webview), not Electron — see
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#1-framework-choice-tauri-not-electron)
   for the size/RAM/native-API comparison that drove this.
-- Two windows: a small **settings** window and a full-screen transparent **overlay**
-  window for snow.
+- Three kinds of window: a small **settings** window, one full-screen transparent
+  **snow overlay** per monitor (always-on-*bottom*, so it behaves like a live wallpaper
+  and never covers the app you are using), and one thin click-through **dock strip** per
+  monitor that has a Dock/taskbar.
 - The settings and overlay UIs (`src/settings`, `src/overlay`) are plain HTML/CSS/JS with
   no Tauri-only calls in their render path (all OS calls go through `src/shared/bridge.js`,
   which falls back to `localStorage` when not running inside Tauri). This is what makes
@@ -56,9 +83,13 @@ snow overlay isn't a security risk).
 
 ```
 src-tauri/        Rust core: window management, theme loader, settings persistence,
-                  platform-specific dock/taskbar decoration, ambient audio
+                  dock/taskbar strip detection (decoration.rs), ambient audio
 src/settings/     Settings window UI
 src/overlay/      Snow overlay canvas renderer
+                    snow.js   particles, frame budget, compositing order
+                    decor.js  trees, garland, fireplace, light animation modes
+                    lights.js aurora, stars, icicles, glitter
+src/dock/         Dock/taskbar strip renderer
 src/shared/       bridge.js — IPC-or-localStorage abstraction shared by both UIs
 themes/           Built-in theme JSON files (8: classic-red, frosty-blue, minimal-white,
                   midnight-gold, candy-cane, gingerbread, arctic-aurora, santa-classic)
@@ -157,13 +188,17 @@ native-window properties are verified manually per-OS — see the checklist belo
 - [ ] Overlay spans the full virtual desktop across multiple monitors.
 - [ ] Overlay stays on top of other windows and doesn't intercept clicks.
 - [ ] Overlay survives display sleep/wake and resolution changes.
-- [ ] Windows taskbar decoration tracks taskbar position after moving/resizing it.
-- [ ] macOS Dock decoration (if enabled) behaves reasonably after Dock resize/auto-hide,
-      and the Accessibility permission prompt is clear.
+- [ ] Windows taskbar decoration tracks the taskbar after moving it to another edge,
+      resizing it, and switching auto-hide on and off.
+- [ ] macOS Dock decoration lines up after moving the Dock left/right/bottom and after
+      using the Dock size slider, and the settings status line is accurate.
+- [ ] Dock decoration appears on each monitor that has a bar, and on none that doesn't.
+- [ ] The real Dock/taskbar still receives every click while decorated.
 
 ### Note on this repository's own CI/sandbox environment
 
-The full `tests/*.spec.js` suite (9 interaction tests + 4 visual baselines above) was run
+The full `tests/*.spec.js` suite (31 tests: settings interaction, overlay rendering and
+frame budget, dock strip rendering, and 4 visual baselines) was run
 and passes in the sandboxed Linux container this scaffold was built in, using its
 pre-installed Chromium via `PW_CHROMIUM_PATH` (that sandbox has no outbound access to
 `cdn.playwright.dev`, so `playwright install`'s own browser download doesn't work there —
@@ -182,20 +217,20 @@ before shipping a release build, then add the generated `icons/` paths back into
 
 ## Known limitations
 
-- **Dock/taskbar decoration is not implemented yet**, on either OS. `src-tauri/src/decoration.rs`
-  has the low-level lookups (`windows_impl::taskbar_rect()` for Windows'
-  `Shell_TrayWnd`; a macOS `dock_frame()` stub) but neither is wired up to actually
-  create and position a decoration window yet — the settings toggle is honest about
-  this (it's just not connected to anything). See
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-docktaskbar-decoration--feasibility)
-  for the design and why macOS in particular is harder: there's no public, stable API
-  for the Dock's exact screen position, only the Accessibility API, which requires the
-  user to grant Accessibility permission and can lag behind Dock resize/move/auto-hide
-  since it would have to poll rather than subscribe to a change notification.
-- The macOS-specific code paths in this project (`decoration.rs`'s `macos_impl`,
-  the Accessibility-permission flow, `macOSPrivateApi`/transparent-window behavior) have
-  only been compiled and logic-reviewed in a Linux sandbox, never run on a real Mac by
-  the person making these changes — real hardware testing on both macOS and Windows by
+- **macOS: the decoration hangs over the Dock's edge, it does not cover the Dock.**
+  The Dock is composited above ordinary floating windows, so no normal window can be
+  drawn on top of it. The strip window therefore reaches 26 px out of the shell bar onto
+  the desktop, and that band carries the snow ledge, the garland and the icicle roots.
+  On Windows the taskbar is covered directly. This is a platform constraint, not
+  something the app can configure away.
+- **macOS with the Dock set to auto-hide**: it reserves no work area and exposes no
+  public API for its hidden frame, so no strip is detected and nothing is drawn. The
+  settings window says so under the toggle instead of leaving it looking broken.
+- The macOS- and Windows-specific code paths in this project (work-area subtraction
+  against a real Dock/taskbar, the `Shell_TrayWnd` fallback, `macOSPrivateApi`/
+  transparent-window behavior, always-on-top strip placement) have
+  only been compiled and logic-reviewed in a Linux sandbox, never run on a real Mac or
+  PC by the person making these changes — real hardware testing on both macOS and Windows by
   someone with access to those machines is still needed before relying on this for a
   release.
 
