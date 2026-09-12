@@ -149,15 +149,14 @@ native-window properties are verified manually per-OS — see the checklist belo
 ### Note on this repository's own CI/sandbox environment
 
 The full `tests/*.spec.js` suite (9 interaction tests + 4 visual baselines above) was run
-and passes in the sandboxed container this scaffold was built in, using its pre-installed
-Chromium via `PW_CHROMIUM_PATH` (that sandbox has no outbound access to
+and passes in the sandboxed Linux container this scaffold was built in, using its
+pre-installed Chromium via `PW_CHROMIUM_PATH` (that sandbox has no outbound access to
 `cdn.playwright.dev`, so `playwright install`'s own browser download doesn't work there —
-not a code issue, just that container's network policy). The Rust/Tauri core itself could
-not be compiled in that same container because it also lacks the Linux
-GTK/webkit2gtk system dev packages Tauri needs for `cargo check`/`cargo build` on Linux
-(again, a normal Tauri Linux prerequisite — see Requirements above — not a code issue).
-Compile and smoke-test the Rust side (`cargo check`, `npm run dev`) on a machine with
-those prerequisites installed before release.
+not a code issue, just that container's network policy). After installing the Linux Tauri
+prerequisites (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
+`librsvg2-dev`, `libasound2-dev`, `build-essential`), the Rust/Tauri core was also compiled
+and run end-to-end there (`cargo check`, `npm run dev` under `xvfb-run`) with both the
+settings and overlay windows launching successfully.
 
 ## App icons
 
