@@ -12,6 +12,12 @@ use std::thread;
 /// `Sender<AudioCommand>` (which is `Send + Sync`) and talk to that thread
 /// over a channel.
 enum AudioCommand {
+    // Not sent from main.rs yet: no ambient sound asset is bundled/embedded
+    // into the binary yet (see themes/*.json's "sound.ambient" field, e.g.
+    // "fireplace" — the actual audio file and its include_bytes!() wiring
+    // are still TODO). Kept here, allowed, so the IPC-facing API is in
+    // place once an asset is added.
+    #[allow(dead_code)]
     PlayLooping { bytes: &'static [u8], volume: f32 },
     SetVolume(f32),
     Stop,
@@ -65,6 +71,7 @@ impl AmbientPlayer {
         Some(Self { tx })
     }
 
+    #[allow(dead_code)] // see AudioCommand::PlayLooping
     pub fn play_looping(&self, bytes: &'static [u8], volume: f32) {
         let _ = self.tx.send(AudioCommand::PlayLooping { bytes, volume });
     }

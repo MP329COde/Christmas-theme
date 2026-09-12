@@ -10,6 +10,7 @@
 //!   Dock resizes/moves/auto-hides.
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)] // not wired into main.rs yet: see taskbar_rect() below
 pub mod windows_impl {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
@@ -28,6 +29,7 @@ pub mod windows_impl {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)] // not wired into main.rs yet: see dock_frame() below
 pub mod macos_impl {
     //! Requires Accessibility permission (System Settings > Privacy &
     //! Security > Accessibility). We poll the Dock's frame on an
@@ -56,6 +58,7 @@ pub mod macos_impl {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[allow(dead_code)] // not wired into main.rs yet
 pub mod unsupported {
     pub fn unsupported_platform_notice() -> &'static str {
         "Dock/taskbar decoration is only implemented for Windows and macOS."
