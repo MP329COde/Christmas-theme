@@ -6,7 +6,7 @@
 // Tauri.
 
 import { getSettings, listThemes, onSettingsChanged } from '../shared/bridge.js';
-import { drawGarland, drawTrees, drawFireplace, DEFAULT_GARLAND_COLORS } from './decor.js';
+import { drawGarland, drawTrees, drawFireplace, GARLAND_PALETTES } from './decor.js';
 
 const canvas = document.getElementById('snow');
 const ctx = canvas.getContext('2d');
@@ -24,13 +24,38 @@ let config = {
 // AppSettings (user toggles), not the theme file, and only render on one
 // overlay window — see isPrimaryOverlay() below — so a multi-monitor setup
 // gets one decorated "scene", not the same trees repeated on every screen.
-let decorConfig = { trees: true, garlands: true, fireplace: true };
+let decorConfig = { trees: true, garlands: true, fireplace: true, garlandStyle: 'multicolor' };
 let themeColors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
 
 let accumulation = []; // per-column snow height, only used when accumulate=true
 let running = true;
 let rafId = null;
 const clock = { start: performance.now() };
+
+// A soft glow dot, pre-rendered once into an offscreen canvas and reused
+// via drawImage() for every "soft dot" flake. Doing the blur once here
+// instead of a live ctx.shadowBlur on every flake, every frame, is what
+// keeps a few hundred glowing flakes cheap enough not to weigh down the
+// CPU/GPU — shadowBlur per-shape at that scale is a well-known canvas
+// performance trap.
+const FLAKE_SPRITE_SIZE = 48;
+const flakeSprite = document.createElement('canvas');
+flakeSprite.width = FLAKE_SPRITE_SIZE;
+flakeSprite.height = FLAKE_SPRITE_SIZE;
+function renderFlakeSprite(color) {
+  const sctx = flakeSprite.getContext('2d');
+  sctx.clearRect(0, 0, FLAKE_SPRITE_SIZE, FLAKE_SPRITE_SIZE);
+  const c = FLAKE_SPRITE_SIZE / 2;
+  const gradient = sctx.createRadialGradient(c, c, 0, c, c, c);
+  gradient.addColorStop(0, color);
+  gradient.addColorStop(0.55, color);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  sctx.fillStyle = gradient;
+  sctx.beginPath();
+  sctx.arc(c, c, c, 0, Math.PI * 2);
+  sctx.fill();
+}
+renderFlakeSprite(config.color);
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -90,12 +115,12 @@ export function start() {
 /// gently rotating as they fall.
 function drawFlake(f) {
   ctx.globalAlpha = f.opacity;
-  ctx.fillStyle = config.color;
 
   if (!f.isCrystal || f.r < 1.6) {
-    ctx.beginPath();
-    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-    ctx.fill();
+    // Soft, slightly-out-of-focus dot via the pre-rendered sprite (see
+    // above) instead of a flat circle — cheap regardless of flake count.
+    const size = f.r * 4;
+    ctx.drawImage(flakeSprite, f.x - size / 2, f.y - size / 2, size, size);
     return;
   }
 
@@ -128,7 +153,8 @@ function tick() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (decorConfig.garlands) {
-    drawGarland(ctx, canvas.width, time, DEFAULT_GARLAND_COLORS);
+    const palette = GARLAND_PALETTES[decorConfig.garlandStyle] ?? GARLAND_PALETTES.multicolor;
+    drawGarland(ctx, canvas.width, time, palette);
   }
   if (decorConfig.trees) {
     drawTrees(ctx, canvas.width, canvas.height, themeColors);
@@ -160,7 +186,6 @@ function tick() {
   ctx.globalAlpha = 1;
 
   if (config.accumulate) {
-    ctx.fillStyle = config.color;
     ctx.beginPath();
     ctx.moveTo(0, canvas.height);
     for (let i = 0; i < accumulation.length; i++) {
@@ -168,7 +193,21 @@ function tick() {
     }
     ctx.lineTo(canvas.width, canvas.height);
     ctx.closePath();
+    ctx.fillStyle = config.color;
     ctx.fill();
+
+    // A faint bluish shadow just under the ridge line reads as depth in
+    // the snow rather than a flat white shelf.
+    ctx.strokeStyle = 'rgba(150,180,210,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < accumulation.length; i++) {
+      const x = i * 4;
+      const y = canvas.height - accumulation[i];
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
   }
 
   rafId = requestAnimationFrame(tick);
@@ -202,9 +241,9 @@ function applyThemeAndSettings(theme, settings) {
   if (!theme) return;
   setConfig({
     density: settings?.snowDensity ?? theme.snow.density,
-    wind: theme.snow.wind,
+    wind: settings?.snowWind ?? theme.snow.wind,
     flakeSize: theme.snow.flakeSize,
-    accumulate: theme.snow.accumulate,
+    accumulate: settings?.snowAccumulate ?? theme.snow.accumulate,
   });
   themeColors = theme.colors;
   const primary = isPrimaryOverlay();
@@ -212,6 +251,7 @@ function applyThemeAndSettings(theme, settings) {
     trees: primary && (settings?.treesDecoration ?? true),
     garlands: primary && (settings?.garlandsDecoration ?? true),
     fireplace: primary && (settings?.fireplaceDecoration ?? true),
+    garlandStyle: settings?.garlandStyle ?? 'multicolor',
   };
 }
 

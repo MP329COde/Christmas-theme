@@ -50,6 +50,27 @@ test('decoration toggles (trees, garlands, fireplace) default on and respond to 
   }
 });
 
+test('wind slider updates the displayed value', async ({ page }) => {
+  const slider = page.locator('[data-testid="snow-wind"]');
+  await expect(page.locator('#snow-wind-value')).toHaveText('30%');
+  await slider.fill('100');
+  await expect(page.locator('#snow-wind-value')).toHaveText('100%');
+});
+
+test('accumulate toggle defaults on and responds to clicks', async ({ page }) => {
+  const toggle = page.locator('[data-testid="accumulate-toggle"]');
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+});
+
+test('garland style select defaults to multicolor and can be changed', async ({ page }) => {
+  const select = page.locator('[data-testid="garland-style"]');
+  await expect(select).toHaveValue('multicolor');
+  await select.selectOption('cool');
+  await expect(select).toHaveValue('cool');
+});
+
 test('volume slider updates label and persists across reload', async ({ page }) => {
   const slider = page.locator('[data-testid="volume"]');
   await slider.fill('80');

@@ -14,9 +14,21 @@
       <select id="theme-select" data-testid="theme-select"></select>
     </section>
 
+    <h2>Snow</h2>
+
     <section>
-      <label for="snow-density">Snow density: <span id="snow-density-value">120</span></label>
+      <label for="snow-density">Density: <span id="snow-density-value">120</span></label>
       <input type="range" id="snow-density" data-testid="snow-density" min="0" max="300" step="10" />
+    </section>
+
+    <section>
+      <label for="snow-wind">Wind: <span id="snow-wind-value">30%</span></label>
+      <input type="range" id="snow-wind" data-testid="snow-wind" min="0" max="100" step="5" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="accumulate-toggle">Accumulate on ground</label>
+      <input type="checkbox" id="accumulate-toggle" data-testid="accumulate-toggle" />
     </section>
 
     <h2>Decorations</h2>
@@ -36,13 +48,24 @@
       <input type="checkbox" id="garlands-toggle" data-testid="garlands-toggle" />
     </section>
 
+    <section>
+      <label for="garland-style">Garland colors</label>
+      <select id="garland-style" data-testid="garland-style">
+        <option value="multicolor">Multicolor</option>
+        <option value="warm">Warm white</option>
+        <option value="cool">Cool blue</option>
+      </select>
+    </section>
+
     <section class="toggle-row">
       <label for="fireplace-toggle">🔥 Fireplace</label>
       <input type="checkbox" id="fireplace-toggle" data-testid="fireplace-toggle" />
     </section>
 
+    <h2>Sound</h2>
+
     <section>
-      <label for="volume">Ambient sound volume: <span id="volume-value">40%</span></label>
+      <label for="volume">Ambient volume: <span id="volume-value">40%</span></label>
       <input type="range" id="volume" data-testid="volume" min="0" max="100" step="5" />
     </section>
 

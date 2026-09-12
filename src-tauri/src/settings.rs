@@ -24,6 +24,17 @@ pub struct AppSettings {
     pub garlands_decoration: bool,
     #[serde(rename = "fireplaceDecoration")]
     pub fireplace_decoration: bool,
+    /// 0.0 (still air) to 1.0 (strong gusts). Overrides the active theme's
+    /// own wind default, same as snow_density already does.
+    #[serde(rename = "snowWind")]
+    pub snow_wind: f32,
+    /// Whether falling snow piles up at the bottom of the screen.
+    /// Overrides the active theme's own default.
+    #[serde(rename = "snowAccumulate")]
+    pub snow_accumulate: bool,
+    /// Garland bulb color palette: "multicolor" | "warm" | "cool".
+    #[serde(rename = "garlandStyle")]
+    pub garland_style: String,
     #[serde(rename = "soundVolume")]
     pub sound_volume: f32,
     pub autostart: bool,
@@ -39,6 +50,9 @@ impl Default for AppSettings {
             trees_decoration: true,
             garlands_decoration: true,
             fireplace_decoration: true,
+            snow_wind: 0.3,
+            snow_accumulate: true,
+            garland_style: "multicolor".into(),
             sound_volume: 0.4,
             autostart: false,
         }

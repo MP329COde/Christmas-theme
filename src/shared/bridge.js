@@ -23,6 +23,9 @@ const DEFAULT_SETTINGS = {
   treesDecoration: true,
   garlandsDecoration: true,
   fireplaceDecoration: true,
+  snowWind: 0.3,
+  snowAccumulate: true,
+  garlandStyle: 'multicolor',
   soundVolume: 0.4,
   autostart: false,
 };

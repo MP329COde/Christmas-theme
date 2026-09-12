@@ -253,6 +253,23 @@ app look far less finished than intended:
   multi-monitor setup gets one decorated scene, not the same trees repeated on every
   screen.
 
+## Added since (realism + more settings pass)
+
+- **More realistic rendering, without extra CPU/GPU cost**: soft-dot snowflakes now use a
+  pre-rendered glow sprite (`drawImage`) instead of a live `ctx.shadowBlur` per flake per
+  frame — shadowBlur at that scale is a well-known canvas performance trap, which would
+  have worked against this project's own "stay light" requirement. Trees get gradient-
+  shaded foliage tiers and a soft contact shadow instead of flat silhouettes; the
+  fireplace flame uses radial gradients (hot pale core fading to a deeper edge) and sits
+  above a couple of drawn logs instead of a flat-colored teardrop; garland bulbs are
+  small shaded ellipses with a highlight and a cap instead of plain dots; the snow pile
+  gets a faint bluish ridge line for a hint of depth.
+- **More settings**: a wind slider (`snowWind`, overrides the theme's own wind default,
+  same pattern as density), a ground-accumulation on/off toggle (`snowAccumulate`), and a
+  garland color palette picker (`garlandStyle`: multicolor / warm white / cool blue —
+  `GARLAND_PALETTES` in `src/overlay/decor.js`). All live-sync to the overlay the same
+  way density and theme already did.
+
 ## Contributing
 
 Issues and PRs welcome. Please:

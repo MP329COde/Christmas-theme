@@ -8,7 +8,23 @@
 // every single screen would look cluttered and repetitive rather than
 // like a single decorated desktop.
 
-export const DEFAULT_GARLAND_COLORS = ['#ff6b6b', '#ffd166', '#4ecdc4', '#a78bfa'];
+export const GARLAND_PALETTES = {
+  multicolor: ['#ff6b6b', '#ffd166', '#4ecdc4', '#a78bfa'],
+  warm: ['#ffb347', '#ffd166', '#ff8c42', '#ffe6a7'],
+  cool: ['#4ecdc4', '#5b8def', '#a7d8ff', '#7fe0e0'],
+};
+
+/// Lightens (positive amt) or darkens (negative amt, -100..100) a "#rrggbb"
+/// color, used to fake simple gradient shading without needing per-theme
+/// light/dark color variants in the theme JSON schema.
+function shadeColor(hex, amt) {
+  const num = parseInt(hex.slice(1), 16);
+  const clamp = (v) => Math.max(0, Math.min(255, v));
+  const r = clamp(((num >> 16) & 0xff) + Math.round((amt / 100) * 255));
+  const g = clamp(((num >> 8) & 0xff) + Math.round((amt / 100) * 255));
+  const b = clamp((num & 0xff) + Math.round((amt / 100) * 255));
+  return `rgb(${r},${g},${b})`;
+}
 
 /// Draws a wavy garland string across the top of the screen with bulbs
 /// that twinkle independently (each on its own phase offset), and a small
@@ -38,20 +54,28 @@ export function drawGarland(ctx, width, time, colors) {
     const twinkle = 0.55 + 0.45 * Math.sin(time * 2.2 + i * 1.3);
 
     ctx.globalAlpha = twinkle;
-    ctx.fillStyle = color;
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, 10);
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 11);
     glow.addColorStop(0, color);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
     ctx.fill();
 
+    // Bulb body with a small highlight so it reads as glass, not a flat dot.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = color;
+    const bulbGradient = ctx.createRadialGradient(x - 1.2, y - 1.2, 0.5, x, y, 4);
+    bulbGradient.addColorStop(0, '#ffffff');
+    bulbGradient.addColorStop(0.35, color);
+    bulbGradient.addColorStop(1, color);
+    ctx.fillStyle = bulbGradient;
     ctx.beginPath();
-    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 3.2, 4, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Bulb cap
+    ctx.fillStyle = 'rgba(60,60,60,0.7)';
+    ctx.fillRect(x - 1.5, y - 6, 3, 2.5);
   }
   ctx.restore();
 }
@@ -65,16 +89,35 @@ function drawPineTree(ctx, x, groundY, scale, colors) {
 
   ctx.save();
 
-  // Trunk
-  ctx.fillStyle = '#5b3a29';
+  // Soft contact shadow so the tree doesn't look like it's floating.
+  const shadow = ctx.createRadialGradient(x, groundY + 2, 0, x, groundY + 2, baseWidth * 0.55);
+  shadow.addColorStop(0, 'rgba(0,0,0,0.28)');
+  shadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(x, groundY + 2, baseWidth * 0.55, baseWidth * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Trunk, with a subtle gradient for a little roundness.
+  const trunkGradient = ctx.createLinearGradient(x - trunkW / 2, 0, x + trunkW / 2, 0);
+  trunkGradient.addColorStop(0, '#432a1e');
+  trunkGradient.addColorStop(0.5, '#5b3a29');
+  trunkGradient.addColorStop(1, '#432a1e');
+  ctx.fillStyle = trunkGradient;
   ctx.fillRect(x - trunkW / 2, groundY - trunkH, trunkW, trunkH);
 
-  // Foliage tiers (stacked triangles, widest at bottom)
-  ctx.fillStyle = colors.secondary;
+  // Foliage tiers (stacked triangles, widest at bottom), each tier shaded
+  // with a left-to-right gradient so the tree reads as three-dimensional
+  // instead of a flat green silhouette.
   for (let t = 0; t < tiers; t++) {
     const tierTop = groundY - trunkH - tierH * (t + 1) * 0.72;
     const tierBottom = groundY - trunkH - tierH * t * 0.72 + 6 * scale;
     const width = baseWidth * (1 - t * 0.24);
+    const tierGradient = ctx.createLinearGradient(x - width / 2, 0, x + width / 2, 0);
+    tierGradient.addColorStop(0, shadeColor(colors.secondary, -18));
+    tierGradient.addColorStop(0.45, colors.secondary);
+    tierGradient.addColorStop(1, shadeColor(colors.secondary, 12));
+    ctx.fillStyle = tierGradient;
     ctx.beginPath();
     ctx.moveTo(x, tierTop);
     ctx.lineTo(x - width / 2, tierBottom);
@@ -178,24 +221,43 @@ export function drawFireplace(ctx, width, height, time) {
   ctx.closePath();
   ctx.fill();
 
-  // Flame: a few overlapping flickering teardrop shapes
+  // A couple of logs at the base of the hearth, under the flame.
+  const logY = oy + openingH - 10;
+  ctx.fillStyle = '#3d2417';
+  ctx.beginPath();
+  ctx.ellipse(ox + openingW * 0.38, logY, openingW * 0.26, 6, -0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(ox + openingW * 0.62, logY, openingW * 0.26, 6, 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Flame: a few overlapping flickering teardrop shapes, each filled with
+  // a radial gradient (hot pale core fading to a deeper edge color) rather
+  // than a flat fill, so it reads as fire rather than a solid orange blob.
   const flameBaseX = ox + openingW / 2;
   const flameBaseY = oy + openingH - 6;
   const flicker = (i) => 0.85 + 0.15 * Math.sin(time * 9 + i * 2.1) + 0.08 * Math.sin(time * 23 + i);
 
   const flameLayers = [
-    { color: '#ffb347', height: 46, width: 26 },
-    { color: '#ff7043', height: 34, width: 20 },
-    { color: '#ffe97f', height: 20, width: 12 },
+    { core: '#fff3c4', edge: '#ff7043', height: 46, width: 26 },
+    { core: '#ffcf6b', edge: '#e8491a', height: 34, width: 20 },
+    { core: '#ffffff', edge: '#ffb347', height: 20, width: 11 },
   ];
   flameLayers.forEach((layer, i) => {
     const f = flicker(i);
-    ctx.fillStyle = layer.color;
+    const tipY = flameBaseY - layer.height * f;
+    const gradient = ctx.createRadialGradient(
+      flameBaseX, flameBaseY - layer.height * 0.3 * f, 1,
+      flameBaseX, flameBaseY - layer.height * 0.3 * f, layer.height * 0.75 * f
+    );
+    gradient.addColorStop(0, layer.core);
+    gradient.addColorStop(1, layer.edge);
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.moveTo(flameBaseX, flameBaseY);
     ctx.quadraticCurveTo(
       flameBaseX - layer.width * f, flameBaseY - layer.height * 0.5 * f,
-      flameBaseX, flameBaseY - layer.height * f
+      flameBaseX, tipY
     );
     ctx.quadraticCurveTo(
       flameBaseX + layer.width * f, flameBaseY - layer.height * 0.5 * f,
