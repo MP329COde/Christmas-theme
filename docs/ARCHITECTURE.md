@@ -21,11 +21,12 @@ Trade-off accepted: Tauri's cross-platform native code (dock/taskbar hooks) has 
 ┌─────────────────────────────────────────────────────────────┐
 │                        Tauri Rust core                       │
 │  - App bootstrap, tray icon, autostart plugin                │
-│  - Theme loader (reads themes/*.json, validates schema)      │
+│  - Theme loader (themes/*.json embedded via include_str!)    │
 │  - Window manager:                                            │
 │      • Settings window  (normal window)                       │
-│      • Snow overlay window (transparent, click-through,       │
-│        always-on-top, spans full virtual desktop)              │
+│      • One snow overlay window PER MONITOR (transparent,      │
+│        click-through, always-on-BOTTOM so it behaves like a    │
+│        live wallpaper and never covers other apps)             │
 │  - Platform decoration module (cfg(target_os)):                │
 │      • macOS: AXUIElement accessibility calls to inspect Dock  │
 │        frame, position an auxiliary transparent NSWindow with  │
@@ -83,4 +84,4 @@ The Rust core validates `schemaVersion` and required fields on load and rejects/
 Tauri's overlay/settings windows are native OS windows, not something Playwright can attach to directly (no CDP endpoint by default, no DOM outside the webview accessible from outside the app). So:
 
 - The **settings UI** (`src/settings`) is plain HTML/CSS/JS with no Tauri-only APIs in its render path — Tauri IPC calls are isolated behind a small `bridge.js` that no-ops (using `localStorage`) when `window.__TAURI__` is undefined. This lets us serve `src/settings` with a plain static dev server and drive it with Playwright exactly like a normal web page.
-- The **snow overlay** (`src/overlay`) is a `<canvas>` renderer with no Tauri-only calls either, so it's also servable standalone and testable for "does it render particles, does density changes take effect" — but we cannot use Playwright to verify OS-level properties (always-on-top, click-through, spanning multiple monitors) since those only exist once Tauri creates the real native window. That part is manually verified per-OS and documented as a manual QA checklist, not an automated test.
+- The **snow overlay** (`src/overlay`) is a `<canvas>` renderer with no Tauri-only calls either, so it's also servable standalone and testable for "does it render particles, does density changes take effect" — but we cannot use Playwright to verify OS-level properties (z-order, click-through, one window per monitor) since those only exist once Tauri creates the real native window. That part is manually verified per-OS and documented as a manual QA checklist, not an automated test.

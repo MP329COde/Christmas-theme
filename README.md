@@ -145,10 +145,10 @@ Generated with `npm run test:update-baselines` (Playwright CLI, Chromium):
 
 ### Why the full overlay window isn't in the automated suite
 
-The production snow overlay is a native, transparent, always-on-top, click-through OS
+The production snow overlay is a native, transparent, always-on-bottom, click-through OS
 window created by Tauri. Playwright drives a browser page, not an arbitrary native OS
-window, so it cannot assert on those OS-level properties (always-on-top ordering,
-click-through, spanning multiple monitors). What's covered instead: `src/overlay/snow.js`
+window, so it cannot assert on those OS-level properties (z-order, click-through,
+spanning multiple monitors). What's covered instead: `src/overlay/snow.js`
 has no Tauri-only calls, so it's served standalone and tested for actual rendering
 behavior (particle count, live density changes, that pixels are actually drawn). The
 native-window properties are verified manually per-OS — see the checklist below.
@@ -269,6 +269,32 @@ app look far less finished than intended:
   garland color palette picker (`garlandStyle`: multicolor / warm white / cool blue —
   `GARLAND_PALETTES` in `src/overlay/decor.js`). All live-sync to the overlay the same
   way density and theme already did.
+
+## Added since (realism + modern UI pass)
+
+- **Depth-of-field snow**: every flake now carries a `depth`, and its size, speed, wind
+  response, brightness and sprite softness all follow from it. Distant flakes stay small,
+  slow, dim and crisp; near ones are large, fast and bloom out of focus. The scene is
+  composited in depth order — distant snow behind the trees and fireplace, near snow in
+  front — which is what gives the overlay a sense of volume instead of one flat sheet.
+  Crystals gained a second pair of side branches so the silhouette reads as a dendrite
+  rather than an asterisk.
+- **Rebuilt decorations** (`src/overlay/decor.js`): pines now have a needled silhouette
+  with light-direction shading, bark grain, ambient occlusion between boughs, snow laid
+  along the branch tips, ornaments with specular highlights and a star with a bloom. The
+  fireplace has per-stone tonal variation with bevels and mortar, a timber mantel with
+  grain, a recessed sooty hearth, charred logs, and a live fire built from seven additive
+  flame tongues, an ember bed, rising sparks and warm light spilling onto the floor.
+  Garland bulbs are shaded glass teardrops with filament highlights on a catenary wire.
+- **Everything static is cached**: tree sprites and the fireplace stonework are rendered
+  once into offscreen canvases and blitted with a single `drawImage` per frame; only the
+  fire, sparks, light spill and bulb twinkle are redrawn. That's what allows this much
+  texture detail while still measuring ~60fps.
+- **Modernised settings window**: card-style rows with hover states, real toggle switches,
+  sliders with a filled track (`--fill`, kept in sync by `syncRangeFill`), a custom select,
+  a proper type scale and grouped sections (Snow / Decorations / Sound). The controls are
+  still native `<input>` elements styled with `appearance: none`, so they stay keyboard
+  accessible and directly clickable by the Playwright suite.
 
 ## Contributing
 

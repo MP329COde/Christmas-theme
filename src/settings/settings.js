@@ -33,6 +33,15 @@ function currentTheme() {
   return themes.find((t) => t.id === themeSelect.value);
 }
 
+/// Keeps the slider's filled-track CSS variable in sync with its value —
+/// a range input can't express "how far along am I" to CSS on its own.
+function syncRangeFill(input) {
+  const min = Number(input.min || 0);
+  const max = Number(input.max || 100);
+  const pct = max === min ? 0 : ((Number(input.value) - min) / (max - min)) * 100;
+  input.style.setProperty('--fill', `${pct}%`);
+}
+
 function setStatus(text) {
   status.textContent = text;
   clearTimeout(setStatus._t);
@@ -83,6 +92,7 @@ async function init() {
   volumeValue.textContent = `${Math.round(settings.soundVolume * 100)}%`;
   autostartToggle.checked = settings.autostart;
 
+  for (const slider of [densityInput, windInput, volumeInput]) syncRangeFill(slider);
   applyThemeColors(currentTheme());
 }
 
@@ -93,11 +103,13 @@ themeSelect.addEventListener('change', async () => {
 
 densityInput.addEventListener('input', () => {
   densityValue.textContent = densityInput.value;
+  syncRangeFill(densityInput);
 });
 densityInput.addEventListener('change', persist);
 
 windInput.addEventListener('input', () => {
   windValue.textContent = `${windInput.value}%`;
+  syncRangeFill(windInput);
 });
 windInput.addEventListener('change', persist);
 
@@ -110,6 +122,7 @@ fireplaceToggle.addEventListener('change', persist);
 
 volumeInput.addEventListener('input', () => {
   volumeValue.textContent = `${volumeInput.value}%`;
+  syncRangeFill(volumeInput);
 });
 volumeInput.addEventListener('change', persist);
 
