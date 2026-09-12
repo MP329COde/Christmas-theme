@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await page.waitForSelector('[data-testid="theme-select"] option');
+  await page.waitForSelector('[data-testid="theme-select"] option', { state: 'attached' });
 });
 
 test('default theme baseline', async ({ page }) => {

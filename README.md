@@ -108,6 +108,26 @@ Test files:
 - `tests/overlay.spec.js` — the snow canvas renderer in isolation (particle count, density
   changes, that it actually draws pixels).
 
+If you already have a Chromium binary on your machine (e.g. one Playwright previously
+installed, or your system's own) and don't want to (re)download one, point
+`PW_CHROMIUM_PATH` at it and `playwright.config.js` will launch that instead:
+
+```bash
+PW_CHROMIUM_PATH=/path/to/chrome npm test
+```
+
+### Settings window baselines
+
+Generated with `npm run test:update-baselines` (Playwright CLI, Chromium):
+
+| Default theme | Frosty Blue theme |
+|---|---|
+| ![Default theme settings window](tests/screenshots/visual-regression.spec.js-snapshots/settings-default-theme-chromium-linux.png) | ![Frosty Blue theme settings window](tests/screenshots/visual-regression.spec.js-snapshots/settings-frosty-blue-theme-chromium-linux.png) |
+
+| Snow density: max (300) | Snow density: min (0) |
+|---|---|
+| ![Max snow density](tests/screenshots/visual-regression.spec.js-snapshots/settings-snow-max-chromium-linux.png) | ![Min snow density](tests/screenshots/visual-regression.spec.js-snapshots/settings-snow-min-chromium-linux.png) |
+
 ### Why the full overlay window isn't in the automated suite
 
 The production snow overlay is a native, transparent, always-on-top, click-through OS
@@ -128,11 +148,16 @@ native-window properties are verified manually per-OS — see the checklist belo
 
 ### Note on this repository's own CI/sandbox environment
 
-This scaffold was built and code-reviewed in a sandboxed container without outbound
-access to `cdn.playwright.dev` (browser binary download) or the Linux GTK/webkit2gtk
-system packages Tauri needs for `cargo check`/`cargo build`. Both are ordinary
-environment prerequisites, not code issues — install them locally (see Requirements
-above and run `npx playwright install`) to build and run the full test suite.
+The full `tests/*.spec.js` suite (9 interaction tests + 4 visual baselines above) was run
+and passes in the sandboxed container this scaffold was built in, using its pre-installed
+Chromium via `PW_CHROMIUM_PATH` (that sandbox has no outbound access to
+`cdn.playwright.dev`, so `playwright install`'s own browser download doesn't work there —
+not a code issue, just that container's network policy). The Rust/Tauri core itself could
+not be compiled in that same container because it also lacks the Linux
+GTK/webkit2gtk system dev packages Tauri needs for `cargo check`/`cargo build` on Linux
+(again, a normal Tauri Linux prerequisite — see Requirements above — not a code issue).
+Compile and smoke-test the Rust side (`cargo check`, `npm run dev`) on a machine with
+those prerequisites installed before release.
 
 ## App icons
 

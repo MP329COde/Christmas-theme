@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await page.waitForSelector('[data-testid="theme-select"] option');
+  // <option> elements don't reliably report as "visible" to Playwright's
+  // actionability checks (they're native form controls, not normal boxes),
+  // so wait for them to be attached to the DOM instead.
+  await page.waitForSelector('[data-testid="theme-select"] option', { state: 'attached' });
 });
 
 test('renders default theme settings', async ({ page }) => {
@@ -46,7 +49,7 @@ test('volume slider updates label and persists across reload', async ({ page }) 
   // Trigger the 'change' event (fill() only fires 'input') so settings.js persists it.
   await slider.dispatchEvent('change');
   await page.reload();
-  await page.waitForSelector('[data-testid="theme-select"] option');
+  await page.waitForSelector('[data-testid="theme-select"] option', { state: 'attached' });
   await expect(page.locator('[data-testid="volume"]')).toHaveValue('80');
 });
 

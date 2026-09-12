@@ -21,8 +21,21 @@ const port = process.env.PORT ? Number(process.env.PORT) : 4173;
 
 const server = http.createServer(async (req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
-  if (urlPath === '/') urlPath = '/settings/index.html';
-  if (urlPath === '/overlay') urlPath = '/overlay/index.html';
+
+  // Redirect (not just internally alias) so the browser's resolved page
+  // URL matches the file's real directory — otherwise relative asset
+  // URLs like `./style.css` resolve against `/` instead of `/settings/`
+  // and 404.
+  if (urlPath === '/') {
+    res.writeHead(302, { Location: '/settings/index.html' });
+    res.end();
+    return;
+  }
+  if (urlPath === '/overlay') {
+    res.writeHead(302, { Location: '/overlay/index.html' });
+    res.end();
+    return;
+  }
 
   const filePath = path.join(
     projectRoot,

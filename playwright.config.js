@@ -15,6 +15,16 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use the environment's pre-installed Chromium (no bundled
+        // browser download required) when PW_CHROMIUM_PATH is set.
+        launchOptions: process.env.PW_CHROMIUM_PATH
+          ? { executablePath: process.env.PW_CHROMIUM_PATH }
+          : undefined,
+      },
+    },
   ],
 });
