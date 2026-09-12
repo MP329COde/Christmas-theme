@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "minimal-white",
+  "name": "Minimal White",
+  "colors": { "primary": "#ffffff", "secondary": "#cfd8dc", "accent": "#90a4ae", "background": "#101418" },
+  "snow": { "density": 40, "accumulate": false, "wind": 0.1, "flakeSize": 2 },
+  "sound": { "ambient": "none", "volume": 0 },
+  "decorations": { "dock": false, "taskbar": false }
+}

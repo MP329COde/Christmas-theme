@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "classic-red",
+  "name": "Classic Red & Green",
+  "colors": { "primary": "#c0392b", "secondary": "#1e7d32", "accent": "#f1c40f", "background": "#0b1d2a" },
+  "snow": { "density": 120, "accumulate": true, "wind": 0.3, "flakeSize": 3 },
+  "sound": { "ambient": "fireplace", "volume": 0.4 },
+  "decorations": { "dock": true, "taskbar": true }
+}

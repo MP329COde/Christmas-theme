@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Christmas Theme Settings</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="panel">
+    <h1>🎄 Christmas Theme</h1>
+
+    <section>
+      <label for="theme-select">Theme</label>
+      <select id="theme-select" data-testid="theme-select"></select>
+    </section>
+
+    <section>
+      <label for="snow-density">Snow density: <span id="snow-density-value">120</span></label>
+      <input type="range" id="snow-density" data-testid="snow-density" min="0" max="300" step="10" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="dock-toggle">Decorate Dock / Taskbar</label>
+      <input type="checkbox" id="dock-toggle" data-testid="dock-toggle" />
+    </section>
+
+    <section>
+      <label for="volume">Ambient sound volume: <span id="volume-value">40%</span></label>
+      <input type="range" id="volume" data-testid="volume" min="0" max="100" step="5" />
+    </section>
+
+    <section class="toggle-row">
+      <label for="autostart-toggle">Start automatically with system</label>
+      <input type="checkbox" id="autostart-toggle" data-testid="autostart-toggle" />
+    </section>
+
+    <footer>
+      <button id="disable-btn" data-testid="disable-all" class="danger">Disable everything</button>
+      <span id="status" data-testid="status" role="status"></span>
+    </footer>
+  </main>
+
+  <script type="module" src="./settings.js"></script>
+</body>
+</html>

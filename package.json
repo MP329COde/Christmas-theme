@@ -1,0 +1,20 @@
+{
+  "name": "christmas-theme",
+  "version": "0.1.0",
+  "description": "Open-source, cross-platform desktop Christmas decoration app (snow overlay, dock/taskbar decorations, ambient sound)",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "serve:ui": "node scripts/dev-server.js",
+    "test": "playwright test",
+    "test:update-baselines": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
