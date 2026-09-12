@@ -237,7 +237,7 @@ function bakeTree(scale, colors, seed, wantLights) {
   const trunkW = 16 * scale;
   const trunkH = 34 * scale;
   const topY = 38 * scale;
-  const baseHalf = 96 * scale;
+  const baseHalf = 108 * scale;
 
   // Contact shadow.
   const sh = c.createRadialGradient(cx, groundY, 0, cx, groundY, baseHalf);
@@ -271,9 +271,11 @@ function bakeTree(scale, colors, seed, wantLights) {
   for (let row = 0; row < rows; row++) {
     const f = row / (rows - 1); // 0 bottom .. 1 top
     const y = foliageBottom - (foliageBottom - topY) * f;
-    const half = baseHalf * (1 - f) ** 0.82;
-    // Rows lower in the tree are in shade, tips catch more light.
-    const rowColor = shade(green, -26 + f * 30 + (rand() - 0.5) * 8);
+    const half = baseHalf * (1 - f) ** 0.72;
+    // Tips catch light, lower rows sit in shade, and each bough wanders a
+    // little in hue — uniform green is the main thing that reads as fake.
+    const hueJitter = (rand() - 0.5) * 16;
+    const rowColor = shade(green, -28 + f * 32 + hueJitter);
     const perRow = Math.max(3, Math.round(half / (7 * scale)));
 
     for (let i = 0; i < perRow; i++) {
@@ -322,6 +324,39 @@ function bakeTree(scale, colors, seed, wantLights) {
     }
   }
 
+  // --- ribbon swagged around the tree --------------------------------------
+  // Drawn as a series of dipping arcs at descending heights: front-facing
+  // runs are lit, the returns behind the tree are darkened so the ribbon
+  // reads as wrapping around the cone rather than lying flat on it.
+  for (let turn = 0; turn < 5; turn++) {
+    const f0 = 0.86 - turn * 0.18;
+    if (f0 < 0.02) break;
+    const y0 = foliageBottom - (foliageBottom - topY) * f0;
+    const half = baseHalf * (1 - f0) ** 0.72;
+    const front = turn % 2 === 0;
+    c.save();
+    // Kept fairly transparent and thin: a heavy opaque band reads as a
+    // bar painted across the tree instead of ribbon lying among branches.
+    c.globalAlpha = front ? 0.72 : 0.34;
+    c.strokeStyle = front ? shade(colors.accent, 6) : shade(colors.accent, -46);
+    c.lineWidth = (2.6 + rand()) * scale;
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(cx - half * 0.9, y0 - 6 * scale);
+    c.quadraticCurveTo(cx, y0 + 26 * scale, cx + half * 0.9, y0 - 8 * scale);
+    c.stroke();
+    if (front) {
+      c.globalAlpha = 0.3;
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.lineWidth = 0.9 * scale;
+      c.beginPath();
+      c.moveTo(cx - half * 0.88, y0 - 7.2 * scale);
+      c.quadraticCurveTo(cx, y0 + 24 * scale, cx + half * 0.88, y0 - 9.2 * scale);
+      c.stroke();
+    }
+    c.restore();
+  }
+
   // --- baubles -------------------------------------------------------------
   const ornamentColors = [
     colors.primary, colors.accent, '#f2f4f7',
@@ -331,7 +366,7 @@ function bakeTree(scale, colors, seed, wantLights) {
   for (let i = 0; i < ornaments; i++) {
     const f = 0.05 + rand() * 0.9;
     const y = foliageBottom - (foliageBottom - topY) * f;
-    const half = baseHalf * (1 - f) ** 0.82;
+    const half = baseHalf * (1 - f) ** 0.72;
     const x = cx + (rand() * 2 - 1) * half * 0.82;
     const r = (4 + rand() * 3.4) * scale;
     const col = ornamentColors[Math.floor(rand() * ornamentColors.length)];
@@ -358,6 +393,23 @@ function bakeTree(scale, colors, seed, wantLights) {
     // Cap and hook.
     c.fillStyle = '#c9a227';
     c.fillRect(x - r * 0.22, y - r * 1.22, r * 0.44, r * 0.34);
+
+    // Every so often hang a star or a drop instead, so the tree isn't
+    // covered in nothing but spheres.
+    if (rand() > 0.76) {
+      const sx2 = cx + (rand() * 2 - 1) * half * 0.7;
+      const sy2 = y + (rand() - 0.5) * 26 * scale;
+      c.fillStyle = rand() > 0.5 ? colors.accent : '#f2f4f7';
+      if (rand() > 0.5) {
+        star(c, sx2, sy2, 5, r * 1.15, r * 0.46);
+      } else {
+        c.beginPath();
+        c.moveTo(sx2, sy2 - r * 1.3);
+        c.quadraticCurveTo(sx2 + r * 0.75, sy2, sx2, sy2 + r * 1.1);
+        c.quadraticCurveTo(sx2 - r * 0.75, sy2, sx2, sy2 - r * 1.3);
+        c.fill();
+      }
+    }
   }
 
   // --- star ---------------------------------------------------------------
@@ -687,6 +739,34 @@ function bakeFireplace(scale, colors, opts) {
     }
   }
 
+  // --- candles standing on the mantel -------------------------------------
+  // Bodies are baked; the flames are animated per frame (see drawFireplace).
+  const candles = [];
+  for (const [px, ch] of [[0.2, 30], [0.31, 20], [0.78, 26]]) {
+    const cxp = w * px;
+    const hgt = ch * scale;
+    const cw = 9 * scale;
+    const base = mantelY + 1;
+    const wax = c.createLinearGradient(cxp - cw / 2, 0, cxp + cw / 2, 0);
+    wax.addColorStop(0, '#b9ac93');
+    wax.addColorStop(0.4, '#f2e9d4');
+    wax.addColorStop(1, '#a99c85');
+    c.fillStyle = wax;
+    c.fillRect(cxp - cw / 2, base - hgt, cw, hgt);
+    // Melted lip and wick.
+    c.fillStyle = '#fbf5e6';
+    c.beginPath();
+    c.ellipse(cxp, base - hgt, cw / 2, 2.2 * scale, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#2b2118';
+    c.lineWidth = 1.2 * scale;
+    c.beginPath();
+    c.moveTo(cxp, base - hgt - 1 * scale);
+    c.lineTo(cxp, base - hgt - 4 * scale);
+    c.stroke();
+    candles.push({ x: cxp, y: base - hgt - 4 * scale, phase: rand() * 6.28 });
+  }
+
   // --- garland draped on the mantel ---------------------------------------
   const garlandLights = drawMantelGarland(
     c, -6 * scale, mantelY - 10 * scale, w + 12 * scale, scale, colors, rand,
@@ -695,6 +775,7 @@ function bakeFireplace(scale, colors, opts) {
 
   return {
     sprite: cv,
+    candles,
     lights: garlandLights,
     geom: { w, h, ox, oy, openW, openH, fireX: ox + openW / 2, fireY: grateY + 6 * scale },
   };
@@ -807,6 +888,35 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
       const s = 13 + 9 * lit;
       ctx.globalAlpha = 0.5 + 0.5 * lit;
       ctx.drawImage(bulb, x + l.x - s / 2, y + l.y - s / 2, s, s);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Candle flames: a warm bloom plus a small teardrop that leans as it
+  // flickers, each on its own phase so they don't gutter in unison.
+  if (fireCache.candles?.length) {
+    const halo = glowSprite('#ffc36b', 48);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const cd of fireCache.candles) {
+      const flick = 0.75 + 0.25 * Math.sin(time * 7.3 + cd.phase) + 0.1 * Math.sin(time * 17 + cd.phase);
+      const fx = x + cd.x + Math.sin(time * 3.1 + cd.phase) * 0.7 * scale;
+      const fy = y + cd.y;
+      const hs = 30 * scale * flick;
+      ctx.globalAlpha = 0.75 * flick;
+      ctx.drawImage(halo, fx - hs / 2, fy - hs * 0.62, hs, hs);
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffdf9a';
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 9 * scale * flick);
+      ctx.quadraticCurveTo(fx + 2.6 * scale, fy - 2 * scale, fx, fy + 1.5 * scale);
+      ctx.quadraticCurveTo(fx - 2.6 * scale, fy - 2 * scale, fx, fy - 9 * scale * flick);
+      ctx.fill();
+      ctx.fillStyle = '#fff6d8';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy - 3 * scale, 1.1 * scale, 2.6 * scale * flick, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';

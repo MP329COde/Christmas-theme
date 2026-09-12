@@ -75,17 +75,24 @@ let bankLastBuilt = -1;
 // small and fairly crisp, near ones are large and bloom out of focus, the
 // way real snow does between a camera and the background.
 const FLAKE_SPRITE_SIZE = 64;
-const FLAKE_SOFTNESS = [0.72, 0.5, 0.24]; // far -> near: core radius fraction
-const flakeSprites = FLAKE_SOFTNESS.map((coreStop) => {
+// far -> near: core radius fraction, and the flake's own tint. Distant
+// snow is cooled by the air between it and the viewer (atmospheric
+// perspective); only the closest flakes are actually white.
+const FLAKE_LAYERS = [
+  { coreStop: 0.72, tint: '203,219,238' },
+  { coreStop: 0.5, tint: '230,239,250' },
+  { coreStop: 0.24, tint: '255,255,255' },
+];
+const flakeSprites = FLAKE_LAYERS.map(({ coreStop, tint }) => {
   const cv = document.createElement('canvas');
   cv.width = FLAKE_SPRITE_SIZE;
   cv.height = FLAKE_SPRITE_SIZE;
   const sctx = cv.getContext('2d');
   const c = FLAKE_SPRITE_SIZE / 2;
   const gradient = sctx.createRadialGradient(c, c, 0, c, c, c);
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(coreStop, 'rgba(255,255,255,0.85)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  gradient.addColorStop(0, `rgba(${tint},1)`);
+  gradient.addColorStop(coreStop, `rgba(${tint},0.85)`);
+  gradient.addColorStop(1, `rgba(${tint},0)`);
   sctx.fillStyle = gradient;
   sctx.beginPath();
   sctx.arc(c, c, c, 0, Math.PI * 2);
@@ -236,12 +243,14 @@ function drawFlake(f) {
 /// drawing so the scene can be composited in depth order (far snow, then
 /// the decorations, then near snow) while each flake is still stepped
 /// exactly once per frame.
-function stepFlake(f) {
+function stepFlake(f, gust) {
   f.y += f.speed;
   f.drift += f.driftRate;
   // Nearer flakes are pushed further by the same wind, which is what makes
   // the layers visibly separate instead of moving as one sheet.
-  f.x += Math.sin(f.drift) * config.wind * (0.35 + f.depth * 1.3);
+  f.x += Math.sin(f.drift) * config.wind * gust * (0.35 + f.depth * 1.3);
+  // A gust also drives the whole field sideways, not just the flutter.
+  f.x += config.wind * (gust - 1) * 0.9 * (0.3 + f.depth);
   f.rotation += f.spin;
 
   if (f.x < -40) f.x = canvas.width + 40;
@@ -316,7 +325,10 @@ function render(time) {
 
   // Step every flake first, then draw in depth order: distant snow sits
   // behind the trees and fireplace, close snow passes in front of them.
-  for (const f of flakes) stepFlake(f);
+  // Two slow sines beating against each other: the wind surges and eases
+  // on no fixed period instead of pulsing regularly.
+  const gust = 1 + 0.55 * Math.sin(time * 0.23) + 0.35 * Math.sin(time * 0.61 + 1.7);
+  for (const f of flakes) stepFlake(f, gust);
 
   for (const f of flakes) {
     if (f.layer === 0) drawFlake(f);
