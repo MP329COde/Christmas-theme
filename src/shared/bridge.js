@@ -4,7 +4,16 @@
 
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
-const BUILTIN_THEMES = ['classic-red', 'frosty-blue', 'minimal-white'];
+const BUILTIN_THEMES = [
+  'classic-red',
+  'frosty-blue',
+  'minimal-white',
+  'midnight-gold',
+  'candy-cane',
+  'gingerbread',
+  'arctic-aurora',
+  'santa-classic',
+];
 
 const DEFAULT_SETTINGS = {
   themeId: 'classic-red',
@@ -47,6 +56,24 @@ export async function disableEverything() {
     return window.__TAURI__.core.invoke('disable_everything');
   }
   localStorage.removeItem('christmas-theme-settings');
+}
+
+// Lets the overlay window(s) react live when settings are saved from the
+// settings window, instead of only picking up changes on next launch.
+// The backend (main.rs) emits 'settings-changed' with { settings, theme }
+// right after save_settings persists. No equivalent exists outside Tauri
+// since there's only one page/window when testing standalone.
+export function onSettingsChanged(callback) {
+  if (!isTauri) {
+    return () => {};
+  }
+  let unlisten = () => {};
+  window.__TAURI__.event
+    .listen('settings-changed', (event) => callback(event.payload))
+    .then((fn) => {
+      unlisten = fn;
+    });
+  return () => unlisten();
 }
 
 export { DEFAULT_SETTINGS };

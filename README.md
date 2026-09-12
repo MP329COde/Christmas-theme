@@ -13,14 +13,18 @@ snow overlay isn't a security risk).
 
 ## Features (V1)
 
-- **Snow overlay**: transparent, borderless, always-on-top window with animated,
+- **Snow overlay**: one transparent, borderless, always-on-top, click-through window per
+  connected monitor (multi-monitor setups get snow on every screen), with animated,
   density-configurable falling snow and optional accumulation at the bottom of the screen.
-- **Dock/taskbar decoration**:
-  - Windows: a layered, click-through window positioned over the taskbar (`Shell_TrayWnd`).
-  - macOS: experimental, opt-in, requires Accessibility permission — see
-    [Known limitations](#known-limitations).
-- **JSON theme system**: versioned schema (`themes/*.json`) covering colors, snow density,
-  ambient sound, and which decorations are active. Reusable for future seasonal themes.
+  Changing the theme or density in the settings window updates all overlay windows live.
+- **Dock/taskbar decoration**: **not implemented yet** — the toggle exists in settings and
+  is persisted, but nothing currently draws on the Dock or taskbar. See
+  [Known limitations](#known-limitations) for the plan and why this is harder than it looks,
+  especially on macOS.
+- **JSON theme system**: versioned schema (`themes/*.json`), 8 built-in themes shipped,
+  covering colors, snow density/wind/accumulation, ambient sound, and which decorations
+  are active. Reusable for future seasonal themes, and extensible by dropping extra
+  `*.json` files into the app's config directory under `themes/`.
 - **Ambient sound**: optional fireplace crackle / sleigh bells, volume-controlled, muted by default volume choice per theme.
 - **Settings window**: theme picker, snow density slider, dock/taskbar toggle, volume
   slider, autostart toggle, and a "disable everything" button that removes all
@@ -46,7 +50,8 @@ src-tauri/        Rust core: window management, theme loader, settings persisten
 src/settings/     Settings window UI
 src/overlay/      Snow overlay canvas renderer
 src/shared/       bridge.js — IPC-or-localStorage abstraction shared by both UIs
-themes/           Built-in theme JSON files (classic-red, frosty-blue, minimal-white)
+themes/           Built-in theme JSON files (8: classic-red, frosty-blue, minimal-white,
+                  midnight-gold, candy-cane, gingerbread, arctic-aurora, santa-classic)
 scripts/          dev-server.js — static file server used by Playwright + Tauri dev
 tests/            Playwright test suite
 docs/             Architecture notes
@@ -167,15 +172,49 @@ before shipping a release build, then add the generated `icons/` paths back into
 
 ## Known limitations
 
-- **macOS Dock decoration is experimental and opt-in.** There's no public, stable macOS
-  API for the Dock's exact screen position — only the Accessibility API, which requires
-  the user to grant Accessibility permission and can lag behind Dock
-  resize/move/auto-hide since we poll rather than subscribe to a change notification.
-  See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-docktaskbar-decoration--feasibility)
-  for details and the V2 plan (subscribing to `NSWorkspace` notifications instead of polling).
-- Windows taskbar decoration is implemented via `Shell_TrayWnd` lookup; if a future Windows
-  version renames this window class, decoration silently fails to attach (falls back to no
-  decoration rather than crashing).
+- **Dock/taskbar decoration is not implemented yet**, on either OS. `src-tauri/src/decoration.rs`
+  has the low-level lookups (`windows_impl::taskbar_rect()` for Windows'
+  `Shell_TrayWnd`; a macOS `dock_frame()` stub) but neither is wired up to actually
+  create and position a decoration window yet — the settings toggle is honest about
+  this (it's just not connected to anything). See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-docktaskbar-decoration--feasibility)
+  for the design and why macOS in particular is harder: there's no public, stable API
+  for the Dock's exact screen position, only the Accessibility API, which requires the
+  user to grant Accessibility permission and can lag behind Dock resize/move/auto-hide
+  since it would have to poll rather than subscribe to a change notification.
+- The macOS-specific code paths in this project (`decoration.rs`'s `macos_impl`,
+  the Accessibility-permission flow, `macOSPrivateApi`/transparent-window behavior) have
+  only been compiled and logic-reviewed in a Linux sandbox, never run on a real Mac by
+  the person making these changes — real hardware testing on both macOS and Windows by
+  someone with access to those machines is still needed before relying on this for a
+  release.
+
+## Fixed in review (worth knowing if something still looks off)
+
+A pass after the initial scaffold found and fixed several bugs that, together, made the
+app look far less finished than intended:
+
+- **`window.__TAURI__` was never injected.** `app.withGlobalTauri` wasn't set in
+  `tauri.conf.json`, so `src/shared/bridge.js`'s Tauri-detection check was always false —
+  the whole app was silently running in its "not in Tauri" `localStorage`/`fetch` fallback
+  mode, meaning the settings window never actually talked to the Rust backend at all. This
+  alone explains most of "nothing works": themes, decorations, persistence.
+- **Only one theme ever showed up.** `list_themes` read from `app.path().resource_dir()`,
+  but `tauri.conf.json` never declared `themes/` as a bundled resource, so that directory
+  was always empty and the app silently fell back to a single hardcoded theme. Themes are
+  now embedded into the binary at compile time (`include_str!`), so this can't happen
+  regardless of bundle/resource configuration — and there are 8 built-in themes now
+  instead of 3.
+- **The overlay blocked all clicks, including on the settings window.** The snow window
+  was always-on-top and covered the whole screen but was never told to ignore cursor
+  events, so it silently ate every click both on the desktop and on the app's own settings
+  window sitting underneath it. `set_ignore_cursor_events(true)` is now called on every
+  overlay window at creation.
+- **Snow only ever appeared on one monitor**, and changing the theme or snow density in
+  settings did nothing to what was already on screen. The overlay is now one window per
+  monitor (`available_monitors()`), and the backend emits a `settings-changed` event on
+  every save that all overlay windows listen for and apply immediately — see
+  `spawn_overlay_windows` and `save_settings` in `src-tauri/src/main.rs`.
 
 ## Contributing
 

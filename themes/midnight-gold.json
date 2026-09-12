@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "midnight-gold",
+  "name": "Midnight Gold",
+  "colors": { "primary": "#d4af37", "secondary": "#0d1b2a", "accent": "#e8c766", "background": "#05090f" },
+  "snow": { "density": 90, "accumulate": true, "wind": 0.2, "flakeSize": 2.5 },
+  "sound": { "ambient": "fireplace", "volume": 0.35 },
+  "decorations": { "dock": true, "taskbar": true }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "candy-cane",
+  "name": "Candy Cane",
+  "colors": { "primary": "#e63946", "secondary": "#ffffff", "accent": "#ff8fa3", "background": "#1a0f12" },
+  "snow": { "density": 160, "accumulate": true, "wind": 0.5, "flakeSize": 3.5 },
+  "sound": { "ambient": "bells", "volume": 0.45 },
+  "decorations": { "dock": true, "taskbar": true }
+}

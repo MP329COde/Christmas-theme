@@ -11,6 +11,7 @@
   },
   "app": {
     "macOSPrivateApi": true,
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "settings",
@@ -19,18 +20,6 @@
         "width": 460,
         "height": 640,
         "resizable": true,
-        "visible": true
-      },
-      {
-        "label": "overlay",
-        "title": "Snow Overlay",
-        "url": "/overlay/index.html",
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "fullscreen": false,
-        "focus": false,
         "visible": true
       }
     ],

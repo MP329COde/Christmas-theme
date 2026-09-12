@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "gingerbread",
+  "name": "Gingerbread",
+  "colors": { "primary": "#8b5a2b", "secondary": "#c9a15a", "accent": "#f4e1c1", "background": "#2b1a0f" },
+  "snow": { "density": 70, "accumulate": true, "wind": 0.15, "flakeSize": 2 },
+  "sound": { "ambient": "fireplace", "volume": 0.3 },
+  "decorations": { "dock": true, "taskbar": true }
+}

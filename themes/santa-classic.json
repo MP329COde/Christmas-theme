@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "santa-classic",
+  "name": "Santa Classic",
+  "colors": { "primary": "#b0202e", "secondary": "#f5f5f5", "accent": "#2e7d32", "background": "#12181f" },
+  "snow": { "density": 140, "accumulate": true, "wind": 0.35, "flakeSize": 3 },
+  "sound": { "ambient": "bells", "volume": 0.4 },
+  "decorations": { "dock": true, "taskbar": true }
+}

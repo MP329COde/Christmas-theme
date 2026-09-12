@@ -68,14 +68,48 @@ impl Theme {
     }
 
     pub fn default_builtin() -> Theme {
-        serde_json::from_str(include_str!("../../themes/classic-red.json"))
-            .expect("built-in default theme must always parse")
+        Self::from_json(EMBEDDED_THEME_JSON[0]).expect("built-in default theme must always parse")
     }
 }
 
-/// Loads every `*.json` theme file in `dir`. Files that fail to parse or
-/// validate are skipped with a logged warning rather than aborting the
-/// whole load, so one broken community theme doesn't take down the app.
+/// The `themes/*.json` files, embedded into the binary at compile time
+/// with `include_str!`.
+///
+/// Earlier this was loaded at runtime from `app.path().resource_dir()`,
+/// but that directory is only populated for paths listed in
+/// `tauri.conf.json`'s `bundle.resources` — which this project never set.
+/// So in both dev and any packaged build, that directory was always
+/// empty and `list_themes` silently fell back to a single hardcoded
+/// theme, no matter how many files existed under `themes/`. Embedding at
+/// compile time makes theme availability independent of bundle/resource
+/// configuration entirely.
+const EMBEDDED_THEME_JSON: &[&str] = &[
+    include_str!("../../themes/classic-red.json"),
+    include_str!("../../themes/frosty-blue.json"),
+    include_str!("../../themes/minimal-white.json"),
+    include_str!("../../themes/midnight-gold.json"),
+    include_str!("../../themes/candy-cane.json"),
+    include_str!("../../themes/gingerbread.json"),
+    include_str!("../../themes/arctic-aurora.json"),
+    include_str!("../../themes/santa-classic.json"),
+];
+
+/// Returns every embedded built-in theme. A malformed embedded file would
+/// be a build-time bug (they're compiled into the binary), so this
+/// panics rather than silently dropping a theme.
+pub fn embedded_themes() -> Vec<Theme> {
+    EMBEDDED_THEME_JSON
+        .iter()
+        .map(|raw| Theme::from_json(raw).expect("embedded theme JSON must always parse"))
+        .collect()
+}
+
+/// Loads every `*.json` theme file in `dir`, for user-contributed themes
+/// dropped into the app's config directory (see `main.rs`). Files that
+/// fail to parse or validate are skipped with a logged warning rather
+/// than aborting the whole load, so one broken community theme doesn't
+/// take down the app. Missing directory is not an error (most users
+/// won't have one).
 pub fn load_themes_from_dir(dir: &Path) -> Vec<Theme> {
     let mut themes = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {

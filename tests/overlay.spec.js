@@ -7,21 +7,27 @@ import { test, expect } from '@playwright/test';
 // as a normal page. See docs/ARCHITECTURE.md section 5 for the full
 // rationale and the manual QA checklist for the native-window behavior.
 
-test('snow renderer initializes with the configured particle count', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.goto('/overlay');
+  // Wait for the initial theme/settings fetch (bridge.js, localStorage
+  // fallback outside Tauri) to finish before each test acts, otherwise it
+  // can resolve after a test's own setDensity() call and silently
+  // overwrite it with the theme's default.
+  await page.evaluate(() => window.snowOverlayReady);
+});
+
+test('snow renderer initializes with the configured particle count', async ({ page }) => {
   const count = await page.evaluate(() => window.snowOverlay.getParticleCount());
   expect(count).toBe(120);
 });
 
 test('setDensity changes the particle count live', async ({ page }) => {
-  await page.goto('/overlay');
   await page.evaluate(() => window.snowOverlay.setDensity(50));
   const count = await page.evaluate(() => window.snowOverlay.getParticleCount());
   expect(count).toBe(50);
 });
 
 test('canvas renders non-transparent pixels after a few frames', async ({ page }) => {
-  await page.goto('/overlay');
   await page.waitForTimeout(300);
   const hasContent = await page.evaluate(() => {
     const canvas = document.getElementById('snow');

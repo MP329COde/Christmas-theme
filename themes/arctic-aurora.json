@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "arctic-aurora",
+  "name": "Arctic Aurora",
+  "colors": { "primary": "#3ddc97", "secondary": "#1b998b", "accent": "#a3f7bf", "background": "#03110f" },
+  "snow": { "density": 220, "accumulate": true, "wind": 0.7, "flakeSize": 2 },
+  "sound": { "ambient": "bells", "volume": 0.25 },
+  "decorations": { "dock": true, "taskbar": true }
+}
