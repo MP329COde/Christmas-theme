@@ -20,6 +20,12 @@ const MIME = {
 const port = process.env.PORT ? Number(process.env.PORT) : 4173;
 
 const server = http.createServer(async (req, res) => {
+  const queryIndex = req.url.indexOf('?');
+  // Kept and re-attached to every redirect below: dropping it silently
+  // turned "/lab?quality=high" into "/lab/index.html" with no parameters,
+  // so the page came up with defaults and looked like the options did
+  // nothing.
+  const query = queryIndex >= 0 ? req.url.slice(queryIndex) : '';
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
 
   // Redirect (not just internally alias) so the browser's resolved page
@@ -27,17 +33,22 @@ const server = http.createServer(async (req, res) => {
   // URLs like `./style.css` resolve against `/` instead of `/settings/`
   // and 404.
   if (urlPath === '/') {
-    res.writeHead(302, { Location: '/settings/index.html' });
+    res.writeHead(302, { Location: `/settings/index.html${query}` });
     res.end();
     return;
   }
   if (urlPath === '/overlay') {
-    res.writeHead(302, { Location: '/overlay/index.html' });
+    res.writeHead(302, { Location: `/overlay/index.html${query}` });
+    res.end();
+    return;
+  }
+  if (urlPath === '/lab') {
+    res.writeHead(302, { Location: `/lab/index.html${query}` });
     res.end();
     return;
   }
   if (urlPath === '/dock') {
-    res.writeHead(302, { Location: '/dock/index.html' });
+    res.writeHead(302, { Location: `/dock/index.html${query}` });
     res.end();
     return;
   }

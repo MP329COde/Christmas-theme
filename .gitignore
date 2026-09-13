@@ -6,3 +6,7 @@ test-results/
 playwright-report/
 .DS_Store
 *.log
+
+# local scratch for capture/debug scripts
+.scratch/
+test-results/
