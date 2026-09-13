@@ -1,22 +1,26 @@
 // The production bridge between the scene composition and the WebGL engine.
 //
-// The engine renders the trees; the Canvas 2D renderer keeps the sky,
-// snow, garlands and fireplaces. That split is deliberate rather than a
-// staging post: the tree is the element that actually needed a GPU —
-// volume, self-occlusion, per-needle lighting and vertex-stage wind are
-// the things Canvas 2D structurally cannot do — while a snowfield of soft
-// sprites and a baked fireplace were never the problem. Porting those too
-// would cost a rewrite and buy nothing visible.
+// The engine renders the trees and — once adopted — the aurora; the
+// Canvas 2D renderer keeps the stars, snow, garlands and fireplaces.
+// That split is deliberate rather than a staging post: the tree needed a
+// GPU for volume, self-occlusion, per-needle lighting and vertex-stage
+// wind; the aurora benefits from the GPU for the bloom pipeline
+// (BRIGHT_PASS/BLUR_PASS) a real light source deserves. A snowfield of
+// soft sprites and a baked fireplace were never the problem — porting
+// those too would cost a rewrite and buy nothing visible.
 //
 // Everything here is failure-tolerant by design. A missing WebGL2, a
 // blocklisted driver, a shader that will not compile on some GPU: all of
-// them end with `start()` returning false, and the overlay then draws its
-// trees in Canvas 2D exactly as before. The user sees a slightly simpler
-// tree, never a black rectangle over their desktop.
+// them end with `start()`/`sync()` returning false, and the overlay then
+// draws BOTH the trees and the aurora in Canvas 2D exactly as before —
+// one scene, one first-frame gate, so a failure anywhere in it falls all
+// the way back rather than adopting half a scene. The user sees a
+// slightly simpler picture, never a black rectangle over their desktop.
 
 import { Renderer } from '../engine/renderer.js';
 import { Scene } from '../engine/scene.js';
 import { ChristmasTree } from '../layers/ChristmasTree.js';
+import { NorthernLights } from '../layers/NorthernLights.js';
 import { TREE_STYLES, resolvePalette } from '../shared/scene.js';
 
 /// Maps one scene tree spec onto the layer's options. The scene is the
@@ -64,6 +68,14 @@ export class GlTrees {
     this.signature = '';
     this.failed = false;
     this.reason = null;
+    // The automatic quality governor's current level for the aurora ray
+    // count (see src/shared/perf.js): kept here, not just on the layer,
+    // because `sync()` below rebuilds the Scene (and therefore a fresh
+    // NorthernLights instance) whenever the composition changes — this
+    // is what gets re-applied to that fresh instance so a mid-session
+    // composition change doesn't silently reset the aurora back to full
+    // detail while the machine is still under load.
+    this.auroraDetail = 1;
   }
 
   get supported() {
@@ -116,12 +128,15 @@ export class GlTrees {
   }
 
   /// Rebuilds the layer set when the composition changes. Cheap to call:
-  /// it compares a signature first and does nothing if the trees are the
-  /// same, so it can be wired straight to every settings save.
+  /// it compares a signature first and does nothing if nothing that
+  /// matters changed, so it can be wired straight to every settings save.
   async sync(sceneCfg, themeColors) {
     if (!this.renderer?.supported || this.failed) return false;
     const trees = sceneCfg.trees ?? [];
-    const signature = JSON.stringify(trees) + JSON.stringify(themeColors);
+    const aurora = !!sceneCfg.aurora;
+    const auroraGain = sceneCfg.auroraIntensity ?? 1;
+    const signature = JSON.stringify(trees) + JSON.stringify(themeColors)
+      + `|aurora:${aurora}:${auroraGain}`;
     if (signature === this.signature) return true;
     this.signature = signature;
 
@@ -130,6 +145,15 @@ export class GlTrees {
       trees.forEach((tree, i) => {
         scene.add(new ChristmasTree(layerOptionsFor(tree, i, themeColors)));
       });
+      if (aurora) {
+        const lights = new NorthernLights({ gain: auroraGain });
+        // Re-apply whatever detail level the governor last decided —
+        // otherwise a composition change mid-session (adding a tree,
+        // changing a colour) would silently undo a degrade that is still
+        // warranted.
+        lights.setDetail(this.auroraDetail);
+        scene.add(lights);
+      }
       await this.renderer.setScene(scene);
       this.scene = scene;
       return true;
@@ -155,6 +179,16 @@ export class GlTrees {
   /// finishes.
   setRenderScale(scale) {
     this.renderer?.setRenderScale(scale);
+  }
+
+  /// The other GPU half of the governor: how many of the aurora's rays to
+  /// actually draw (see NorthernLights' module header for why this is
+  /// safe to change every frame — it's a draw count, not a rebuild).
+  /// Stored even when the layer doesn't currently exist (aurora off, or
+  /// the engine hasn't adopted yet) so it applies the moment it does.
+  setAuroraDetail(fraction) {
+    this.auroraDetail = Math.max(0, Math.min(1, Number(fraction) || 0));
+    this.scene?.get('northern-lights')?.setDetail(this.auroraDetail);
   }
 
   run() {

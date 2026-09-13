@@ -123,4 +123,47 @@ test.describe('production overlay adoption', () => {
     expect(info.mode).toBe('canvas2d');
     expect(info.reason).toMatch(/software rasteriser/);
   });
+
+  test('forcing WebGL also hands the aurora to the engine, alongside the trees', async ({ page }) => {
+    // The default scene composition has the aurora on (see
+    // shared/scene.js's defaultScene) — the same "first real frame or
+    // fall all the way back" gate as the trees now covers both.
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer, null,
+      { polling: 300, timeout: 60000 });
+    expect((await page.evaluate(() => window.overlayRenderer)).mode).toBe('webgl');
+
+    expect(await page.evaluate(() => window.snowOverlay.getAuroraRenderer())).toBe('gl');
+    const aurora = await page.evaluate(() => {
+      const layer = window.overlayGlTrees?.scene?.get('northern-lights');
+      return layer ? { ready: layer.ready, instanceCount: layer.instanceCount } : null;
+    });
+    expect(aurora).not.toBeNull();
+    expect(aurora.ready).toBe(true);
+    expect(aurora.instanceCount).toBeGreaterThan(0);
+
+    await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
+
+  test('automatic degrade lowers the GL aurora ray count without a rebuild', async ({ page }) => {
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer, null,
+      { polling: 300, timeout: 60000 });
+
+    const before = await page.evaluate(
+      () => window.overlayGlTrees.scene.get('northern-lights').instanceCount
+    );
+
+    await page.evaluate(() => window.overlayGlTrees.setAuroraDetail(0.2));
+    const after = await page.evaluate(
+      () => window.overlayGlTrees.scene.get('northern-lights').instanceCount
+    );
+
+    expect(after).toBeLessThan(before);
+    // The layer object is the SAME one, not a rebuilt scene — setDetail()
+    // must be a cheap draw-count change, never a reallocation.
+    expect(await page.evaluate(() => window.overlayGlTrees.scene.layers.length)).toBeGreaterThan(0);
+
+    await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
 });

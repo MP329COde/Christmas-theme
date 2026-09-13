@@ -90,6 +90,13 @@ async function boot() {
 
   adopted = true;
   overlay.setTreeRenderer('gl');
+  // The aurora is adopted together with the trees — one Scene, one
+  // first-frame gate (see gl-trees.js's header) — so if we got this far,
+  // whatever aurora layer that scene has (if any: gl-trees.js only adds
+  // one when the composition actually has the aurora on) is already
+  // live. Canvas 2D's own aurora draw checks this same flag and skips
+  // itself accordingly, so this is safe to set unconditionally.
+  overlay.setAuroraRenderer('gl');
   glCanvas.hidden = false;
   window.overlayRenderer = {
     mode: 'webgl',
@@ -101,12 +108,13 @@ async function boot() {
   // Automatic quality degrade (src/shared/perf.js) already runs inside
   // snow.js, sampling the Canvas 2D layers' own cost — this is what
   // forwards its GPU-facing half to the engine, so a sustained overage
-  // drops the trees' internal render resolution too, not just the sky
-  // and snow. Subscribing fires immediately with the tier already in
-  // effect, so a governor that degraded before adoption finished isn't
-  // silently ignored.
+  // drops the trees' internal render resolution AND the aurora's ray
+  // count too, not just the Canvas 2D sky and snow. Subscribing fires
+  // immediately with the tier already in effect, so a governor that
+  // degraded before adoption finished isn't silently ignored.
   overlay.onQualityTierChanged((tierCfg) => {
     glTrees.setRenderScale(tierCfg.glRenderScale ?? 1);
+    glTrees.setAuroraDetail(tierCfg.auroraDetail ?? 1);
   });
 }
 

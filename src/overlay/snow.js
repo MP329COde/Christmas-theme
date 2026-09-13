@@ -39,6 +39,13 @@ const fctx = frontCanvas.getContext('2d');
 /// 'gl' once the engine has taken the trees over; '2d' until then, and
 /// for good if the engine cannot start.
 let treeRenderer = '2d';
+/// Same idea, for the aurora specifically: the engine adopts the trees
+/// and the aurora TOGETHER (one Scene, one first-frame gate — see
+/// gl-trees.js), so in practice this always tracks `treeRenderer`, but
+/// it stays its own flag rather than being inferred from that one, so a
+/// future independent aurora-only adoption path doesn't have to touch
+/// every read site.
+let auroraRenderer = '2d';
 const sceneListeners = new Set();
 
 let flakes = [];
@@ -594,7 +601,10 @@ function render(time) {
 
   if (sceneCfg.aurora || sceneCfg.stars) {
     drawSky(ctx, viewW, viewH, time, {
-      aurora: sceneCfg.aurora,
+      // The GL engine draws the aurora once adopted (see gl-trees.js /
+      // NorthernLights) — this only draws it here when that hasn't
+      // happened, so it's never painted twice.
+      aurora: sceneCfg.aurora && auroraRenderer === '2d',
       stars: sceneCfg.stars,
       originX,
       originY,
@@ -731,6 +741,11 @@ window.snowOverlay = {
     return treeRenderer;
   },
   getTreeRenderer: () => treeRenderer,
+  setAuroraRenderer(which) {
+    auroraRenderer = which === 'gl' ? 'gl' : '2d';
+    return auroraRenderer;
+  },
+  getAuroraRenderer: () => auroraRenderer,
   /// Subscribe to composition changes, so a second renderer can stay in
   /// step with this one without polling.
   onSceneChanged(listener) {
