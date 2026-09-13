@@ -207,18 +207,36 @@ struct ScreenInfo {
     index: usize,
     label: String,
     name: String,
+    /// Position in the OS's virtual desktop space (physical pixels), i.e.
+    /// where this monitor's top-left corner sits relative to the primary
+    /// monitor's origin. This is what lets overlay windows derive a shared
+    /// global coordinate space instead of each starting back at (0, 0) —
+    /// needed so a star field (or anything else meant to look continuous)
+    /// lines up across monitor edges.
+    x: i32,
+    y: i32,
     width: u32,
     height: u32,
     scale_factor: f64,
     /// The monitor containing the origin is the primary one on every
     /// platform we target.
     primary: bool,
+    /// The virtual desktop's own top-left corner — the minimum x/y across
+    /// ALL connected monitors, not just this one. Identical on every entry
+    /// in the returned list; included per-entry so a caller that only
+    /// fetches its own screen's info still gets it. Monitors laid out
+    /// above/left of the primary one (a common arrangement) have negative
+    /// positions, so this is not always (0, 0).
+    virtual_origin_x: i32,
+    virtual_origin_y: i32,
 }
 
 #[tauri::command]
 fn list_screens(app: tauri::AppHandle) -> Vec<ScreenInfo> {
-    app.available_monitors()
-        .unwrap_or_default()
+    let monitors = app.available_monitors().unwrap_or_default();
+    let virtual_origin_x = monitors.iter().map(|m| m.position().x).min().unwrap_or(0);
+    let virtual_origin_y = monitors.iter().map(|m| m.position().y).min().unwrap_or(0);
+    monitors
         .iter()
         .enumerate()
         .map(|(index, m)| ScreenInfo {
@@ -228,8 +246,12 @@ fn list_screens(app: tauri::AppHandle) -> Vec<ScreenInfo> {
                 .name()
                 .cloned()
                 .unwrap_or_else(|| format!("Display {}", index + 1)),
+            x: m.position().x,
+            y: m.position().y,
             width: m.size().width,
             height: m.size().height,
+            virtual_origin_x,
+            virtual_origin_y,
             scale_factor: m.scale_factor(),
             primary: m.position().x == 0 && m.position().y == 0,
         })

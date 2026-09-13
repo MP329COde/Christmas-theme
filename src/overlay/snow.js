@@ -12,6 +12,7 @@
 
 import {
   getSettings, listThemes, onSettingsChanged, publishStats, loadBackground, onBackgroundChanged,
+  listScreens,
 } from '../shared/bridge.js';
 import { drawGarland, drawTree, drawFireplace } from './decor.js';
 import { screenConfig, resolvePalette, TREE_STYLES, defaultScene } from '../shared/scene.js';
@@ -89,6 +90,36 @@ function screenIndex() {
 // size, with which light strings, plus the sky layers and background.
 let sceneCfg = screenConfig(defaultScene(), 0);
 let backgroundImage = null;
+
+// This window's position in the OS's virtual desktop space (physical
+// px), relative to the virtual desktop's own top-left corner. Used to
+// place sky elements (stars) in a coordinate space shared across every
+// overlay window, so they read as one continuous sky instead of each
+// monitor generating its own disconnected field. Resolved async from
+// Tauri's Monitor API below; 0,0 until then (and permanently outside
+// Tauri, where there is exactly one window and it doesn't matter).
+let originX = 0;
+let originY = 0;
+
+/// Matches this window to its own entry in `listScreens()` by index (Rust
+/// names overlay windows `overlay-<index>`, same as `screenIndex()`
+/// above) and records its real desktop position. A resize is forced
+/// afterwards to re-key the star field bake, which otherwise stays keyed
+/// to the origin-less first pass.
+async function resolveScreenOrigin() {
+  try {
+    const screens = await listScreens();
+    const mine = screens.find((s) => s.index === screenIndex());
+    if (!mine) return;
+    originX = (mine.x ?? 0) - (mine.virtualOriginX ?? 0);
+    originY = (mine.y ?? 0) - (mine.virtualOriginY ?? 0);
+    invalidateLights();
+  } catch {
+    // No Tauri, or the call failed: stay at 0,0 — the single-window
+    // behaviour this always had.
+  }
+}
+resolveScreenOrigin();
 
 let accumulation = []; // per-column snow height, only used when accumulate=true
 let running = true;
@@ -245,12 +276,29 @@ function drawBackground(w, h) {
   ctx.restore();
 }
 
+// The canvas BACKING STORE (canvas.width/height) is sized in DEVICE
+// pixels so sprite/text edges stay crisp on a HiDPI display, but every
+// draw call in this file works in LOGICAL (CSS) pixels — viewW/viewH —
+// exactly as it did when this ran unscaled. `ctx.setTransform` bridges
+// the two once per resize; nothing downstream has to know DPR exists.
+// Previously canvas.width was set to window.innerWidth with no DPR
+// factor at all, which left the whole overlay rendering at 1x and being
+// upscaled by the browser (blurry) on any HiDPI/Retina screen.
+let viewW = window.innerWidth;
+let viewH = window.innerHeight;
+let dpr = 1;
+
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  dpr = window.devicePixelRatio || 1;
+  viewW = window.innerWidth;
+  viewH = window.innerHeight;
+  canvas.width = Math.round(viewW * dpr);
+  canvas.height = Math.round(viewH * dpr);
   frontCanvas.width = canvas.width;
   frontCanvas.height = canvas.height;
-  accumulation = new Float32Array(Math.ceil(canvas.width / 4));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  accumulation = new Float32Array(Math.ceil(viewW / 4));
   bankDirty = true;
   // Every light layer bakes sprites cut to the current size; a resize has
   // to throw those away or the fringe and star field stay sized for the
@@ -282,8 +330,8 @@ function resetFlake(f, atTop) {
   // Only mid/near flakes are ever detailed crystals — a distant flake is
   // too small for the shape to read, so drawing one is wasted work.
   f.isCrystal = depth > 0.45 && Math.random() < 0.4;
-  f.x = Math.random() * canvas.width;
-  f.y = atTop ? -10 : Math.random() * -canvas.height;
+  f.x = Math.random() * viewW;
+  f.y = atTop ? -10 : Math.random() * -viewH;
   f.r = config.flakeSize * config.flakeScale * (0.35 + depth * 1.5) * (0.75 + Math.random() * 0.5);
   f.speed = (0.35 + depth * 1.5) * (0.8 + Math.random() * 0.5);
   f.drift = Math.random() * Math.PI * 2;
@@ -375,11 +423,11 @@ function stepFlake(f, gust) {
   f.x += config.wind * (gust - 1) * 0.9 * (0.3 + f.depth);
   f.rotation += f.spin;
 
-  if (f.x < -40) f.x = canvas.width + 40;
-  else if (f.x > canvas.width + 40) f.x = -40;
+  if (f.x < -40) f.x = viewW + 40;
+  else if (f.x > viewW + 40) f.x = -40;
 
   const col = Math.max(0, Math.min(accumulation.length - 1, Math.floor(f.x / 4)));
-  const groundY = config.accumulate ? canvas.height - accumulation[col] : canvas.height;
+  const groundY = config.accumulate ? viewH - accumulation[col] : viewH;
 
   if (f.y > groundY) {
     if (config.accumulate && accumulation[col] < config.maxSnowHeight) {
@@ -391,10 +439,10 @@ function stepFlake(f, gust) {
 }
 
 function rebuildBank() {
-  if (!bankCanvas || bankCanvas.width !== canvas.width || bankCanvas.height !== canvas.height) {
+  if (!bankCanvas || bankCanvas.width !== viewW || bankCanvas.height !== viewH) {
     bankCanvas = document.createElement('canvas');
-    bankCanvas.width = canvas.width;
-    bankCanvas.height = canvas.height;
+    bankCanvas.width = viewW;
+    bankCanvas.height = viewH;
   }
   const b = bankCanvas.getContext('2d');
   b.clearRect(0, 0, bankCanvas.width, bankCanvas.height);
@@ -450,16 +498,18 @@ function rebuildBank() {
 }
 
 function render(time) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  fctx.clearRect(0, 0, frontCanvas.width, frontCanvas.height);
+  ctx.clearRect(0, 0, viewW, viewH);
+  fctx.clearRect(0, 0, viewW, viewH);
 
   // --- behind the trees --------------------------------------------------
-  drawBackground(canvas.width, canvas.height);
+  drawBackground(viewW, viewH);
 
   if (sceneCfg.aurora || sceneCfg.stars) {
-    drawSky(ctx, canvas.width, canvas.height, time, {
+    drawSky(ctx, viewW, viewH, time, {
       aurora: sceneCfg.aurora,
       stars: sceneCfg.stars,
+      originX,
+      originY,
       lightIntensity: (decorConfig.lightIntensity ?? 1) * (sceneCfg.auroraIntensity ?? 1),
     });
   }
@@ -482,7 +532,7 @@ function render(time) {
   if (treeRenderer === '2d') {
     for (const tree of sceneCfg.trees ?? []) {
       const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
-      drawTree(ctx, canvas.width, canvas.height, themeColors, time, {
+      drawTree(ctx, viewW, viewH, themeColors, time, {
         ...tree,
         palette: resolvePalette(tree.lights),
         styleWidth: style.width,
@@ -494,12 +544,12 @@ function render(time) {
 
   // --- in front of the trees ---------------------------------------------
   if (sceneCfg.icicles) {
-    drawIcicles(fctx, frontCanvas.width, frontCanvas.height, time, decorConfig);
+    drawIcicles(fctx, viewW, viewH, time, decorConfig);
   }
 
   const garland = sceneCfg.garland;
   if (garland?.enabled) {
-    drawGarland(fctx, frontCanvas.width, time, resolvePalette(garland.lights), {
+    drawGarland(fctx, viewW, time, resolvePalette(garland.lights), {
       animation: garland.lights?.mode,
       speed: garland.lights?.speed,
       size: garland.lights?.size,
@@ -510,7 +560,7 @@ function render(time) {
   }
 
   for (const fire of sceneCfg.fireplaces ?? []) {
-    drawFireplace(fctx, frontCanvas.width, frontCanvas.height, time, themeColors, {
+    drawFireplace(fctx, viewW, viewH, time, themeColors, {
       ...fire,
       palette: resolvePalette(fire.lights),
     }, decorConfig);
@@ -531,7 +581,7 @@ function render(time) {
     // Glitter goes on top of the bank, since it is light bouncing off the
     // surface we just drew.
     if (sceneCfg.snowGlitter) {
-      drawGlitter(fctx, frontCanvas.width, frontCanvas.height, time, accumulation, decorConfig);
+      drawGlitter(fctx, viewW, viewH, time, accumulation, decorConfig);
     }
   }
 }

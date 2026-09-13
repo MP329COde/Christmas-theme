@@ -108,3 +108,72 @@ test('recycling a landed flake allocates nothing', async ({ page }) => {
   // objects would be orders of magnitude more.
   expect(grew).toBeLessThan(4_000_000);
 });
+
+// ---------------------------------------------------------------------------
+// multi-screen star field continuity (src/overlay/lights.js)
+// ---------------------------------------------------------------------------
+//
+// Two overlay windows on adjacent monitors each call getStars() with their
+// own local w/h but a DIFFERENT origin (their real desktop position). The
+// fix under test: the star field is derived from a hash over GLOBAL grid
+// cells, so the same star lands in the same global position regardless of
+// which window's local coordinates it is expressed in — the pattern reads
+// as one continuous sky across the shared edge instead of two independent
+// random fields that happen to abut.
+test.describe('star field multi-screen coherence', () => {
+  test('a star field split across two windows matches one wide window', async ({ page }) => {
+    await page.goto('/overlay');
+    const result = await page.evaluate(async () => {
+      const mod = await import('/overlay/lights.js');
+      const W = 1000;
+      const H = 700;
+
+      // One "wide" window spanning both monitors, origin (0,0).
+      mod.invalidateLights();
+      const wideCanvas = document.createElement('canvas');
+      wideCanvas.width = W * 2;
+      wideCanvas.height = H;
+      const wideCtx = wideCanvas.getContext('2d');
+      mod.drawSky(wideCtx, W * 2, H, 0, { stars: true, aurora: false, originX: 0, originY: 0 });
+
+      // The same span as two separate windows, each with its own local
+      // origin matching its real desktop position.
+      mod.invalidateLights();
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = W;
+      leftCanvas.height = H;
+      mod.drawSky(leftCanvas.getContext('2d'), W, H, 0, { stars: true, aurora: false, originX: 0, originY: 0 });
+
+      mod.invalidateLights();
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = W;
+      rightCanvas.height = H;
+      mod.drawSky(rightCanvas.getContext('2d'), W, H, 0, { stars: true, aurora: false, originX: W, originY: 0 });
+
+      // Composite the two window canvases side by side and diff against
+      // the single wide render pixel-for-pixel.
+      const combined = document.createElement('canvas');
+      combined.width = W * 2;
+      combined.height = H;
+      const cctx = combined.getContext('2d');
+      cctx.drawImage(leftCanvas, 0, 0);
+      cctx.drawImage(rightCanvas, W, 0);
+
+      const a = wideCtx.getImageData(0, 0, W * 2, H).data;
+      const b = cctx.getImageData(0, 0, W * 2, H).data;
+      let maxDiff = 0;
+      for (let i = 0; i < a.length; i++) {
+        const d = Math.abs(a[i] - b[i]);
+        if (d > maxDiff) maxDiff = d;
+      }
+      return { maxDiff, alphaSum: a.reduce((s, v, i) => (i % 4 === 3 ? s + v : s), 0) };
+    });
+
+    // Confirms stars were actually drawn (not an empty/degenerate field).
+    expect(result.alphaSum).toBeGreaterThan(0);
+    // Identical draw calls (same additive blend order) on matching pixel
+    // data should be exact; a small tolerance absorbs any floating point
+    // noise in canvas compositing.
+    expect(result.maxDiff).toBeLessThanOrEqual(1);
+  });
+});

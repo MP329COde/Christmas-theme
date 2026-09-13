@@ -304,29 +304,74 @@ function drawAurora(ctx, w, h, time, gain) {
 // star field
 // ---------------------------------------------------------------------------
 
+// Average area (in desktop px^2) given to one star. A cell this size is
+// what the old per-window random field averaged out to; kept as a grid
+// spacing below so the on-screen density is unchanged.
+const STAR_CELL = 161;
+
+/// A small, well-mixed integer hash of (cellX, cellY, stream). `stream`
+/// separates the independent random values a star needs (position jitter,
+/// existence, magnitude, phase, rate...) into different pseudo-random
+/// sequences without needing a stateful generator — which matters here
+/// because every window must derive the SAME value for the SAME cell,
+/// with nothing carried between calls.
+function hashCell(cx, cy, stream) {
+  let h = (cx * 374761393 + cy * 668265263 + stream * 2246822519) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
 let starField = null;
 let starFieldKey = '';
 
-function getStars(w, h) {
-  const key = `${w}x${h}`;
+/// Stars are derived from a fixed grid over the virtual desktop, keyed by
+/// GLOBAL cell coordinates rather than anything local to one window. The
+/// same cell hashes to the same star everywhere, so two overlay windows
+/// sitting side by side render matching stars right up to the shared edge
+/// — there is no independent per-monitor field to fall out of alignment.
+///
+/// `originX`/`originY` place this window's local (0,0) in that shared
+/// space (the monitor's real desktop position, from Tauri's Monitor API);
+/// a window with no such info (outside Tauri, or before it resolves) just
+/// passes 0,0, which keeps the previous single-window behaviour exactly.
+function getStars(w, h, originX = 0, originY = 0) {
+  const key = `${w}x${h}x${originX}x${originY}`;
   if (starField && starFieldKey === key) return starField;
-  const rand = mulberry32(20241224);
-  const count = Math.round((w * h) / 26000);
+
+  const skyH = h * 0.62;
+  const cx0 = Math.floor(originX / STAR_CELL) - 1;
+  const cx1 = Math.floor((originX + w) / STAR_CELL) + 1;
+  const cy0 = Math.floor(originY / STAR_CELL) - 1;
+  const cy1 = Math.floor((originY + skyH) / STAR_CELL) + 1;
+
   const stars = [];
-  for (let i = 0; i < count; i++) {
-    // Brightness follows a steep curve: a real sky is mostly faint stars
-    // with a handful of bright ones, not a uniform spread.
-    const mag = rand() ** 2.4;
-    stars.push({
-      x: rand() * w,
-      y: rand() * h * 0.62,
-      size: 3 + mag * 12,
-      base: 0.18 + mag * 0.7,
-      // Scintillation is fast and irregular, so two incommensurate rates.
-      phase: rand() * Math.PI * 2,
-      rate: 0.7 + rand() * 2.6,
-      rate2: 3.1 + rand() * 5.5,
-    });
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      // Not every cell gets a star — a rigid one-per-cell grid would read
+      // as a lattice rather than a sky. ~78% occupancy keeps the average
+      // density right while breaking up the regularity.
+      if (hashCell(cx, cy, 0) > 0.78) continue;
+      const gx = cx * STAR_CELL + hashCell(cx, cy, 1) * STAR_CELL;
+      const gy = cy * STAR_CELL + hashCell(cx, cy, 2) * STAR_CELL;
+      if (gy < originY || gy > originY + skyH) continue;
+      const x = gx - originX;
+      const y = gy - originY;
+      if (x < -20 || x > w + 20) continue;
+      // Brightness follows a steep curve: a real sky is mostly faint stars
+      // with a handful of bright ones, not a uniform spread.
+      const mag = hashCell(cx, cy, 3) ** 2.4;
+      stars.push({
+        x,
+        y,
+        size: 3 + mag * 12,
+        base: 0.18 + mag * 0.7,
+        // Scintillation is fast and irregular, so two incommensurate rates.
+        phase: hashCell(cx, cy, 4) * Math.PI * 2,
+        rate: 0.7 + hashCell(cx, cy, 5) * 2.6,
+        rate2: 3.1 + hashCell(cx, cy, 6) * 5.5,
+      });
+    }
   }
   starField = stars;
   starFieldKey = key;
@@ -349,7 +394,7 @@ export function drawSky(ctx, w, h, time, opts = {}) {
   }
 
   if (opts.stars) {
-    for (const s of getStars(w, h)) {
+    for (const s of getStars(w, h, opts.originX ?? 0, opts.originY ?? 0)) {
       const twinkle =
         0.62 + 0.26 * Math.sin(time * s.rate + s.phase) + 0.12 * Math.sin(time * s.rate2);
       const alpha = s.base * twinkle * gain;

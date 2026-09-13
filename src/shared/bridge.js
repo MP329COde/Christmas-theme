@@ -95,7 +95,8 @@ export async function listScreens() {
   }
   return [{
     index: 0, label: 'overlay-0', name: 'Preview display',
-    width: 1920, height: 1080, scaleFactor: 1, primary: true,
+    x: 0, y: 0, width: 1920, height: 1080, scaleFactor: 1, primary: true,
+    virtualOriginX: 0, virtualOriginY: 0,
   }];
 }
 
