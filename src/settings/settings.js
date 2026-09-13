@@ -620,8 +620,14 @@ function renderSystem() {
   panel.append(el('div', { class: 'card' },
     dropdown({
       id: 'fps-limit', label: 'Frame rate cap', value: String(settings.fpsLimit),
+      // 30fps is the recommended default: this is a background wallpaper,
+      // not something that benefits from matching a 120Hz panel, and a
+      // lower cap is the single biggest lever a user has over the app's
+      // own CPU/GPU cost. The higher options stay available for anyone
+      // who wants them; automatic degrade (shared/perf.js) still applies
+      // underneath whatever cap is chosen.
       options: [['0', 'Unlimited (match display)'], ['144', '144 fps'], ['120', '120 fps'],
-        ['60', '60 fps'], ['30', '30 fps (battery saver)']],
+        ['60', '60 fps'], ['30', '30 fps (recommended)'], ['24', '24 fps (battery saver)']],
       onChange: (v) => { settings.fpsLimit = Number(v); persist(); },
     }),
     el('p', { class: 'hint', id: 'fps-readout', 'data-testid': 'fps-readout', text: 'Waiting for the overlay…' }),
@@ -792,9 +798,15 @@ document.getElementById('disable-btn').addEventListener('click', async () => {
   setStatus('Everything disabled');
 });
 
-onStats(({ fps, frameMs, particles }) => {
+onStats(({ fps, frameMs, particles, qualityLabel }) => {
   const node = document.getElementById('fps-readout');
-  if (node) node.textContent = `${fps} fps · ${frameMs} ms/frame · ${particles} flakes`;
+  if (node) {
+    // The quality label only appears once it has actually degraded once
+    // ('full' stays implicit) — showing it unconditionally would make a
+    // perfectly healthy machine look like something is wrong.
+    const tierNote = qualityLabel && qualityLabel !== 'full' ? ` · quality: ${qualityLabel}` : '';
+    node.textContent = `${fps} fps · ${frameMs} ms/frame · ${particles} flakes${tierNote}`;
+  }
 });
 
 async function init() {

@@ -147,6 +147,16 @@ export class GlTrees {
     this.renderer?.setFpsLimit(limit);
   }
 
+  /// The GPU half of the automatic quality governor (src/shared/perf.js):
+  /// a lower internal render resolution under sustained load, upscaled
+  /// back to the window's full size by the existing composite pass. A
+  /// no-op before `start()` has actually created a renderer — harmless,
+  /// since the governor re-applies its current tier once adoption
+  /// finishes.
+  setRenderScale(scale) {
+    this.renderer?.setRenderScale(scale);
+  }
+
   run() {
     this.renderer?.start();
   }

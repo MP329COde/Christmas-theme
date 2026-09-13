@@ -87,9 +87,11 @@ pub struct AppSettings {
     /// including on a software rasteriser) or "canvas" (never).
     #[serde(default = "default_renderer")]
     pub renderer: String,
-    /// Frame rate cap. 0 means uncapped — render at the display's refresh
-    /// rate, which is the default and what a 120Hz panel needs to actually
-    /// reach 120fps. A cap only ever lowers it, to save battery.
+    /// Frame rate cap. This is a permanent background wallpaper, not a
+    /// game, so the default (30) deliberately does NOT chase the
+    /// display's full refresh rate — see src/shared/perf.js for the rest
+    /// of the automatic performance budget this is one part of. 0 means
+    /// uncapped for anyone who wants it back.
     #[serde(rename = "fpsLimit")]
     pub fps_limit: u32,
     #[serde(rename = "soundVolume")]
@@ -125,7 +127,7 @@ impl Default for AppSettings {
             renderer: default_renderer(),
             scene: serde_json::Value::Null,
             presets: serde_json::Value::Null,
-            fps_limit: 0,
+            fps_limit: 30,
             sound_volume: 0.4,
             autostart: false,
         }

@@ -38,7 +38,11 @@ const DEFAULT_SETTINGS = {
   stars: true,
   icicles: true,
   snowGlitter: true,
-  fpsLimit: 0,
+  // A permanent background wallpaper has no need of matching the
+  // display's full refresh rate; 30fps is the default so a fresh install
+  // never runs the overlay unconditionally uncapped (see shared/perf.js
+  // for the rest of the performance budget this is part of).
+  fpsLimit: 30,
   renderer: 'auto',
   soundVolume: 0.4,
   autostart: false,

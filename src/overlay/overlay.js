@@ -97,6 +97,17 @@ async function boot() {
     quality: glTrees.stats?.quality,
   };
   window.overlayGlTrees = glTrees;
+
+  // Automatic quality degrade (src/shared/perf.js) already runs inside
+  // snow.js, sampling the Canvas 2D layers' own cost — this is what
+  // forwards its GPU-facing half to the engine, so a sustained overage
+  // drops the trees' internal render resolution too, not just the sky
+  // and snow. Subscribing fires immediately with the tier already in
+  // effect, so a governor that degraded before adoption finished isn't
+  // silently ignored.
+  overlay.onQualityTierChanged((tierCfg) => {
+    glTrees.setRenderScale(tierCfg.glRenderScale ?? 1);
+  });
 }
 
 // Exposed so tests can await the decision rather than racing it.

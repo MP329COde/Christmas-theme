@@ -260,7 +260,15 @@ function curtainBase(spec, t, time, h) {
 /// right: rays below the visibility threshold are skipped before the draw
 /// call, the ray count is per-curtain rather than per-pixel, and every
 /// sprite is baked.
-function drawAurora(ctx, w, h, time, gain) {
+/// `detail` (0..1, default 1) is the automatic-degrade knob: rather than
+/// re-baking anything, a lower detail simply skips a stride of rays,
+/// evenly spaced round the curtain (not a truncated range, which would
+/// leave one side bare) so the curtain looks thinner rather than
+/// lopsided. The dropped rays' contribution is folded back into the ones
+/// that remain (alpha scaled by the stride) so the curtain doesn't also
+/// go dim as it goes sparse.
+function drawAurora(ctx, w, h, time, gain, detail = 1) {
+  const stride = Math.max(1, Math.round(1 / Math.max(0.08, Math.min(1, detail))));
   for (const spec of getAurora()) {
     // Slow horizontal drift, wrapped, so the whole curtain migrates the
     // way a real one does over minutes.
@@ -279,7 +287,7 @@ function drawAurora(ctx, w, h, time, gain) {
       ctx.drawImage(spec.hazeSprite, t * w - segW / 2, y - hh, segW, hh);
     }
 
-    for (let i = 0; i < spec.rays; i++) {
+    for (let i = 0; i < spec.rays; i += stride) {
       const t = (i / spec.rays + shift) % 1;
       const x = t * w;
       const base = curtainBase(spec, t, time, h);
@@ -291,7 +299,7 @@ function drawAurora(ctx, w, h, time, gain) {
       const energy = 0.25 + 0.75 * (own * 0.55 + travel * 0.45);
       const height = h * (0.10 + 0.22 * energy);
       const width = RAY_W * spec.widths[i] * (0.8 + 0.4 * energy);
-      const alpha = spec.alpha * energy * gain;
+      const alpha = spec.alpha * energy * gain * Math.min(stride, 1 / Math.max(0.08, detail));
       if (alpha < 0.02) continue;
       ctx.globalAlpha = Math.min(1, alpha);
       ctx.drawImage(spec.ray, x - width / 2, base - height, width, height);
@@ -370,6 +378,13 @@ function getStars(w, h, originX = 0, originY = 0) {
         phase: hashCell(cx, cy, 4) * Math.PI * 2,
         rate: 0.7 + hashCell(cx, cy, 5) * 2.6,
         rate2: 3.1 + hashCell(cx, cy, 6) * 5.5,
+        // A stable per-star draw, used to thin the field under automatic
+        // degrade (drawSky's `starDetail`). Deriving it from the same
+        // grid hash — rather than re-rolling anything — means a lower
+        // detail level always drops the SAME subset of stars (whichever
+        // dimmer stars this pushes below the cutoff), so the field
+        // doesn't reshuffle as quality steps up and down.
+        thin: hashCell(cx, cy, 7),
       });
     }
   }
@@ -390,11 +405,13 @@ export function drawSky(ctx, w, h, time, opts = {}) {
   ctx.globalCompositeOperation = 'lighter';
 
   if (opts.aurora) {
-    drawAurora(ctx, w, h, time, gain);
+    drawAurora(ctx, w, h, time, gain, opts.auroraDetail ?? 1);
   }
 
   if (opts.stars) {
+    const starDetail = opts.starDetail ?? 1;
     for (const s of getStars(w, h, opts.originX ?? 0, opts.originY ?? 0)) {
+      if (s.thin > starDetail) continue;
       const twinkle =
         0.62 + 0.26 * Math.sin(time * s.rate + s.phase) + 0.12 * Math.sin(time * s.rate2);
       const alpha = s.base * twinkle * gain;

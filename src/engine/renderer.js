@@ -98,6 +98,16 @@ export class Renderer {
     // observable at all in a container with no GPU.
     this.maxDpr = options.maxDpr ?? (this.caps.software ? 1 : 1.75);
     this.fpsLimit = options.fpsLimit ?? (this.caps.software ? 20 : 0);
+    // The internal render resolution as a fraction of the canvas's own
+    // (already DPR-clamped) size: the scene and bloom targets are drawn
+    // at `canvasSize * renderScale`, then the composite pass — sampling
+    // them through a LINEAR filter — upscales to the full canvas when it
+    // writes the final frame. This is the automatic-degrade knob for the
+    // GPU path (see shared/perf.js): stepping it down trades resolution,
+    // not frame rate, for headroom, which reads as a slightly softer
+    // scene rather than stutter. 1 = full resolution, unchanged from
+    // before this existed.
+    this.renderScale = Math.min(1, Math.max(0.35, options.renderScale ?? 1));
     this.bloomStrength = options.bloomStrength ?? 0.85;
     this.exposure = options.exposure ?? 1.0;
 
@@ -141,6 +151,18 @@ export class Renderer {
       : requested;
   }
 
+  /// Called by the automatic quality governor, never directly by user
+  /// settings — this is the "reduce internal resolution" lever from the
+  /// perf budget, distinct from the DPR cap and the fps cap. A no-op
+  /// resize is skipped so a governor sampling every frame doesn't
+  /// reallocate render targets it isn't actually changing.
+  setRenderScale(scale) {
+    const clamped = Math.min(1, Math.max(0.35, Number(scale) || 1));
+    if (clamped === this.renderScale) return;
+    this.renderScale = clamped;
+    this.resize();
+  }
+
   resize() {
     const gl = this.gl;
     if (!gl) return;
@@ -157,9 +179,18 @@ export class Renderer {
     this.height = h;
     this.dpr = dpr;
 
+    // Scene/bloom render targets are sized off the RENDER scale, not the
+    // canvas: they can be smaller than the final framebuffer. The final
+    // composite pass (below, in frame()) still draws at the full w/h —
+    // it's a linear-filtered upscale of these, not a smaller picture.
+    const iw = Math.max(1, Math.round(w * this.renderScale));
+    const ih = Math.max(1, Math.round(h * this.renderScale));
+    this.internalWidth = iw;
+    this.internalHeight = ih;
+
     for (const t of [this.sceneTarget, this.bloomA, this.bloomB]) t?.dispose();
     const float = this.quality !== 'low' && this.caps.floatRenderTargets;
-    this.sceneTarget = new RenderTarget(gl, w, h, { depth: true, float });
+    this.sceneTarget = new RenderTarget(gl, iw, ih, { depth: true, float });
     if (this.quality === 'low') {
       this.bloomA = null;
       this.bloomB = null;
@@ -167,8 +198,8 @@ export class Renderer {
       // Quarter resolution: bloom is a low-frequency signal by definition,
       // so blurring it at full resolution is four times the bandwidth for
       // a result nobody can distinguish.
-      const bw = Math.max(1, w >> 2);
-      const bh = Math.max(1, h >> 2);
+      const bw = Math.max(1, iw >> 2);
+      const bh = Math.max(1, ih >> 2);
       this.bloomA = new RenderTarget(gl, bw, bh, { float });
       this.bloomB = new RenderTarget(gl, bw, bh, { float });
     }

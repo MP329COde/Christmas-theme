@@ -17,6 +17,7 @@ import {
 import { drawGarland, drawTree, drawFireplace } from './decor.js';
 import { screenConfig, resolvePalette, TREE_STYLES, defaultScene } from '../shared/scene.js';
 import { drawSky, drawGlitter, drawIcicles, invalidateLights } from './lights.js';
+import { QualityGovernor, debugEnabled } from '../shared/perf.js';
 
 // TWO canvases, not one.
 //
@@ -53,8 +54,73 @@ let config = {
 
 // 0 = uncapped, i.e. run at whatever the display refreshes at (120Hz on a
 // ProMotion panel). The cap is there to save battery, it is not a floor.
-let fpsLimit = 0;
+// Default changed from 0 (unlimited) to 30: this is a permanent background
+// wallpaper, not a game — it has no need of a 120Hz redraw to look smooth,
+// and forcing one on every frame this app ever draws is exactly the kind
+// of unconditional cost the perf budget below exists to avoid.
+let fpsLimit = 30;
 let lastFrameAt = 0;
+
+// ---------------------------------------------------------------------------
+// automatic quality degrade (see src/shared/perf.js)
+// ---------------------------------------------------------------------------
+//
+// Four tiers, each a concrete recipe for "draw less" rather than a vague
+// quality slider: fewer aurora rays and stars, a smaller snow field, and
+// (applied to the GL tree layer, if adopted) a lower internal render
+// resolution. Degrading resolution before framerate is deliberate — a
+// slightly softer scene is far less noticeable on a background wallpaper
+// than the stutter a dropped frame would be.
+const QUALITY_TIERS = [
+  { label: 'full', auroraDetail: 1, starDetail: 1, snowScale: 1, glRenderScale: 1 },
+  { label: 'reduced', auroraDetail: 0.7, starDetail: 0.75, snowScale: 0.75, glRenderScale: 0.85 },
+  { label: 'low', auroraDetail: 0.45, starDetail: 0.5, snowScale: 0.55, glRenderScale: 0.65 },
+  { label: 'minimum', auroraDetail: 0.25, starDetail: 0.3, snowScale: 0.35, glRenderScale: 0.5 },
+];
+
+/// The CPU-time proxy target (see perf.js for why this is milliseconds of
+/// our own render() work, not an OS CPU percentage): a fraction of the
+/// period implied by the current fps cap, leaving headroom for
+/// compositing, other apps and the OS. Recomputed whenever the cap
+/// changes; an unlimited cap (0) assumes a 60Hz budget so there's still a
+/// target to measure against.
+function targetFrameMsFor(limit) {
+  const hz = limit > 0 ? limit : 60;
+  return (1000 / hz) * 0.4;
+}
+
+const qualityTierListeners = new Set();
+
+function applyQualityTier(tierCfg) {
+  applyDensity();
+  for (const cb of qualityTierListeners) cb(tierCfg);
+}
+
+/// Subscribes to automatic quality tier changes — used by overlay.js to
+/// forward `glRenderScale` to the WebGL tree renderer, which lives outside
+/// this module. Immediately invoked with the CURRENT tier so a listener
+/// added after boot doesn't have to wait for the next transition.
+export function onQualityTierChanged(cb) {
+  qualityTierListeners.add(cb);
+  cb(quality.tier);
+  return () => qualityTierListeners.delete(cb);
+}
+
+export function getQualityTier() {
+  return quality.tier;
+}
+
+const quality = new QualityGovernor({
+  tiers: QUALITY_TIERS,
+  targetFrameMs: targetFrameMsFor(fpsLimit),
+  // Every overlay window (one per monitor) shares this channel: a window
+  // struggling on its own pulls every other window's quality down with
+  // it, rather than each window deciding in isolation while the machine
+  // as a whole is still under load. See perf.js for the reasoning.
+  channel: 'christmas-overlay-quality',
+  debug: debugEnabled(),
+  onChange: applyQualityTier,
+});
 
 // Rolling render statistics, published to the settings window so the frame
 // budget is verifiable rather than merely asserted.
@@ -348,22 +414,42 @@ function makeFlake() {
   return resetFlake({}, false);
 }
 
+/// Resizes the actual particle array to `n`. Separate from `setDensity`
+/// below because two different things now decide how many flakes exist:
+/// the user's chosen density (`config.density`) and the automatic
+/// degrade's `snowScale` — this is the one place that turns "how many do
+/// we actually want right now" into the array itself.
+function resizeFlakes(n) {
+  const target = Math.max(0, Math.round(n));
+  if (flakes.length < target) {
+    while (flakes.length < target) flakes.push(makeFlake());
+  } else {
+    flakes.length = target;
+  }
+}
+
+/// Re-applies the user's density setting scaled by the current quality
+/// tier. Called on every setDensity()/setConfig() and every automatic
+/// tier change, so the two never fight — whichever changed last wins,
+/// which is exactly "the smaller of what the user asked for and what the
+/// machine can currently afford".
+function applyDensity() {
+  resizeFlakes(config.density * (quality.tier.snowScale ?? 1));
+}
+
 export function setDensity(density) {
   config.density = density;
-  if (flakes.length < density) {
-    while (flakes.length < density) flakes.push(makeFlake());
-  } else {
-    flakes.length = density;
-  }
+  applyDensity();
 }
 
 export function setConfig(partial) {
   config = { ...config, ...partial };
-  setDensity(config.density);
+  applyDensity();
 }
 
 export function setFpsLimit(limit) {
   fpsLimit = Number(limit) || 0;
+  quality.setTargetFrameMs(targetFrameMsFor(fpsLimit));
 }
 
 export function getParticleCount() {
@@ -376,6 +462,8 @@ export function getStats() {
     frameMs: stats.frameMs,
     particles: flakes.length,
     renderer: treeRenderer === 'gl' ? 'webgl' : 'canvas2d',
+    qualityTier: quality.tierIndex,
+    qualityLabel: quality.tier.label,
   };
 }
 
@@ -510,6 +598,8 @@ function render(time) {
       stars: sceneCfg.stars,
       originX,
       originY,
+      auroraDetail: quality.tier.auroraDetail,
+      starDetail: quality.tier.starDetail,
       lightIntensity: (decorConfig.lightIntensity ?? 1) * (sceneCfg.auroraIntensity ?? 1),
     });
   }
@@ -602,6 +692,9 @@ function tick(now) {
   const t0 = performance.now();
   render((ts - clock.start) / 1000);
   const cost = performance.now() - t0;
+  // Fed straight from the same measurement the stats readout already
+  // takes — one timing, two uses, no extra performance.now() calls.
+  quality.sample(cost, ts);
 
   stats.frames++;
   stats.accum += cost;
@@ -624,6 +717,12 @@ tick();
 // Expose for Playwright / manual debugging without a module bundler step.
 window.snowOverlay = {
   setDensity, setConfig, setFpsLimit, getParticleCount, getStats, start, stop,
+  onQualityTierChanged, getQualityTier,
+  /// Test-only hook: feeds a synthetic frame cost straight into the
+  /// quality governor, bypassing the real render loop entirely, so a
+  /// Playwright test can simulate a slow machine deterministically
+  /// instead of needing to actually make the page slow.
+  __simulateFrameCost: (ms, now) => quality.sample(ms, now ?? performance.now()),
   /// Hands the trees to the WebGL engine (or takes them back). Called by
   /// the bootstrap once the engine has actually produced a frame — never
   /// merely because a context could be created.
