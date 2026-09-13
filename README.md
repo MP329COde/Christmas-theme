@@ -46,6 +46,21 @@ snow overlay isn't a security risk).
   are active. Reusable for future seasonal themes, and extensible by dropping extra
   `*.json` files into the app's config directory under `themes/`.
 - **Ambient sound**: optional fireplace crackle / sleigh bells, volume-controlled, muted by default volume choice per theme.
+- **Per-screen composition**: every monitor has its own scene. Add as many
+  trees and fireplaces as you like, drag each one along a scale model of the
+  screen to place it, and set its size, species, baubles, snow load and
+  light string individually. Two trees on the left screen and a fireplace on
+  the right is a normal thing to ask for.
+- **Presets**: save the whole look under a name, switch between them, and
+  export or import them as a JSON file to share. Applying a preset never
+  touches autostart or the Dock toggle — those belong to the machine, not
+  to the look.
+- **Per-string light styling**: every garland, tree string and mantel swag
+  picks its own palette (multicolour, warm, cool, red & green, red & blue,
+  candy, ice, gold, or your own colours), animation (twinkle, sparkle,
+  chase, wave, steady), speed, bulb size and brightness.
+- **Background image**: give any screen a photograph behind the scene, with
+  cover / contain / stretch / tile and an opacity.
 - **Settings window**: theme picker; snow density, wind, flake size, accumulation and max
   snow depth; dock/taskbar toggle with a **status line saying what was actually detected**;
   tree/garland/fireplace/stocking/swag toggles and decoration size; light animation,
@@ -60,7 +75,7 @@ capture script in the commit that added them), not mocked up.
 
 | | |
 |---|---|
-| ![Desktop scene](docs/screenshots/overlay-scene.png) | The overlay at 1920×1080 over a dark wallpaper: aurora, star field, icicle fringe, light garland, two decorated conifers, the fireplace with lit candles, and depth-sorted snow. |
+| ![Desktop scene](docs/screenshots/overlay-scene.png) | A composed scene at 1920×1080: four trees of different species and sizes, two fireplaces, a red-and-green chasing garland, aurora curtains, stars, icicles and depth-sorted snow. Everything in it is placed and styled from the settings window. |
 | ![Dock strip](docs/screenshots/dock-bottom.png) | The Dock/taskbar strip: snow ledge, pine swag, animated bulbs and icicles. |
 | ![Dock strip, left edge](docs/screenshots/dock-left.png) | The same renderer with the bar docked to the left edge. |
 | ![Settings](docs/screenshots/settings-window.png) | The settings window. |

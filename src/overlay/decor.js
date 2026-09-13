@@ -169,7 +169,8 @@ function bough(c, x, y, len, angle, width, color, rand) {
 ///
 /// Pure arithmetic per bulb, no allocation: the modes cost nothing beyond
 /// the blit the caller was going to make anyway.
-export function bulbLevel(mode, time, index, phase = 0, count = 1) {
+export function bulbLevel(mode, time, index, phase = 0, count = 1, speed = 1) {
+  time *= speed;
   switch (mode) {
     case 'steady':
       // Never fully flat: even mains-powered warm white breathes a little.
@@ -204,9 +205,10 @@ export function bulbLevel(mode, time, index, phase = 0, count = 1) {
 /// is a baked glow sprite plus a tiny shaded body, so the whole string
 /// costs a couple of dozen blits instead of a couple of dozen gradients.
 export function drawGarland(ctx, width, time, colors, opts = {}) {
-  const spacing = 54;
+  const spacing = 54 * (opts.spacing ?? 1);
   const count = Math.max(2, Math.round(width / spacing));
-  const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 + Math.sin(t * Math.PI) * 26;
+  const sag = opts.sag ?? 1;
+  const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 * sag + Math.sin(t * Math.PI) * 26 * sag;
 
   ctx.save();
   ctx.lineCap = 'round';
@@ -228,14 +230,14 @@ export function drawGarland(ctx, width, time, colors, opts = {}) {
     const capY = wireY(t);
     const y = capY + 11;
     const color = colors[i % colors.length];
-    const lit = bulbLevel(opts.animation, time, i, i * 1.37, count + 1);
+    const lit = bulbLevel(opts.animation, time, i, i * 1.37, count + 1, opts.speed ?? 1);
     const gain = opts.lightIntensity ?? 1;
 
     ctx.fillStyle = '#22262d';
     ctx.fillRect(x - 2, capY, 4, 5);
 
     const glow = glowSprite(color);
-    const gs = 40 * lit * (0.8 + 0.2 * gain);
+    const gs = 40 * lit * (0.8 + 0.2 * gain) * (opts.size ?? 1);
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, 0.85 * lit * gain);
     ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
@@ -264,7 +266,15 @@ const treeCache = new Map();
 /// stacked triangles, dusted with snow, hung with baubles, and with the
 /// positions of its warm string lights returned so they can be twinkled
 /// live on top of the baked sprite.
-function bakeTree(scale, colors, seed, wantLights) {
+function bakeTree(scale, colors, seed, spec = {}) {
+  const wantLights = spec.lightsOn !== false;
+  // Style controls the silhouette itself, not just a colour: a spruce is
+  // visibly narrower and sparser than a pine, and swapping between them
+  // has to change the geometry or it is only a label.
+  const styleWidth = spec.styleWidth ?? 1;
+  const styleDensity = spec.styleDensity ?? 1;
+  const snowAmount = spec.snow ?? 1;
+  const ornamentAmount = spec.ornaments ?? 1;
   const w = 240 * scale;
   const h = 420 * scale;
   const cv = makeCanvas(w, h);
@@ -276,7 +286,7 @@ function bakeTree(scale, colors, seed, wantLights) {
   const trunkW = 16 * scale;
   const trunkH = 34 * scale;
   const topY = 38 * scale;
-  const baseHalf = 108 * scale;
+  const baseHalf = 108 * scale * styleWidth;
 
   // Contact shadow.
   const sh = c.createRadialGradient(cx, groundY, 0, cx, groundY, baseHalf);
@@ -315,7 +325,7 @@ function bakeTree(scale, colors, seed, wantLights) {
     // little in hue — uniform green is the main thing that reads as fake.
     const hueJitter = (rand() - 0.5) * 16;
     const rowColor = shade(green, -28 + f * 32 + hueJitter);
-    const perRow = Math.max(3, Math.round(half / (7 * scale)));
+    const perRow = Math.max(3, Math.round((half / (7 * scale)) * styleDensity));
 
     for (let i = 0; i < perRow; i++) {
       const side = i % 2 === 0 ? -1 : 1;
@@ -351,7 +361,7 @@ function bakeTree(scale, colors, seed, wantLights) {
     const half = baseHalf * (1 - f) ** 0.82;
     const caps = Math.max(2, Math.round(half / (13 * scale)));
     for (let i = 0; i <= caps; i++) {
-      if (rand() > 0.5) continue;
+      if (rand() > 0.5 * Math.min(2, snowAmount)) continue;
       const p = i / caps;
       const x = cx + (p * 2 - 1) * half * (0.55 + rand() * 0.45);
       const len = (4 + rand() * 5) * scale;
@@ -367,7 +377,7 @@ function bakeTree(scale, colors, seed, wantLights) {
   // Drawn as a series of dipping arcs at descending heights: front-facing
   // runs are lit, the returns behind the tree are darkened so the ribbon
   // reads as wrapping around the cone rather than lying flat on it.
-  for (let turn = 0; turn < 5; turn++) {
+  for (let turn = 0; spec.ribbon !== false && turn < 5; turn++) {
     const f0 = 0.86 - turn * 0.18;
     if (f0 < 0.02) break;
     const y0 = foliageBottom - (foliageBottom - topY) * f0;
@@ -401,7 +411,7 @@ function bakeTree(scale, colors, seed, wantLights) {
     colors.primary, colors.accent, '#f2f4f7',
     shade(colors.primary, 16), shade(colors.accent, -12), '#b9c4d0',
   ];
-  const ornaments = Math.round(26 * scale);
+  const ornaments = Math.round(26 * scale * ornamentAmount);
   for (let i = 0; i < ornaments; i++) {
     const f = 0.05 + rand() * 0.9;
     const y = foliageBottom - (foliageBottom - topY) * f;
@@ -453,6 +463,9 @@ function bakeTree(scale, colors, seed, wantLights) {
 
   // --- star ---------------------------------------------------------------
   const starY = topY - 12 * scale;
+  if (spec.star === false) {
+    return { sprite: cv, lights, star: null, groundY };
+  }
   const sg = c.createLinearGradient(cx - 14 * scale, starY - 14 * scale, cx + 14 * scale, starY + 14 * scale);
   sg.addColorStop(0, '#fffdf0');
   sg.addColorStop(0.5, colors.accent);
@@ -463,77 +476,92 @@ function bakeTree(scale, colors, seed, wantLights) {
   return { sprite: cv, lights, star: { x: cx, y: starY }, groundY };
 }
 
-function getTree(scale, colors, seed, wantLights) {
-  const key = `${scale.toFixed(2)}|${colors.secondary}|${colors.primary}|${colors.accent}|${seed}|${wantLights}`;
+function getTree(scale, colors, seed, spec) {
+  const key = [
+    scale.toFixed(2), colors.secondary, colors.primary, colors.accent, seed,
+    spec.lightsOn !== false, spec.styleWidth, spec.styleDensity,
+    spec.snow, spec.ornaments, spec.ribbon, spec.star,
+  ].join('|');
   let t = treeCache.get(key);
   if (!t) {
-    t = bakeTree(scale, colors, seed, wantLights);
-    if (treeCache.size > 6) treeCache.clear();
+    t = bakeTree(scale, colors, seed, spec);
+    // Several trees with different styles and scales can be on screen at
+    // once now, so the cache has to hold more than one bake — but still
+    // be bounded, or dragging a size slider would grow it without limit.
+    if (treeCache.size > 14) treeCache.clear();
     treeCache.set(key, t);
   }
   return t;
 }
 
-/// Draws a conifer in each bottom corner (mirrored, different seeds) and
-/// twinkles their string lights on top of the baked sprite.
-export function drawTrees(ctx, width, height, colors, time, opts = {}) {
-  const scale = Math.max(0.7, Math.min(2.2, (height / 900) * (opts.decorScale ?? 1)));
-  const withLights = opts.treeLights !== false;
-  const left = getTree(scale, colors, 1337, withLights);
-  const right = getTree(scale, colors, 90210, withLights);
-  const margin = 6 * scale;
+/// Draws ONE conifer, wherever the scene says it goes.
+///
+/// This replaces the old `drawTrees`, which hard-coded exactly two trees
+/// into the bottom corners. A scene now holds a list of tree specs, each
+/// with its own horizontal position, scale, style, seed and light string,
+/// so a screen can have one tree, five, or none — and two trees side by
+/// side are genuinely different trees rather than one sprite mirrored.
+export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
+  const scale = Math.max(0.55, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
+  const tree = getTree(scale, colors, spec.seed ?? 1337, spec);
+  const gain = (opts.lightIntensity ?? 1) * (spec.lights?.intensity ?? 1);
+  const palette = spec.palette ?? ['#ffdba0'];
+  const mode = spec.lights?.mode ?? opts.lightAnimation;
+  const speed = spec.lights?.speed ?? 1;
+  const bulbScale = spec.lights?.size ?? 1;
 
-  const bulb = glowSprite('#ffdba0', 48);
-  const starGlow = glowSprite(colors.accent, 96);
-  const mode = opts.lightAnimation;
-  const gain = opts.lightIntensity ?? 1;
+  const originX = Math.round((spec.x ?? 0.5) * width - tree.sprite.width / 2);
+  const originY = height - tree.sprite.height;
 
-  for (const [tree, mirrored] of [[left, false], [right, true]]) {
-    const originX = mirrored ? width - margin - tree.sprite.width : margin;
-    const originY = height - tree.sprite.height;
+  ctx.save();
+  if (spec.flip) {
+    ctx.translate(originX + tree.sprite.width, originY);
+    ctx.scale(-1, 1);
+  } else {
+    ctx.translate(originX, originY);
+  }
+  ctx.drawImage(tree.sprite, 0, 0);
 
-    ctx.save();
-    if (mirrored) {
-      ctx.translate(originX + tree.sprite.width, originY);
-      ctx.scale(-1, 1);
-      ctx.drawImage(tree.sprite, 0, 0);
-    } else {
-      ctx.translate(originX, originY);
-      ctx.drawImage(tree.sprite, 0, 0);
-    }
-
+  if (spec.lightsOn !== false && tree.lights.length) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < tree.lights.length; i++) {
       const l = tree.lights[i];
-      // Driven by the same controller as the top garland, so "chase" or
-      // "sparkle" runs through the whole scene rather than one string.
-      const lit = bulbLevel(mode, time, i, l.phase, tree.lights.length);
-      const s = (14 + 10 * lit) * (0.85 + 0.15 * gain);
+      // Each tree runs its own palette and mode, so one screen can carry a
+      // warm-white tree next to a red-and-blue one.
+      const color = palette[i % palette.length];
+      const lit = bulbLevel(mode, time, i, l.phase, tree.lights.length, speed);
+      const s = (14 + 10 * lit) * (0.85 + 0.15 * gain) * bulbScale;
       ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * lit) * gain);
-      ctx.drawImage(bulb, l.x - s / 2, l.y - s / 2, s, s);
+      ctx.drawImage(glowSprite(color, 48), l.x - s / 2, l.y - s / 2, s, s);
     }
-
-    // The topper pulses on a slower, independent beat and throws light
-    // onto the branches under it.
-    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1) + 0.08 * Math.sin(time * 6.3);
-    const ss = 90 * twinkle;
-    ctx.globalAlpha = Math.min(1, 0.85 * twinkle * gain);
-    ctx.drawImage(starGlow, tree.star.x - ss / 2, tree.star.y - ss / 2, ss, ss);
-    const halo = 210 * twinkle;
-    ctx.globalAlpha = Math.min(1, 0.16 * twinkle * gain);
-    ctx.drawImage(starGlow, tree.star.x - halo / 2, tree.star.y - halo * 0.3, halo, halo);
-
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.restore();
   }
+
+  if (tree.star) {
+    ctx.globalCompositeOperation = 'lighter';
+    const starGlow = glowSprite(colors.accent, 96);
+    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1) + 0.08 * Math.sin(time * 6.3);
+    const ss = 90 * twinkle * scale * 0.8;
+    ctx.globalAlpha = Math.min(1, 0.85 * twinkle * gain);
+    ctx.drawImage(starGlow, tree.star.x - ss / 2, tree.star.y - ss / 2, ss, ss);
+    const halo = ss * 2.4;
+    ctx.globalAlpha = Math.min(1, 0.16 * twinkle * gain);
+    ctx.drawImage(starGlow, tree.star.x - halo / 2, tree.star.y - halo * 0.3, halo, halo);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
 // fireplace
 // ---------------------------------------------------------------------------
 
-let fireCache = null;
+// Several fireplaces can be on screen at once, each at its own scale, so
+// the bake cache holds one entry per distinct configuration instead of a
+// single slot that thrashed whenever two differed.
+const fireCache = new Map();
 
 /// Irregular stone courses, like the dry-stone surrounds in the reference
 /// photos, rather than a uniform brick grid.
@@ -894,18 +922,25 @@ function bakeFlameSheet(fw, fh, scale) {
 
 /// Draws the fireplace: baked stonework, the flame sprite-sheet frame for
 /// this moment, ember bed, sparks, and warm light spilling into the room.
-export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
-  const scale = Math.max(0.8, Math.min(2.2, (height / 900) * (opts.decorScale ?? 1)));
-  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${opts.stockings}|${opts.mantelGarland}`;
-  if (!fireCache || fireCache.key !== key) {
-    const baked = bakeFireplace(scale, colors, opts);
+export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts = {}) {
+  const scale = Math.max(0.6, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
+  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${spec.stockings}|${spec.mantelGarland}|${spec.candles}`;
+  let cached = fireCache.get(key);
+  if (!cached) {
+    const baked = bakeFireplace(scale, colors, spec);
     const fw = Math.ceil(baked.geom.openW);
     const fh = Math.ceil(baked.geom.openH * 0.85);
-    fireCache = { key, ...baked, flame: bakeFlameSheet(fw, fh, scale) };
+    cached = { ...baked, flame: bakeFlameSheet(fw, fh, scale) };
+    if (fireCache.size > 6) fireCache.clear();
+    fireCache.set(key, cached);
   }
-  const { sprite, geom, lights, flame } = fireCache;
-  const gain = opts.lightIntensity ?? 1;
-  const x = width / 2 - geom.w / 2;
+  const fireCacheEntry = cached;
+  const { sprite, geom, lights, flame } = cached;
+  const gain = (opts.lightIntensity ?? 1) * (spec.lights?.intensity ?? 1);
+  const palette = spec.palette ?? ['#ffd79a'];
+  const mode = spec.lights?.mode ?? opts.lightAnimation;
+  const speed = spec.lights?.speed ?? 1;
+  const x = Math.round((spec.x ?? 0.5) * width - geom.w / 2);
   const y = height - geom.h;
 
   const fireX = x + geom.fireX;
@@ -928,12 +963,12 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
 
   // Mantel garland lights.
   if (lights.length) {
-    const bulb = glowSprite('#ffd79a', 48);
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < lights.length; i++) {
       const l = lights[i];
-      const lit = bulbLevel(opts.lightAnimation, time, i, l.phase, lights.length);
-      const s = 13 + 9 * lit;
+      const bulb = glowSprite(palette[i % palette.length], 48);
+      const lit = bulbLevel(mode, time, i, l.phase, lights.length, speed);
+      const s = (13 + 9 * lit) * (spec.lights?.size ?? 1);
       ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * lit) * gain);
       ctx.drawImage(bulb, x + l.x - s / 2, y + l.y - s / 2, s, s);
     }
@@ -943,10 +978,10 @@ export function drawFireplace(ctx, width, height, time, colors, opts = {}) {
 
   // Candle flames: a warm bloom plus a small teardrop that leans as it
   // flickers, each on its own phase so they don't gutter in unison.
-  if (fireCache.candles?.length) {
+  if (spec.candles !== false && fireCacheEntry.candles?.length) {
     const halo = glowSprite('#ffc36b', 48);
     ctx.globalCompositeOperation = 'lighter';
-    for (const cd of fireCache.candles) {
+    for (const cd of fireCacheEntry.candles) {
       const flick = 0.75 + 0.25 * Math.sin(time * 7.3 + cd.phase) + 0.1 * Math.sin(time * 17 + cd.phase);
       const fx = x + cd.x + Math.sin(time * 3.1 + cd.phase) * 0.7 * scale;
       const fy = y + cd.y;

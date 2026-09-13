@@ -41,6 +41,11 @@ const DEFAULT_SETTINGS = {
   fpsLimit: 0,
   soundVolume: 0.4,
   autostart: false,
+  // Per-screen composition and saved presets. Null here rather than a
+  // built-in default, so the renderer can tell "never configured" (use the
+  // stock composition) from "configured to be empty".
+  scene: null,
+  presets: null,
 };
 
 export async function listThemes() {
@@ -78,6 +83,47 @@ export async function dockStatus() {
     return window.__TAURI__.core.invoke('dock_status');
   }
   return { strips: [], reason: 'Dock/taskbar decoration only runs in the desktop app.' };
+}
+
+/// The connected displays, so the per-screen editor can name them. Outside
+/// Tauri there is exactly one notional screen, which is what keeps the
+/// settings UI testable as a plain page.
+export async function listScreens() {
+  if (isTauri) {
+    return window.__TAURI__.core.invoke('list_screens');
+  }
+  return [{
+    index: 0, label: 'overlay-0', name: 'Preview display',
+    width: 1920, height: 1080, scaleFactor: 1, primary: true,
+  }];
+}
+
+/// Background images are stored per screen in their own files, never
+/// inside settings.json: a 4K photo as a data URL is megabytes, and
+/// putting it in the settings payload would mean rewriting and
+/// re-broadcasting it on every slider change.
+export async function saveBackground(key, dataUrl) {
+  if (isTauri) {
+    return window.__TAURI__.core.invoke('save_background', { key, dataUrl });
+  }
+  if (dataUrl) localStorage.setItem(`christmas-bg-${key}`, dataUrl);
+  else localStorage.removeItem(`christmas-bg-${key}`);
+}
+
+export async function loadBackground(key) {
+  if (isTauri) {
+    return window.__TAURI__.core.invoke('load_background', { key });
+  }
+  return localStorage.getItem(`christmas-bg-${key}`);
+}
+
+export function onBackgroundChanged(callback) {
+  if (!isTauri) return () => {};
+  let unlisten = () => {};
+  window.__TAURI__.event
+    .listen('background-changed', (event) => callback(event.payload))
+    .then((fn) => { unlisten = fn; });
+  return () => unlisten();
 }
 
 export async function disableEverything() {

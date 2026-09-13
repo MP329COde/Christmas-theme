@@ -105,9 +105,15 @@ fn disable_everything(
     if let Some(player) = &state_guard.player {
         player.stop();
     }
+    let config_dir = state_guard.settings_path.parent().map(|p| p.to_path_buf());
     drop(state_guard);
-    // "No residual trace" includes screen furniture: take the dock
-    // decoration down immediately rather than at next launch.
+    // "No residual trace" means every file this app wrote, not only the
+    // settings: stored background images go too.
+    if let Some(dir) = config_dir {
+        let _ = std::fs::remove_dir_all(dir.join("backgrounds"));
+    }
+    // It also includes screen furniture: take the dock decoration down
+    // immediately rather than at next launch.
     sync_dock_windows(&app, false);
     Ok(())
 }
@@ -189,6 +195,99 @@ fn sync_dock_windows(app: &tauri::AppHandle, enabled: bool) {
             }
         }
     }
+}
+
+/// One connected display, as the settings window needs to describe it:
+/// which overlay window belongs to it, how big it is, and a label a person
+/// can recognise. Without this the per-screen editor could only say
+/// "screen 0", which is useless on a four-monitor desk.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScreenInfo {
+    index: usize,
+    label: String,
+    name: String,
+    width: u32,
+    height: u32,
+    scale_factor: f64,
+    /// The monitor containing the origin is the primary one on every
+    /// platform we target.
+    primary: bool,
+}
+
+#[tauri::command]
+fn list_screens(app: tauri::AppHandle) -> Vec<ScreenInfo> {
+    app.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .map(|(index, m)| ScreenInfo {
+            index,
+            label: format!("overlay-{index}"),
+            name: m
+                .name()
+                .cloned()
+                .unwrap_or_else(|| format!("Display {}", index + 1)),
+            width: m.size().width,
+            height: m.size().height,
+            scale_factor: m.scale_factor(),
+            primary: m.position().x == 0 && m.position().y == 0,
+        })
+        .collect()
+}
+
+/// Background images live in their own files, one per screen, NOT inside
+/// settings.json. A 4K photo as a data URL is megabytes; putting that in
+/// the settings file would mean rewriting it on every slider change and
+/// re-broadcasting it to every window on every save.
+fn background_path(dir: &std::path::Path, key: &str) -> std::path::PathBuf {
+    // The key comes from the settings window and only ever identifies a
+    // screen, but it reaches the filesystem, so it is restricted to
+    // characters that cannot escape the directory.
+    let safe: String = key
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .take(40)
+        .collect();
+    dir.join("backgrounds").join(format!("{safe}.txt"))
+}
+
+#[tauri::command]
+fn save_background(
+    app: tauri::AppHandle,
+    state: State<Mutex<AppState>>,
+    key: String,
+    data_url: Option<String>,
+) -> Result<(), String> {
+    let dir = {
+        let state = state.lock().unwrap();
+        state.settings_path.parent().unwrap().to_path_buf()
+    };
+    let path = background_path(&dir, &key);
+    match data_url {
+        Some(url) => {
+            std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::write(&path, url).map_err(|e| e.to_string())?;
+        }
+        // None clears it, and clearing must actually remove the file so
+        // "disable everything" leaves nothing behind.
+        None => {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    let _ = app.emit("background-changed", &key);
+    Ok(())
+}
+
+#[tauri::command]
+fn load_background(state: State<Mutex<AppState>>, key: String) -> Option<String> {
+    let dir = {
+        let state = state.lock().unwrap();
+        state.settings_path.parent().unwrap().to_path_buf()
+    };
+    std::fs::read_to_string(background_path(&dir, &key)).ok()
 }
 
 /// What the settings window shows next to the Dock toggle: the strips we
@@ -325,7 +424,10 @@ fn main() {
             get_settings,
             save_settings,
             disable_everything,
-            dock_status
+            dock_status,
+            list_screens,
+            save_background,
+            load_background
         ])
         .run(tauri::generate_context!())
         .expect("error while running christmas-theme app");

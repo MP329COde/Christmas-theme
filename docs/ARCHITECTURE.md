@@ -268,3 +268,72 @@ CI.** The engine tests cover shader compilation, geometry generation,
 composited pixel values including alpha, premultiplication correctness,
 independent layer toggling and CPU cost. Frame rate on real hardware moves
 to the manual QA checklist.
+
+
+## 7. Scene composition, per screen
+
+The renderer used to hard-code the composition: exactly two trees, in the
+bottom corners, mirrored from one sprite, plus one fireplace at
+bottom-centre, and only on `overlay-0`. Nothing about that was adjustable,
+because there was nothing to adjust — it was control flow, not data.
+
+It is now data. `src/shared/scene.js` owns the schema and both the
+settings window (which edits it) and the overlay (which renders it) import
+the same module:
+
+```
+scene.screens["0"]     composition for monitor 0
+scene.screens.default  used by any monitor without its own entry
+```
+
+A screen holds LISTS — `trees: [...]`, `fireplaces: [...]` — where each
+element carries its own `x` (a fraction of the screen width, so a layout
+survives a resolution change), `scale`, species, and a light style. A light
+style is the same object wherever it appears, so "red and blue, chasing,
+fast" means one thing whether it is set on the top garland, a tree's string
+or a mantel swag.
+
+Which screen a window is rendering for comes from its own label: Rust names
+the overlay windows `overlay-0`, `overlay-1`, ..., so the page reads its
+index without a round trip. That replaced `isPrimaryOverlay()`, which could
+only express "the decorations go on monitor 0".
+
+**Rust stores the scene and the presets as opaque JSON.** This part of the
+configuration is user-composed content whose shape belongs to the renderer;
+mirroring every field in Rust would mean editing two languages to add one
+slider, and would make an older binary reject a newer config rather than
+carrying it through untouched.
+
+**Background images live in their own files**, one per screen, written by
+`save_background`. A 4K photograph as a data URL is megabytes; inside
+settings.json it would be rewritten and re-broadcast to every window on
+every slider change.
+
+### The stutter, and what caused it
+
+Reported as snow "catching" on a fast machine. The cause was in
+`stepFlake`: every time a flake landed it ran
+`Object.assign(f, makeFlake(), { y: -10 })`, allocating a fresh object plus
+an object literal. At a few hundred flakes falling continuously that is
+thousands of short-lived objects per second, and the resulting
+garbage-collection sawtooth is exactly what a periodic hitch feels like —
+worse on a fast machine, which lands *more* flakes per second, not fewer.
+Flakes are now recycled in place, the settled-bank ridge buffer is reused,
+and the per-column heights are a typed array. The steady state allocates
+nothing. `tests/overlay.spec.js` guards it by watching the JS heap.
+
+### The aurora, rebuilt
+
+The first version baked one wavy band, combed vertical gaps into it and
+slid it sideways — a fixed silhouette translating across the screen, which
+is why it read as a radio-wave diagram. It is now a curtain: an undulating
+base line with individual rays extending upward from it, each breathing on
+its own rate, with a travelling wave of brightness running along the
+curtain and a diffuse air-glow behind. It morphs rather than translating.
+
+An intermediate low-resolution buffer for it was tried and **measured
+slower** — it cuts the rays' fill cost by a ninth but pays a full-frame
+upscaled blit, which on a CPU-rasterised canvas cost 6.8 ms/frame against
+1.5 ms drawing direct at 1920×1080. On a GPU-composited canvas the trade
+would probably go the other way, but "probably" is not a reason to ship a
+five-fold regression on the one machine that can be measured.

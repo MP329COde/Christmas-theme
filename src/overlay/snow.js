@@ -10,8 +10,11 @@
 // gradients and builds essentially no paths. See decor.js for the same
 // approach applied to the scene.
 
-import { getSettings, listThemes, onSettingsChanged, publishStats } from '../shared/bridge.js';
-import { drawGarland, drawTrees, drawFireplace, GARLAND_PALETTES } from './decor.js';
+import {
+  getSettings, listThemes, onSettingsChanged, publishStats, loadBackground, onBackgroundChanged,
+} from '../shared/bridge.js';
+import { drawGarland, drawTree, drawFireplace } from './decor.js';
+import { screenConfig, resolvePalette, TREE_STYLES, defaultScene } from '../shared/scene.js';
 import { drawSky, drawGlitter, drawIcicles, invalidateLights } from './lights.js';
 
 const canvas = document.getElementById('snow');
@@ -37,27 +40,36 @@ let lastFrameAt = 0;
 // budget is verifiable rather than merely asserted.
 const stats = { fps: 0, frameMs: 0, frames: 0, accum: 0, since: 0 };
 
-// Decorations are independent of the snow theme config: they come from
-// AppSettings (user toggles), not the theme file, and only render on one
-// overlay window — see isPrimaryOverlay() below — so a multi-monitor setup
-// gets one decorated "scene", not the same trees repeated on every screen.
+// Global light master controls. What appears on THIS screen is decided by
+// the per-screen composition (sceneCfg) instead — that is what lets one
+// monitor carry the fireplace and another carry three trees, rather than
+// every window drawing the same thing or only "overlay-0" being decorated.
 let decorConfig = {
-  trees: true,
-  garlands: true,
-  fireplace: true,
-  garlandStyle: 'multicolor',
-  treeLights: true,
-  stockings: true,
-  mantelGarland: true,
-  decorScale: 1,
   lightAnimation: 'twinkle',
   lightIntensity: 1,
-  aurora: true,
-  stars: true,
-  icicles: true,
-  snowGlitter: true,
+  decorScale: 1,
 };
 let themeColors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
+
+/// Which monitor this overlay window is on. Rust names the windows
+/// `overlay-0`, `overlay-1`, ... so the window knows its own index without
+/// an extra round trip, and that index is the key into the per-screen
+/// composition. Outside Tauri (the Playwright harness) it is screen 0.
+function screenIndex() {
+  if (typeof window.__TAURI__ === 'undefined') return 0;
+  try {
+    const label = window.__TAURI__.window.getCurrentWindow().label;
+    const n = Number(label.split('-')[1]);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// The resolved composition for THIS screen: which trees, where, at what
+// size, with which light strings, plus the sky layers and background.
+let sceneCfg = screenConfig(defaultScene(), 0);
+let backgroundImage = null;
 
 let accumulation = []; // per-column snow height, only used when accumulate=true
 let running = true;
@@ -71,6 +83,7 @@ const clock = { start: performance.now() };
 let bankCanvas = null;
 let bankDirty = true;
 let bankLastBuilt = -1;
+let ridgeBuffer = null;
 
 // Flake sprites, pre-rendered once into offscreen canvases and reused via
 // drawImage(). Doing the falloff once here instead of a live
@@ -156,10 +169,67 @@ const crystalStrip = (() => {
   return cv;
 })();
 
+/// Loads this screen's background image, if it has one. Stored by Rust in
+/// its own file rather than inside settings.json — see save_background —
+/// and fetched once here, not on every settings save.
+async function refreshBackground() {
+  if (sceneCfg.background !== 'image') {
+    backgroundImage = null;
+    return;
+  }
+  try {
+    const dataUrl = await loadBackground(`screen-${screenIndex()}`);
+    if (!dataUrl) {
+      backgroundImage = null;
+      return;
+    }
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+    backgroundImage = img;
+  } catch {
+    // A background that fails to decode must never take the overlay down
+    // with it; the scene simply renders without one.
+    backgroundImage = null;
+  }
+}
+
+/// Draws the background image under everything else, honouring the chosen
+/// fit. `cover` and `contain` keep the photograph's aspect ratio, which a
+/// plain stretch to the canvas does not — and a stretched photo is
+/// immediately obvious on an ultrawide monitor.
+function drawBackground(w, h) {
+  if (!backgroundImage) return;
+  const iw = backgroundImage.naturalWidth;
+  const ih = backgroundImage.naturalHeight;
+  if (!iw || !ih) return;
+  ctx.save();
+  ctx.globalAlpha = sceneCfg.backgroundOpacity ?? 1;
+  const fit = sceneCfg.backgroundFit ?? 'cover';
+  if (fit === 'stretch') {
+    ctx.drawImage(backgroundImage, 0, 0, w, h);
+  } else if (fit === 'tile') {
+    for (let y = 0; y < h; y += ih) {
+      for (let x = 0; x < w; x += iw) ctx.drawImage(backgroundImage, x, y);
+    }
+  } else {
+    const scale = fit === 'contain'
+      ? Math.min(w / iw, h / ih)
+      : Math.max(w / iw, h / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.drawImage(backgroundImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  }
+  ctx.restore();
+}
+
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
-  accumulation = new Array(Math.ceil(canvas.width / 4)).fill(0);
+  accumulation = new Float32Array(Math.ceil(canvas.width / 4));
   bankDirty = true;
   // Every light layer bakes sprites cut to the current size; a resize has
   // to throw those away or the fringe and star field stay sized for the
@@ -168,30 +238,45 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-function makeFlake() {
+/// Gives a flake a fresh set of properties IN PLACE.
+///
+/// This used to be `Object.assign(f, makeFlake(), { y: -10 })` at the
+/// moment a flake landed, which allocated a new object plus an object
+/// literal every single time. At a few hundred flakes falling
+/// continuously that is thousands of short-lived objects per second, and
+/// the resulting garbage-collection sawtooth is exactly the periodic
+/// hitch you feel as the snow stuttering — on a fast machine especially,
+/// because a fast machine lands more flakes per second, not fewer.
+///
+/// Recycling in place allocates nothing, so the steady state produces no
+/// garbage at all.
+function resetFlake(f, atTop) {
   // depth: 0 = far away, 1 = close to the viewer. Everything else about a
   // flake follows from it, which is what sells the sense of volume: near
   // flakes are big, fast, bright and out of focus; distant ones are small,
   // slow and dim.
   const depth = Math.random() ** 1.6; // biased distant: fewer big foreground flakes
-  const layer = depth > 0.72 ? 2 : depth > 0.38 ? 1 : 0;
+  f.depth = depth;
+  f.layer = depth > 0.72 ? 2 : depth > 0.38 ? 1 : 0;
   // Only mid/near flakes are ever detailed crystals — a distant flake is
   // too small for the shape to read, so drawing one is wasted work.
-  const isCrystal = depth > 0.45 && Math.random() < 0.4;
-  return {
-    x: Math.random() * canvas.width,
-    y: Math.random() * -canvas.height,
-    depth,
-    layer,
-    r: config.flakeSize * config.flakeScale * (0.35 + depth * 1.5) * (0.75 + Math.random() * 0.5),
-    speed: (0.35 + depth * 1.5) * (0.8 + Math.random() * 0.5),
-    drift: Math.random() * Math.PI * 2,
-    driftRate: 0.006 + Math.random() * 0.012,
-    opacity: 0.35 + depth * 0.6,
-    isCrystal,
-    rotation: Math.random() * Math.PI,
-    spin: (Math.random() - 0.5) * 0.02,
-  };
+  f.isCrystal = depth > 0.45 && Math.random() < 0.4;
+  f.x = Math.random() * canvas.width;
+  f.y = atTop ? -10 : Math.random() * -canvas.height;
+  f.r = config.flakeSize * config.flakeScale * (0.35 + depth * 1.5) * (0.75 + Math.random() * 0.5);
+  f.speed = (0.35 + depth * 1.5) * (0.8 + Math.random() * 0.5);
+  f.drift = Math.random() * Math.PI * 2;
+  f.driftRate = 0.006 + Math.random() * 0.012;
+  f.opacity = 0.35 + depth * 0.6;
+  f.rotation = Math.random() * Math.PI;
+  f.spin = (Math.random() - 0.5) * 0.02;
+  return f;
+}
+
+/// The one place a flake object is created. Called only when the density
+/// setting grows the field.
+function makeFlake() {
+  return resetFlake({}, false);
 }
 
 export function setDensity(density) {
@@ -275,7 +360,7 @@ function stepFlake(f, gust) {
       accumulation[col] += 0.15;
       bankDirty = true;
     }
-    Object.assign(f, makeFlake(), { y: -10 });
+    resetFlake(f, true);
   }
 }
 
@@ -291,12 +376,19 @@ function rebuildBank() {
 
   // Smooth the drift profile: raw per-column heights give a noisy
   // sawtooth, whereas settled snow forms soft rolling banks.
-  const ridge = [];
+  //
+  // The buffer is reused across rebuilds. This runs several times a
+  // second for the life of the app, and allocating a fresh array each
+  // time is the same garbage-collection problem as recycling flakes.
+  if (!ridgeBuffer || ridgeBuffer.length !== accumulation.length) {
+    ridgeBuffer = new Float32Array(accumulation.length);
+  }
+  const ridge = ridgeBuffer;
   for (let i = 0; i < accumulation.length; i++) {
     const a = accumulation[Math.max(0, i - 1)];
     const m = accumulation[i];
     const c = accumulation[Math.min(accumulation.length - 1, i + 1)];
-    ridge.push((a + m * 2 + c) / 4);
+    ridge[i] = (a + m * 2 + c) / 4;
   }
 
   const h = bankCanvas.height;
@@ -334,9 +426,17 @@ function rebuildBank() {
 function render(time) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Sky first: aurora and stars sit behind the snow and the scene.
-  if (decorConfig.aurora || decorConfig.stars) {
-    drawSky(ctx, canvas.width, canvas.height, time, decorConfig);
+  // Compositing order is depth order: background photograph, sky, far
+  // snow, then the scene elements, then near snow in front of them, then
+  // the settled bank and the light bouncing off it.
+  drawBackground(canvas.width, canvas.height);
+
+  if (sceneCfg.aurora || sceneCfg.stars) {
+    drawSky(ctx, canvas.width, canvas.height, time, {
+      aurora: sceneCfg.aurora,
+      stars: sceneCfg.stars,
+      lightIntensity: (decorConfig.lightIntensity ?? 1) * (sceneCfg.auroraIntensity ?? 1),
+    });
   }
 
   // Step every flake first, then draw in depth order: distant snow sits
@@ -351,21 +451,41 @@ function render(time) {
   }
   ctx.globalAlpha = 1;
 
-  if (decorConfig.icicles) {
+  if (sceneCfg.icicles) {
     drawIcicles(ctx, canvas.width, canvas.height, time, decorConfig);
   }
-  if (decorConfig.garlands) {
-    const palette = GARLAND_PALETTES[decorConfig.garlandStyle] ?? GARLAND_PALETTES.multicolor;
-    drawGarland(ctx, canvas.width, time, palette, {
-      animation: decorConfig.lightAnimation,
-      lightIntensity: decorConfig.lightIntensity,
+
+  const garland = sceneCfg.garland;
+  if (garland?.enabled) {
+    drawGarland(ctx, canvas.width, time, resolvePalette(garland.lights), {
+      animation: garland.lights?.mode,
+      speed: garland.lights?.speed,
+      size: garland.lights?.size,
+      sag: garland.sag,
+      spacing: garland.spacing,
+      lightIntensity: (decorConfig.lightIntensity ?? 1) * (garland.lights?.intensity ?? 1),
     });
   }
-  if (decorConfig.trees) {
-    drawTrees(ctx, canvas.width, canvas.height, themeColors, time, decorConfig);
+
+  // Elements are drawn in the order they appear in the composition, so
+  // "behind" and "in front of" is something the user controls by ordering
+  // the list rather than something baked into the renderer.
+  for (const tree of sceneCfg.trees ?? []) {
+    const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
+    drawTree(ctx, canvas.width, canvas.height, themeColors, time, {
+      ...tree,
+      palette: resolvePalette(tree.lights),
+      styleWidth: style.width,
+      styleDensity: style.density,
+      snow: (tree.snow ?? 1) * (style.snow ?? 1),
+    }, decorConfig);
   }
-  if (decorConfig.fireplace) {
-    drawFireplace(ctx, canvas.width, canvas.height, time, themeColors, decorConfig);
+
+  for (const fire of sceneCfg.fireplaces ?? []) {
+    drawFireplace(ctx, canvas.width, canvas.height, time, themeColors, {
+      ...fire,
+      palette: resolvePalette(fire.lights),
+    }, decorConfig);
   }
 
   for (const f of flakes) {
@@ -382,7 +502,7 @@ function render(time) {
     if (bankCanvas) ctx.drawImage(bankCanvas, 0, 0);
     // Glitter goes on top of the bank, since it is light bouncing off the
     // surface we just drew.
-    if (decorConfig.snowGlitter) {
+    if (sceneCfg.snowGlitter) {
       drawGlitter(ctx, canvas.width, canvas.height, time, accumulation, decorConfig);
     }
   }
@@ -428,28 +548,20 @@ window.snowOverlay = {
   setDensity, setConfig, setFpsLimit, getParticleCount, getStats, start, stop,
 };
 
-/// Only one overlay window (whichever monitor got "overlay-0") draws the
-/// trees/garland/fireplace scene. With one overlay window per monitor,
-/// repeating the same full-size decorations on every screen would read as
-/// duplicated clutter rather than one decorated desktop. Falls back to
-/// true outside Tauri (standalone page / Playwright) so the decorations
-/// stay visible and testable there.
-function isPrimaryOverlay() {
-  if (typeof window.__TAURI__ === 'undefined') return true;
-  try {
-    return window.__TAURI__.window.getCurrentWindow().label === 'overlay-0';
-  } catch {
-    return true;
-  }
-}
-
-// Apply the theme's snow settings and the user's overrides. User-chosen
-// values win over the theme's own defaults so the settings window stays
-// authoritative.
 function applyThemeAndSettings(theme, settings) {
   if (!theme) return;
+  const index = screenIndex();
+  const previousBackground = `${sceneCfg.background}|${sceneCfg.backgroundFit}`;
+  sceneCfg = screenConfig(settings?.scene ?? defaultScene(), index);
+
+  // A screen can override the global snow density, so one monitor can be
+  // a blizzard while another stays calm.
+  const density = sceneCfg.snowDensity === 'inherit' || sceneCfg.snowDensity == null
+    ? (settings?.snowDensity ?? theme.snow.density)
+    : Number(sceneCfg.snowDensity);
+
   setConfig({
-    density: settings?.snowDensity ?? theme.snow.density,
+    density: sceneCfg.enabled === false ? 0 : density,
     wind: settings?.snowWind ?? theme.snow.wind,
     flakeSize: theme.snow.flakeSize,
     flakeScale: settings?.flakeScale ?? 1,
@@ -460,26 +572,18 @@ function applyThemeAndSettings(theme, settings) {
   themeColors = theme.colors;
   bankDirty = true;
 
-  const primary = isPrimaryOverlay();
+  // Global light settings still exist as the master controls; per-element
+  // styles multiply into them rather than replacing them.
   decorConfig = {
-    trees: primary && (settings?.treesDecoration ?? true),
-    garlands: primary && (settings?.garlandsDecoration ?? true),
-    fireplace: primary && (settings?.fireplaceDecoration ?? true),
-    garlandStyle: settings?.garlandStyle ?? 'multicolor',
-    treeLights: settings?.treeLights ?? true,
-    stockings: settings?.stockings ?? true,
-    mantelGarland: settings?.mantelGarland ?? true,
-    decorScale: settings?.decorScale ?? 1,
     lightAnimation: settings?.lightAnimation ?? 'twinkle',
     lightIntensity: settings?.lightIntensity ?? 1,
-    // Sky and ambient light layers run on every monitor, not just the
-    // primary one: an aurora across all four screens is the point,
-    // whereas four copies of the same fireplace would be clutter.
-    aurora: settings?.aurora ?? true,
-    stars: settings?.stars ?? true,
-    icicles: settings?.icicles ?? true,
-    snowGlitter: settings?.snowGlitter ?? true,
+    decorScale: settings?.decorScale ?? 1,
   };
+
+  if (`${sceneCfg.background}|${sceneCfg.backgroundFit}` !== previousBackground
+      || sceneCfg.background === 'image') {
+    refreshBackground();
+  }
 }
 
 async function initFromBackend() {
@@ -505,3 +609,20 @@ window.snowOverlayReady = initFromBackend();
 onSettingsChanged(({ theme, settings }) => {
   applyThemeAndSettings(theme, settings);
 });
+
+// The image itself travels outside the settings payload (it is megabytes),
+// so its own event tells this window to re-read it.
+onBackgroundChanged((key) => {
+  if (key === `screen-${screenIndex()}`) refreshBackground();
+});
+
+// Exposed so the settings window's per-screen editor can be driven from a
+// test, and so the scene can be inspected without a debugger.
+window.snowOverlayScene = {
+  getScreenIndex: screenIndex,
+  getConfig: () => sceneCfg,
+  setConfig: (next) => {
+    sceneCfg = screenConfig({ screens: { [String(screenIndex())]: next } }, screenIndex());
+    bankDirty = true;
+  },
+};

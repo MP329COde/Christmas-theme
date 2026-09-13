@@ -68,6 +68,21 @@ pub struct AppSettings {
     /// Specular sparkles on the surface of the settled snow.
     #[serde(rename = "snowGlitter")]
     pub snow_glitter: bool,
+    /// Per-screen scene composition and saved presets.
+    ///
+    /// Deliberately stored as opaque JSON rather than modelled field by
+    /// field in Rust. This part of the configuration is a tree of
+    /// user-composed content — a list of trees per screen, each with its
+    /// own position, scale and light style, plus any number of saved
+    /// presets — and its shape is owned by the renderer that consumes it.
+    /// Mirroring every field here would mean editing two languages to add
+    /// one slider, and would make an older binary reject a newer config
+    /// instead of carrying it through untouched.
+    #[serde(default)]
+    pub scene: serde_json::Value,
+    /// Saved presets: [{ id, name, createdAt, scene, global }].
+    #[serde(default)]
+    pub presets: serde_json::Value,
     /// Frame rate cap. 0 means uncapped — render at the display's refresh
     /// rate, which is the default and what a 120Hz panel needs to actually
     /// reach 120fps. A cap only ever lowers it, to save battery.
@@ -103,6 +118,8 @@ impl Default for AppSettings {
             stars: true,
             icicles: true,
             snow_glitter: true,
+            scene: serde_json::Value::Null,
+            presets: serde_json::Value::Null,
             fps_limit: 0,
             sound_volume: 0.4,
             autostart: false,

@@ -6,167 +6,39 @@
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <main class="panel">
+  <header class="topbar">
     <h1>🎄 Christmas Theme</h1>
-
-    <section>
-      <label for="theme-select">Theme</label>
-      <select id="theme-select" data-testid="theme-select"></select>
-    </section>
-
-    <h2>Snow</h2>
-
-    <section>
-      <label for="snow-density">Density <span id="snow-density-value">120</span></label>
-      <input type="range" id="snow-density" data-testid="snow-density" min="0" max="300" step="10" />
-    </section>
-
-    <section>
-      <label for="snow-wind">Wind <span id="snow-wind-value">30%</span></label>
-      <input type="range" id="snow-wind" data-testid="snow-wind" min="0" max="100" step="5" />
-    </section>
-
-    <section>
-      <label for="flake-scale">Flake size <span id="flake-scale-value">100%</span></label>
-      <input type="range" id="flake-scale" data-testid="flake-scale" min="40" max="250" step="10" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="accumulate-toggle">Accumulate on ground</label>
-      <input type="checkbox" id="accumulate-toggle" data-testid="accumulate-toggle" />
-    </section>
-
-    <section>
-      <label for="max-snow-height">Max snow depth <span id="max-snow-height-value">60 px</span></label>
-      <input type="range" id="max-snow-height" data-testid="max-snow-height" min="0" max="300" step="10" />
-    </section>
-
-    <h2>Decorations</h2>
-
-    <section>
-      <div class="toggle-row">
-        <label for="dock-toggle">Decorate Dock / Taskbar</label>
-        <input type="checkbox" id="dock-toggle" data-testid="dock-toggle" />
-      </div>
-      <p class="hint" id="dock-status" data-testid="dock-status">Checking the Dock / taskbar…</p>
-    </section>
-
-    <section class="toggle-row">
-      <label for="trees-toggle">🎄 Christmas trees</label>
-      <input type="checkbox" id="trees-toggle" data-testid="trees-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="garlands-toggle">✨ Light garland</label>
-      <input type="checkbox" id="garlands-toggle" data-testid="garlands-toggle" />
-    </section>
-
-    <section>
-      <label for="garland-style">Garland colors</label>
-      <select id="garland-style" data-testid="garland-style">
-        <option value="multicolor">Multicolor</option>
-        <option value="warm">Warm white</option>
-        <option value="cool">Cool blue</option>
+    <div class="preset-bar">
+      <select id="preset-select" data-testid="preset-select" aria-label="Preset">
+        <option value="">— Preset —</option>
       </select>
-    </section>
+      <button id="preset-save" data-testid="preset-save" class="ghost" title="Save the current look as a preset">Save as…</button>
+      <button id="preset-delete" data-testid="preset-delete" class="ghost" title="Delete the selected preset">Delete</button>
+      <button id="preset-export" data-testid="preset-export" class="ghost" title="Export presets to a file">Export</button>
+      <label class="ghost file" title="Import presets from a file">
+        Import<input type="file" id="preset-import" data-testid="preset-import" accept="application/json" hidden />
+      </label>
+    </div>
+  </header>
 
-    <section class="toggle-row">
-      <label for="tree-lights-toggle">💡 String lights on trees</label>
-      <input type="checkbox" id="tree-lights-toggle" data-testid="tree-lights-toggle" />
-    </section>
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-tab="scene" data-testid="tab-scene" role="tab" aria-selected="true">Scene</button>
+    <button class="tab" data-tab="snow" data-testid="tab-snow" role="tab" aria-selected="false">Snow</button>
+    <button class="tab" data-tab="lights" data-testid="tab-lights" role="tab" aria-selected="false">Lights</button>
+    <button class="tab" data-tab="system" data-testid="tab-system" role="tab" aria-selected="false">System</button>
+  </nav>
 
-    <section class="toggle-row">
-      <label for="fireplace-toggle">🔥 Fireplace</label>
-      <input type="checkbox" id="fireplace-toggle" data-testid="fireplace-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="stockings-toggle">🧦 Stockings on the mantel</label>
-      <input type="checkbox" id="stockings-toggle" data-testid="stockings-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="mantel-garland-toggle">🌿 Pine swag on the mantel</label>
-      <input type="checkbox" id="mantel-garland-toggle" data-testid="mantel-garland-toggle" />
-    </section>
-
-    <section>
-      <label for="decor-scale">Decoration size <span id="decor-scale-value">100%</span></label>
-      <input type="range" id="decor-scale" data-testid="decor-scale" min="50" max="200" step="10" />
-    </section>
-
-    <h2>Lights &amp; sky</h2>
-
-    <section>
-      <label for="light-animation">Light animation</label>
-      <select id="light-animation" data-testid="light-animation">
-        <option value="twinkle">Twinkle (slow fade)</option>
-        <option value="sparkle">Sparkle (random flashes)</option>
-        <option value="chase">Chase (running light)</option>
-        <option value="wave">Wave (travelling swell)</option>
-        <option value="steady">Steady</option>
-      </select>
-      <p class="hint">Drives every string at once: top garland, trees, mantel and the Dock.</p>
-    </section>
-
-    <section>
-      <label for="light-intensity">Light intensity <span id="light-intensity-value">100%</span></label>
-      <input type="range" id="light-intensity" data-testid="light-intensity" min="20" max="200" step="10" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="aurora-toggle">🌌 Aurora curtains</label>
-      <input type="checkbox" id="aurora-toggle" data-testid="aurora-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="stars-toggle">⭐ Stars &amp; shooting stars</label>
-      <input type="checkbox" id="stars-toggle" data-testid="stars-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="icicles-toggle">🧊 Icicles (glint &amp; drips)</label>
-      <input type="checkbox" id="icicles-toggle" data-testid="icicles-toggle" />
-    </section>
-
-    <section class="toggle-row">
-      <label for="glitter-toggle">✨ Glitter on settled snow</label>
-      <input type="checkbox" id="glitter-toggle" data-testid="glitter-toggle" />
-    </section>
-
-    <h2>Sound</h2>
-
-    <section>
-      <label for="volume">Ambient volume <span id="volume-value">40%</span></label>
-      <input type="range" id="volume" data-testid="volume" min="0" max="100" step="5" />
-    </section>
-
-    <h2>Performance</h2>
-
-    <section>
-      <label for="fps-limit">Frame rate cap</label>
-      <select id="fps-limit" data-testid="fps-limit">
-        <option value="0">Unlimited (match display)</option>
-        <option value="144">144 fps</option>
-        <option value="120">120 fps</option>
-        <option value="60">60 fps</option>
-        <option value="30">30 fps (battery saver)</option>
-      </select>
-      <p class="hint" data-testid="fps-readout" id="fps-readout">Waiting for the overlay…</p>
-    </section>
-
-    <h2>System</h2>
-
-    <section class="toggle-row">
-      <label for="autostart-toggle">Start automatically with system</label>
-      <input type="checkbox" id="autostart-toggle" data-testid="autostart-toggle" />
-    </section>
-
-    <footer>
-      <button id="disable-btn" data-testid="disable-all" class="danger">Disable everything</button>
-      <span id="status" data-testid="status" role="status"></span>
-    </footer>
+  <main>
+    <section class="panel" id="panel-scene" data-testid="panel-scene"></section>
+    <section class="panel" id="panel-snow" data-testid="panel-snow" hidden></section>
+    <section class="panel" id="panel-lights" data-testid="panel-lights" hidden></section>
+    <section class="panel" id="panel-system" data-testid="panel-system" hidden></section>
   </main>
+
+  <footer>
+    <button id="disable-btn" data-testid="disable-all" class="danger">Disable everything</button>
+    <span id="status" data-testid="status" role="status"></span>
+  </footer>
 
   <script type="module" src="./settings.js"></script>
 </body>

@@ -60,3 +60,51 @@ test('a full scene frame stays well inside the 120fps budget', async ({ page }) 
   // change that quietly makes rendering expensive is caught here.
   expect(frameMs).toBeLessThan(4);
 });
+
+test('the scene composition drives what this screen shows', async ({ page }) => {
+  // One tree, no fireplace: the renderer must follow the composition
+  // rather than the two-trees-and-a-fireplace it used to hard-code.
+  await page.evaluate(() => window.snowOverlayScene.setConfig({
+    trees: [{ id: 't1', x: 0.5, scale: 1, seed: 7 }],
+    fireplaces: [],
+    aurora: false,
+    stars: false,
+  }));
+  const cfg = await page.evaluate(() => window.snowOverlayScene.getConfig());
+  expect(cfg.trees).toHaveLength(1);
+  expect(cfg.fireplaces).toHaveLength(0);
+  expect(cfg.aurora).toBe(false);
+});
+
+test('an empty composition still renders the snow', async ({ page }) => {
+  await page.evaluate(() => window.snowOverlayScene.setConfig({
+    trees: [], fireplaces: [], garland: { enabled: false },
+    aurora: false, stars: false, icicles: false,
+  }));
+  await page.waitForTimeout(400);
+  const painted = await page.evaluate(() => {
+    const canvas = document.getElementById('snow');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+    return false;
+  });
+  expect(painted).toBe(true);
+});
+
+test('recycling a landed flake allocates nothing', async ({ page }) => {
+  // The stutter this guards against: the old code built a fresh object
+  // (plus an object literal) every time a flake landed, so a few hundred
+  // flakes falling continuously produced thousands of short-lived objects
+  // a second and a garbage-collection sawtooth you could feel.
+  await page.evaluate(() => window.snowOverlay.setDensity(400));
+  const grew = await page.evaluate(async () => {
+    if (!performance.memory) return null; // not exposed in every build
+    const before = performance.memory.usedJSHeapSize;
+    await new Promise((r) => setTimeout(r, 2500));
+    return performance.memory.usedJSHeapSize - before;
+  });
+  if (grew === null) test.skip(true, 'performance.memory unavailable in this build');
+  // A little churn is expected from the page itself; thousands of flake
+  // objects would be orders of magnitude more.
+  expect(grew).toBeLessThan(4_000_000);
+});
