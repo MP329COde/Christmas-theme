@@ -87,6 +87,12 @@ export function defaultFireplace(overrides = {}) {
     id: `fire-${Math.random().toString(36).slice(2, 8)}`,
     x: 0.5,
     scale: 1,
+    // 'rustic' (dry-stone surround, tall arched firebox, mantel beam) or
+    // 'modern' (flat panel, suspended shelf, a wide linear flame) — see
+    // decor.js's bakeFireplace/bakeModernSurround. A theme can set its own
+    // default via themes/*.json's "fireplaceStyle"; each fireplace can
+    // still override it individually here.
+    fireplaceStyle: overrides.fireplaceStyle ?? 'rustic',
     stockings: true,
     mantelGarland: true,
     candles: true,

@@ -5,5 +5,6 @@
   "colors": { "primary": "#ffffff", "secondary": "#cfd8dc", "accent": "#90a4ae", "background": "#101418" },
   "snow": { "density": 40, "accumulate": false, "wind": 0.1, "flakeSize": 2 },
   "sound": { "ambient": "none", "volume": 0 },
-  "decorations": { "dock": false, "taskbar": false }
+  "decorations": { "dock": false, "taskbar": false },
+  "fireplaceStyle": "modern"
 }

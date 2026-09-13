@@ -489,6 +489,11 @@ function renderScene() {
           value: Math.round(fire.scale * 100), format: (v) => `${v}%`,
           onInput: (v) => editScreen((s) => { s.fireplaces[i].scale = v / 100; }),
         })),
+      dropdown({
+        id: `fire-${i}-style`, label: 'Style', value: fire.fireplaceStyle ?? 'rustic',
+        options: [['rustic', '🪵 Rustic (stone, mantel beam)'], ['modern', '⬛ Modern (flat panel, floating shelf)']],
+        onChange: (v) => editScreen((s) => { s.fireplaces[i].fireplaceStyle = v; }),
+      }),
       toggle({ id: `fire-${i}-stockings`, label: '🧦 Stockings', checked: fire.stockings,
         onChange: (v) => editScreen((s) => { s.fireplaces[i].stockings = v; }) }),
       toggle({ id: `fire-${i}-swag`, label: '🌿 Pine swag on the mantel', checked: fire.mantelGarland,
@@ -502,7 +507,14 @@ function renderScene() {
   });
   panel.append(el('button', {
     class: 'add', 'data-testid': 'fireplace-add', text: '+ Add a fireplace',
-    onclick: () => editScreen((s) => { s.fireplaces.push(defaultFireplace({ x: 0.5 })); }),
+    // A theme can suggest a default style for a freshly added fireplace
+    // (themes/*.json's "fireplaceStyle") — existing fireplaces are never
+    // changed retroactively by a theme switch, only what gets created
+    // from this button while that theme is active.
+    onclick: () => editScreen((s) => {
+      const theme = themes.find((t) => t.id === settings.themeId);
+      s.fireplaces.push(defaultFireplace({ x: 0.5, fireplaceStyle: theme?.fireplaceStyle ?? 'rustic' }));
+    }),
   }));
 
   panel.append(el('button', {

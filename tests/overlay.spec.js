@@ -177,3 +177,70 @@ test.describe('star field multi-screen coherence', () => {
     expect(result.maxDiff).toBeLessThanOrEqual(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// modern fireplace variant (src/overlay/decor.js)
+// ---------------------------------------------------------------------------
+test.describe('fireplace style variants', () => {
+  test('rustic and modern styles both render and look visibly different', async ({ page }) => {
+    await page.goto('/overlay');
+    const result = await page.evaluate(async () => {
+      const mod = await import('/overlay/decor.js');
+      const W = 500;
+      const H = 400;
+      const colors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
+
+      function renderStyle(style) {
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        mod.drawFireplace(ctx, W, H, 1.2, colors, {
+          x: 0.5, scale: 1, fireplaceStyle: style,
+          stockings: true, mantelGarland: true, candles: true,
+          lights: { palette: 'warm', mode: 'twinkle' },
+        }, {});
+        return ctx.getImageData(0, 0, W, H).data;
+      }
+
+      const rustic = renderStyle('rustic');
+      const modern = renderStyle('modern');
+
+      let litRustic = 0;
+      let litModern = 0;
+      let diff = 0;
+      for (let i = 0; i < rustic.length; i += 4) {
+        if (rustic[i + 3] > 0) litRustic++;
+        if (modern[i + 3] > 0) litModern++;
+        diff += Math.abs(rustic[i] - modern[i]) + Math.abs(rustic[i + 1] - modern[i + 1])
+          + Math.abs(rustic[i + 2] - modern[i + 2]);
+      }
+      return { litRustic, litModern, diff };
+    });
+
+    // Both styles must actually draw something (never a blank fireplace).
+    expect(result.litRustic).toBeGreaterThan(0);
+    expect(result.litModern).toBeGreaterThan(0);
+    // And they must be visibly different pictures, not the same bake under
+    // a different name.
+    expect(result.diff).toBeGreaterThan(10000);
+  });
+
+  test('an unrecognised fireplaceStyle falls back to rustic rather than drawing nothing', async ({ page }) => {
+    await page.goto('/overlay');
+    const painted = await page.evaluate(async () => {
+      const mod = await import('/overlay/decor.js');
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 320;
+      const ctx = canvas.getContext('2d');
+      mod.drawFireplace(ctx, 400, 320, 1.5, { primary: '#c0392b', secondary: '#1e7d32' }, {
+        x: 0.5, scale: 1, fireplaceStyle: 'not-a-real-style', lights: {},
+      }, {});
+      const data = ctx.getImageData(0, 0, 400, 320).data;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+      return false;
+    });
+    expect(painted).toBe(true);
+  });
+});

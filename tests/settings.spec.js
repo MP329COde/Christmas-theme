@@ -44,6 +44,26 @@ test('a second fireplace can be added', async ({ page }) => {
   await expect(page.locator('[data-testid="fireplace-card-1"]')).toBeVisible();
 });
 
+test('a fireplace defaults to the rustic style and can be switched to modern', async ({ page }) => {
+  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('rustic');
+  await page.selectOption('[data-testid="fire-0-style"]', 'modern');
+  await page.waitForTimeout(300);
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].fireplaces[0].fireplaceStyle);
+  expect(stored).toBe('modern');
+});
+
+test('a theme with its own fireplaceStyle seeds new fireplaces with it', async ({ page }) => {
+  // minimal-white.json declares "fireplaceStyle": "modern".
+  await page.click('[data-testid="tab-lights"]');
+  await page.selectOption('[data-testid="theme-select"]', 'minimal-white');
+  await page.click('[data-testid="tab-scene"]');
+  await page.click('[data-testid="fireplace-add"]');
+  await expect(page.locator('[data-testid="fire-1-style"]')).toHaveValue('modern');
+  // The existing (first) fireplace must NOT have been changed retroactively.
+  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('rustic');
+});
+
 test('a tree position slider moves the element and persists', async ({ page }) => {
   await page.locator('[data-testid="tree-0-x"]').fill('42');
   await expect(page.locator('#tree-0-x-value')).toHaveText('42%');

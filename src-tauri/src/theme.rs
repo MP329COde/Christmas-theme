@@ -53,6 +53,14 @@ pub struct Theme {
     pub snow: SnowConfig,
     pub sound: SoundConfig,
     pub decorations: Decorations,
+    /// Optional per-theme default fireplace style ("rustic" or "modern"),
+    /// applied by the settings UI to new fireplaces created while this
+    /// theme is active — see decor.js's bakeRusticFireplace/
+    /// bakeModernFireplace. Absent in most themes (falls back to
+    /// "rustic"), so it must not reject an old theme file that predates
+    /// this field.
+    #[serde(rename = "fireplaceStyle", default)]
+    pub fireplace_style: Option<String>,
 }
 
 impl Theme {

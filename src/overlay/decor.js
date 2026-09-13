@@ -655,7 +655,11 @@ function drawStocking(c, x, y, scale, color, cuffColor) {
   c.restore();
 }
 
-function bakeFireplace(scale, colors, opts) {
+/// Dry-stone rustic surround: the original bake — tall arched firebox,
+/// log grate, a heavy mantel beam. Unchanged; see bakeModernFireplace
+/// just below for the alternative style, selected via
+/// `spec.fireplaceStyle` ('rustic', the default, or 'modern').
+function bakeRusticFireplace(scale, colors, opts) {
   const w = 300 * scale;
   const h = 250 * scale;
   const cv = makeCanvas(w, h);
@@ -826,6 +830,189 @@ function bakeFireplace(scale, colors, opts) {
   };
 }
 
+/// Modern surround: a flat matte panel, a wide linear flame slot instead
+/// of a tall arched firebox with logs, and a THIN SUSPENDED shelf — drawn
+/// with a visible gap and a soft drop-shadow beneath it, rather than
+/// resting on the wall the way the rustic beam does, which is what reads
+/// as "floating" rather than "built in".
+///
+/// Returns the exact same shape as bakeRusticFireplace (sprite, candles,
+/// lights, geom) so drawFireplace()'s per-frame animation — flame sheet,
+/// embers, sparks, spill light, candles, garland, stockings — needs no
+/// changes at all to support either style.
+function bakeModernFireplace(scale, colors, opts) {
+  const w = 300 * scale;
+  const h = 250 * scale;
+  const cv = makeCanvas(w, h);
+  const c = cv.getContext('2d');
+  const rand = mulberry32(2024);
+
+  // A floating shelf sits higher than the rustic beam, leaving more flat
+  // panel visible above the firebox — the proportions a suspended,
+  // minimalist mantel actually has.
+  const mantelY = 46 * scale;
+  const mantelH = 8 * scale;
+
+  // --- flat panel wall, brushed rather than textured -----------------------
+  const panel = c.createLinearGradient(0, 0, 0, h);
+  panel.addColorStop(0, '#33363c');
+  panel.addColorStop(0.55, '#26282d');
+  panel.addColorStop(1, '#1a1b1f');
+  c.fillStyle = panel;
+  c.fillRect(0, 0, w, h);
+  // Faint brushed-metal streaks: barely-there horizontal lines, not the
+  // stone's rough mottling.
+  for (let i = 0; i < 40; i++) {
+    c.strokeStyle = `rgba(255,255,255,${0.015 + rand() * 0.02})`;
+    c.lineWidth = 1;
+    const y = rand() * h;
+    c.beginPath();
+    c.moveTo(0, y);
+    c.lineTo(w, y + (rand() - 0.5) * 2);
+    c.stroke();
+  }
+
+  // --- wide, short linear firebox, flush with a slim dark bezel ------------
+  const openW = w * 0.82;
+  const openH = h * 0.17;
+  const ox = (w - openW) / 2;
+  const oy = h - openH - 14 * scale;
+
+  c.save();
+  roundRect(c, ox - 5 * scale, oy - 5 * scale, openW + 10 * scale, openH + 10 * scale, 3 * scale);
+  c.fillStyle = '#101113';
+  c.fill();
+  c.restore();
+
+  c.save();
+  roundRect(c, ox, oy, openW, openH, 2 * scale);
+  c.clip();
+  const back = c.createLinearGradient(0, oy, 0, oy + openH);
+  back.addColorStop(0, '#0c0d0f');
+  back.addColorStop(1, '#1c1512');
+  c.fillStyle = back;
+  c.fillRect(ox, oy, openW, openH);
+
+  // A bed of glowing glass pebbles instead of logs — the fuel bed a
+  // linear/bio-ethanol insert actually shows, and much cheaper to bake
+  // than the rustic grate + three logs.
+  const grateY = oy + openH - 6 * scale;
+  const pebbleCount = Math.round(openW / (9 * scale));
+  for (let i = 0; i < pebbleCount; i++) {
+    const px = ox + ((i + 0.5) / pebbleCount) * openW + (rand() - 0.5) * 4 * scale;
+    const py = grateY - rand() * 3 * scale;
+    const pr = (2 + rand() * 2.4) * scale;
+    const g = c.createRadialGradient(px, py, 0, px, py, pr);
+    g.addColorStop(0, 'rgba(255,214,168,0.9)');
+    g.addColorStop(1, 'rgba(60,30,18,0.9)');
+    c.fillStyle = g;
+    c.beginPath();
+    c.ellipse(px, py, pr, pr * 0.6, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+
+  // Slim bezel highlight, top edge only — a thin reveal line rather than
+  // the rustic recess shadow all the way round.
+  c.strokeStyle = 'rgba(255,255,255,0.12)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(ox, oy - 1);
+  c.lineTo(ox + openW, oy - 1);
+  c.stroke();
+
+  // --- suspended shelf, inset from the panel's own edges -------------------
+  const shelfInset = 22 * scale;
+  const shelfX = shelfInset;
+  const shelfW = w - shelfInset * 2;
+
+  // The gap under the shelf reads as "floating" only if something is
+  // visibly different there — a soft shadow cast onto the panel below it.
+  const gapShadow = c.createLinearGradient(0, mantelY + mantelH, 0, mantelY + mantelH + 14 * scale);
+  gapShadow.addColorStop(0, 'rgba(0,0,0,0.35)');
+  gapShadow.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = gapShadow;
+  c.fillRect(shelfX, mantelY + mantelH, shelfW, 14 * scale);
+
+  const shelf = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
+  shelf.addColorStop(0, '#e9e5dc');
+  shelf.addColorStop(0.5, '#c9c4b8');
+  shelf.addColorStop(1, '#a8a296');
+  c.fillStyle = shelf;
+  roundRect(c, shelfX, mantelY, shelfW, mantelH, 1.5 * scale);
+  c.fill();
+  // A crisp highlight along the top front edge sells it as a hard,
+  // machined slab rather than the beam's soft-worn wood.
+  c.strokeStyle = 'rgba(255,255,255,0.55)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(shelfX + 2 * scale, mantelY + 1);
+  c.lineTo(shelfX + shelfW - 2 * scale, mantelY + 1);
+  c.stroke();
+
+  // --- stockings hung from the shelf ---------------------------------------
+  // A modern room is less likely to want the traditional four in a row by
+  // default; the option itself is unchanged, only the default flips.
+  if (opts.stockings === true) {
+    const sockColors = [colors.primary, '#e8e3d8', colors.primary, '#e8e3d8'];
+    const cuffs = ['#f3efe6', '#c0182a', '#f3efe6', '#c0182a'];
+    for (let i = 0; i < 4; i++) {
+      const sx = w * (0.14 + i * 0.235);
+      drawStocking(c, sx, mantelY + mantelH + 2 * scale, scale, sockColors[i], cuffs[i]);
+    }
+  }
+
+  // --- candles on the shelf -------------------------------------------------
+  const candles = [];
+  if (opts.candles !== false) {
+    for (const [px, ch] of [[0.24, 22], [0.5, 15], [0.76, 26]]) {
+      const cxp = w * px;
+      const hgt = ch * scale;
+      const cw = 7 * scale;
+      const base = mantelY + 1;
+      const wax = c.createLinearGradient(cxp - cw / 2, 0, cxp + cw / 2, 0);
+      wax.addColorStop(0, '#d8d4cc');
+      wax.addColorStop(0.5, '#f5f2ec');
+      wax.addColorStop(1, '#c9c4ba');
+      c.fillStyle = wax;
+      c.fillRect(cxp - cw / 2, base - hgt, cw, hgt);
+      c.strokeStyle = '#2b2118';
+      c.lineWidth = 1.1 * scale;
+      c.beginPath();
+      c.moveTo(cxp, base - hgt - 1 * scale);
+      c.lineTo(cxp, base - hgt - 4 * scale);
+      c.stroke();
+      candles.push({ x: cxp, y: base - hgt - 4 * scale, phase: rand() * 6.28 });
+    }
+  }
+
+  // --- garland, understated: a single thin strand rather than the full
+  // pine swag, if requested at all (default off — a bare shelf is the
+  // point of the style) -----------------------------------------------------
+  let garlandLights = [];
+  if (opts.mantelGarland === true) {
+    garlandLights = drawMantelGarland(
+      c, -6 * scale, mantelY - 6 * scale, w + 12 * scale, scale, colors, rand, true
+    );
+  }
+
+  return {
+    sprite: cv,
+    candles,
+    lights: garlandLights,
+    geom: { w, h, ox, oy, openW, openH, fireX: ox + openW / 2, fireY: grateY + 6 * scale },
+  };
+}
+
+/// Picks the bake for the requested style. Any unrecognised value falls
+/// back to 'rustic' rather than erroring — a bad/old theme value must
+/// never leave the overlay without a fireplace at all.
+function bakeFireplace(scale, colors, opts) {
+  return opts.fireplaceStyle === 'modern'
+    ? bakeModernFireplace(scale, colors, opts)
+    : bakeRusticFireplace(scale, colors, opts);
+}
+
 // --- flame sprite sheet ------------------------------------------------------
 
 let flameSheet = null;
@@ -895,7 +1082,7 @@ function bakeFlameSheet(fw, fh, scale) {
 /// this moment, ember bed, sparks, and warm light spilling into the room.
 export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts = {}) {
   const scale = Math.max(0.6, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
-  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${spec.stockings}|${spec.mantelGarland}|${spec.candles}`;
+  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${spec.stockings}|${spec.mantelGarland}|${spec.candles}|${spec.fireplaceStyle}`;
   let cached = fireCache.get(key);
   if (!cached) {
     const baked = bakeFireplace(scale, colors, spec);
