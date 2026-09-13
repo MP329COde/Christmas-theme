@@ -93,3 +93,34 @@ test('CPU cost per frame stays small', async ({ page }) => {
   // moved back onto the main thread.
   expect(cpuMs).toBeLessThan(2);
 });
+
+test.describe('production overlay adoption', () => {
+  // Small viewport on purpose: this project rasterises in software, where
+  // a full-size frame takes long enough to starve the page. What is being
+  // tested is the DECISION and the handover, not the frame rate.
+  test.use({ viewport: { width: 560, height: 400 } });
+
+  test('forcing WebGL hands the trees to the engine', async ({ page }) => {
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer, null,
+      { polling: 300, timeout: 60000 });
+    const info = await page.evaluate(() => window.overlayRenderer);
+    expect(info.mode).toBe('webgl');
+    // The Canvas 2D renderer must have actually let go of the trees, or
+    // both would draw them and the scene would double up.
+    expect(await page.evaluate(() => window.snowOverlay.getTreeRenderer())).toBe('gl');
+    await expect(page.locator('#snow-gl')).toBeVisible();
+    await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
+
+  test('automatic mode refuses a software rasteriser', async ({ page }) => {
+    // Adopting SwiftShader would be slower AND no prettier than Canvas 2D,
+    // and an uncapped GL loop on it starves the rest of the overlay.
+    await page.goto('/overlay?renderer=auto', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer, null,
+      { polling: 300, timeout: 60000 });
+    const info = await page.evaluate(() => window.overlayRenderer);
+    expect(info.mode).toBe('canvas2d');
+    expect(info.reason).toMatch(/software rasteriser/);
+  });
+});

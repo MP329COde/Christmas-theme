@@ -181,3 +181,37 @@ export function makePreset(name, settings) {
     settings: JSON.parse(JSON.stringify(settings)),
   };
 }
+
+/// How bright bulb `index` is at `time`, under the chosen animation mode.
+///
+/// Lives here, in the shared scene model, because BOTH renderers consume
+/// it: the Canvas 2D garlands and the WebGL tree have to agree on what
+/// "chase" means, or switching renderer would silently change the
+/// animation. Pure arithmetic per bulb, no allocation.
+export function bulbLevel(mode, time, index, phase = 0, count = 1, speed = 1) {
+  time *= speed;
+  switch (mode) {
+    case 'steady':
+      // Never fully flat: even mains-powered warm white breathes a little.
+      return 0.92 + 0.08 * Math.sin(time * 0.9 + phase);
+    case 'chase': {
+      // A lit head running along the string, wrapping at the end.
+      const head = (time * 3.4) % count;
+      let d = Math.abs(index - head);
+      d = Math.min(d, count - d);
+      return 0.16 + 0.84 * Math.max(0, 1 - d / 3.2);
+    }
+    case 'wave':
+      // A phase offset per bulb turns the shared sine into a travelling swell.
+      return 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(time * 2.4 - index * 0.55));
+    case 'sparkle': {
+      // Mostly off, with short bright flashes — the "twinkle" setting on a
+      // real light string, as opposed to a slow fade.
+      const f = Math.sin(time * 2.7 + phase * 3.1);
+      return 0.2 + 0.8 * Math.max(0, f) ** 6;
+    }
+    case 'twinkle':
+    default:
+      return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 1.7 + phase));
+  }
+}

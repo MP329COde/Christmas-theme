@@ -89,8 +89,15 @@ export class Renderer {
     // A software rasteriser runs this correctly but slowly, so it gets the
     // cheap tier by default rather than a bloom chain it cannot afford.
     this.quality = options.quality ?? (this.caps.software ? 'low' : 'high');
-    this.maxDpr = options.maxDpr ?? 1.75;
-    this.fpsLimit = options.fpsLimit ?? 0;
+    // A software rasteriser can take hundreds of milliseconds per frame.
+    // Left uncapped it does not merely run slowly — it saturates the main
+    // thread and starves everything else on the page, including the
+    // Canvas 2D renderer drawing the rest of the scene. Capping it is both
+    // the correct behaviour for a machine with no usable GPU (a wallpaper
+    // animation has no business eating a core) and what makes the engine
+    // observable at all in a container with no GPU.
+    this.maxDpr = options.maxDpr ?? (this.caps.software ? 1 : 1.75);
+    this.fpsLimit = options.fpsLimit ?? (this.caps.software ? 20 : 0);
     this.bloomStrength = options.bloomStrength ?? 0.85;
     this.exposure = options.exposure ?? 1.0;
 
@@ -127,7 +134,11 @@ export class Renderer {
   }
 
   setFpsLimit(limit) {
-    this.fpsLimit = Number(limit) || 0;
+    const requested = Number(limit) || 0;
+    // A user cap can only ever lower the software ceiling, never raise it.
+    this.fpsLimit = this.caps.software
+      ? (requested > 0 ? Math.min(requested, 20) : 20)
+      : requested;
   }
 
   resize() {

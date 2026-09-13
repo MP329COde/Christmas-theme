@@ -337,3 +337,67 @@ upscaled blit, which on a CPU-rasterised canvas cost 6.8 ms/frame against
 1.5 ms drawing direct at 1920×1080. On a GPU-composited canvas the trade
 would probably go the other way, but "probably" is not a reason to ship a
 five-fold regression on the one machine that can be measured.
+
+
+## 8. Wiring the engine into the production overlay
+
+The overlay is now a HYBRID, and deliberately so.
+
+```
+#snow        Canvas 2D   background image, sky (aurora, stars), far snow
+#snow-gl     WebGL       the trees
+#snow-front  Canvas 2D   icicles, garland, fireplaces, near snow, bank, glitter
+```
+
+Three stacked transparent canvases, whose z-order *is* the depth order of
+the scene. The split is not a staging post on the way to porting
+everything: the tree is the element that actually needed a GPU — volume,
+self-occlusion, per-needle lighting and vertex-stage wind are things
+Canvas 2D structurally cannot do — while a snowfield of soft sprites and a
+baked fireplace were never the problem. Porting those too would cost a
+rewrite and buy nothing visible.
+
+Both renderers read the SAME composition from `src/shared/scene.js`, and
+`bulbLevel` moved there for the same reason: a string set to "chase" has
+to behave identically in both, or switching renderer would silently change
+the animation.
+
+### Adoption is earned, not assumed
+
+`src/overlay/overlay.js` only hands the trees over once the engine has
+**demonstrably produced geometry and survived a frame**. Creating a
+context succeeds on plenty of machines where the first real draw then
+fails — a blocklisted driver, a shader the compiler rejects, a webview
+that will not composite a transparent GL surface. Adopting on "the context
+exists" is how an app ends up showing a black rectangle over somebody's
+desktop. Every failure path ends the same way: the Canvas 2D trees stay,
+`window.overlayRenderer.reason` says why, and the settings window can
+report it.
+
+### A software rasteriser is refused by default
+
+SwiftShader and llvmpipe hand out a WebGL2 context and then take hundreds
+of milliseconds per frame. Adopting one would be slower than the Canvas 2D
+tree AND, with the bloom chain off, no better looking — and worse, an
+uncapped GL loop on a software rasteriser saturates the main thread and
+starves the Canvas 2D renderer drawing the *rest* of the scene, so it
+makes the whole overlay worse rather than only the trees. `renderer:
+"auto"` therefore means "hardware GPU or nothing"; `"webgl"` forces it
+anyway and `"canvas"` never uses it. The engine also caps itself at 20 fps
+and DPR 1 whenever it detects software rasterisation.
+
+This is measurable in this repository's own container, which has no GPU:
+`renderer=auto` reports
+`canvas2d — software rasteriser (ANGLE ... SwiftShader)` and the overlay
+runs at 45 fps / 1.5 ms per frame on Canvas 2D, while `renderer=webgl`
+adopts the engine and hands it the trees. Both are asserted by tests, in
+two Playwright projects.
+
+### Still unverified
+
+Nothing here has run on a real GPU. The one thing that cannot be
+established from a container without one is whether WKWebView composites a
+transparent WebGL canvas correctly inside a borderless, always-on-bottom
+Tauri window on macOS. If it does not, `renderer: "auto"` is what keeps
+that from being a visible failure — but it remains the open question this
+design is built around rather than one it answers.

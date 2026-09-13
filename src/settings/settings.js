@@ -624,7 +624,17 @@ function renderSystem() {
         ['60', '60 fps'], ['30', '30 fps (battery saver)']],
       onChange: (v) => { settings.fpsLimit = Number(v); persist(); },
     }),
-    el('p', { class: 'hint', id: 'fps-readout', 'data-testid': 'fps-readout', text: 'Waiting for the overlay…' })));
+    el('p', { class: 'hint', id: 'fps-readout', 'data-testid': 'fps-readout', text: 'Waiting for the overlay…' }),
+    dropdown({
+      id: 'renderer-pref', label: 'Tree renderer', value: settings.renderer ?? 'auto',
+      options: [
+        ['auto', 'Automatic (GPU when available)'],
+        ['webgl', 'Always WebGL'],
+        ['canvas', 'Always Canvas 2D'],
+      ],
+      onChange: (v) => { settings.renderer = v; persist(); },
+    }),
+    el('p', { class: 'hint', text: 'Automatic uses the WebGL engine only on a real GPU. On a software rasteriser it stays on Canvas 2D, which there is both faster and no less detailed. Takes effect on the next launch.' })));
 
   panel.append(el('h2', { text: 'Startup' }));
   panel.append(el('div', { class: 'card' },

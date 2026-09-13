@@ -83,6 +83,10 @@ pub struct AppSettings {
     /// Saved presets: [{ id, name, createdAt, scene, global }].
     #[serde(default)]
     pub presets: serde_json::Value,
+    /// Tree renderer: "auto" (WebGL only on a real GPU), "webgl" (force it,
+    /// including on a software rasteriser) or "canvas" (never).
+    #[serde(default = "default_renderer")]
+    pub renderer: String,
     /// Frame rate cap. 0 means uncapped — render at the display's refresh
     /// rate, which is the default and what a 120Hz panel needs to actually
     /// reach 120fps. A cap only ever lowers it, to save battery.
@@ -118,6 +122,7 @@ impl Default for AppSettings {
             stars: true,
             icicles: true,
             snow_glitter: true,
+            renderer: default_renderer(),
             scene: serde_json::Value::Null,
             presets: serde_json::Value::Null,
             fps_limit: 0,
@@ -125,6 +130,10 @@ impl Default for AppSettings {
             autostart: false,
         }
     }
+}
+
+fn default_renderer() -> String {
+    "auto".into()
 }
 
 impl AppSettings {

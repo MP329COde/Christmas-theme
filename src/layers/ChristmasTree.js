@@ -34,6 +34,7 @@ import { Layer } from '../engine/layer.js';
 import { createProgram, textureFromCanvas, Blend } from '../engine/gl.js';
 import { InstancedQuads, InstanceWriter } from '../engine/instanced.js';
 import { LIGHTING_GLSL, hexToRgb } from '../engine/lighting.js';
+import { bulbLevel } from '../shared/scene.js';
 import { SIMPLEX3, HASH, COLOR } from '../engine/noise.glsl.js';
 
 const TAU = Math.PI * 2;
@@ -250,9 +251,11 @@ uniform float uZRange;   // half-depth of the object, for the depth buffer
 
 float perspective(float z) { return uFocal / max(uFocal - z, 1.0); }
 
+uniform float uFlip;  // -1 mirrors the tree about its own trunk
+
 vec4 project(vec3 p, out float persp) {
   persp = perspective(p.z);
-  vec2 screen = uOrigin + p.xy * persp;
+  vec2 screen = uOrigin + vec2(p.x * uFlip, p.y) * persp;
   // Nearer (larger z) must come out with a smaller depth value.
   float depth = clamp(-p.z / uZRange, -0.98, 0.98);
   return vec4(screen / uResolution * 2.0 - 1.0, depth, 1.0);
@@ -511,6 +514,17 @@ export class ChristmasTree extends Layer {
       ornamentCount: 38,
       wind: 1.0,
       lightIntensity: 1.0,
+      // Scene-driven knobs, so one layer class covers every tree a
+      // composition can ask for rather than one hard-coded tree.
+      styleWidth: 1.0,    // spruce is narrow, pine is broad
+      styleDensity: 1.0,  // branches per tier
+      snowAmount: 1.0,
+      star: true,
+      lightsOn: true,
+      lightMode: 'twinkle',
+      lightSpeed: 1,
+      bulbSize: 1,
+      flip: false,
       ...options,
     };
     this.bulbs = [];
@@ -572,7 +586,7 @@ export class ChristmasTree extends Layer {
     const H = renderer.height / renderer.dpr; // work in CSS pixels, scale at draw
     const scale = renderer.dpr;
     const height = H * this.opts.heightFraction * scale;
-    const radius = height * 0.29;
+    const radius = height * 0.29 * this.opts.styleWidth;
     this.height = height;
     this.radius = radius;
 
@@ -664,7 +678,7 @@ export class ChristmasTree extends Layer {
 
           // Snow settles on sprigs that face upward and are not buried
           // deep inside the canopy.
-          if (ny / nl > 0.42 && u > 0.3 && rand() > 0.6) {
+          if (ny / nl > 0.42 && u > 0.3 && rand() > 1 - 0.4 * this.opts.snowAmount) {
             const snowCell = 5 + Math.floor(rand() * 2);
             snow.push(
               bx, by + size * 0.06, bz + size * 0.02,
@@ -683,8 +697,9 @@ export class ChristmasTree extends Layer {
     this.instanceCount = needles.count + snow.count + trunk.count;
 
     // --- baubles ----------------------------------------------------------
-    const orn = new InstanceWriter(8, this.opts.ornamentCount);
-    for (let i = 0; i < this.opts.ornamentCount; i++) {
+    const ornamentCount = Math.max(0, Math.round(this.opts.ornamentCount));
+    const orn = new InstanceWriter(8, Math.max(1, ornamentCount));
+    for (let i = 0; i < ornamentCount; i++) {
       const f = 0.08 + rand() * 0.82;
       const y = trunkTop + (foliageTop - trunkTop) * f;
       const r = radius * (1 - f) ** 0.78 * (0.84 + rand() * 0.26);
@@ -702,8 +717,9 @@ export class ChristmasTree extends Layer {
     // Wound as a spiral, which is how a string actually goes on a tree,
     // and each bulb keeps its own flicker constants for life.
     this.bulbs = [];
-    for (let i = 0; i < this.opts.bulbCount; i++) {
-      const f = 0.04 + (i / this.opts.bulbCount) * 0.92;
+    const bulbCount = this.opts.lightsOn === false ? 0 : Math.max(0, Math.round(this.opts.bulbCount));
+    for (let i = 0; i < bulbCount; i++) {
+      const f = 0.04 + (i / Math.max(1, bulbCount)) * 0.92;
       const y = trunkTop + (foliageTop - trunkTop) * f;
       const r = radius * (1 - f) ** 0.78 * (1.04 + rand() * 0.12);
       // Golden angle, not a round 2.1 rad. A step of 2.1 is close enough
@@ -718,7 +734,7 @@ export class ChristmasTree extends Layer {
         y,
         z: Math.sin(a) * r,
         color,
-        size: radius * 0.062,
+        size: radius * 0.062 * this.opts.bulbSize,
         // Three incommensurate rates per bulb, each with its own phase: no
         // two bulbs share a period, so the string never visibly pulses as
         // a unit the way a single shared sine makes it.
@@ -734,7 +750,9 @@ export class ChristmasTree extends Layer {
     this.bulbData = new Float32Array(this.bulbs.length * 8);
 
     // --- star -------------------------------------------------------------
-    this.star = { x: 0, y: foliageTop + radius * 0.07, z: 0, size: radius * 0.78 };
+    this.star = this.opts.star === false
+      ? null
+      : { x: 0, y: foliageTop + radius * 0.07, z: 0, size: radius * 0.78 };
     this.starData = new Float32Array(8);
 
     // --- contact shadow ---------------------------------------------------
@@ -746,12 +764,23 @@ export class ChristmasTree extends Layer {
   /// Per-bulb brightness for this instant. Sum of three sines at rates
   /// that share no common period, so the sequence never repeats audibly
   /// to the eye, plus a rare deeper dip that reads as a loose contact.
-  bulbLevel(b, time) {
+  bulbLevel(b, time, index) {
+    const mode = this.opts.lightMode;
+    if (mode && mode !== 'twinkle') {
+      // Chase, wave, sparkle and steady come from the shared light model,
+      // so a string set to "chase" runs identically here and in the
+      // Canvas 2D garlands.
+      return bulbLevel(mode, time, index, b.p1, this.bulbs.length, this.opts.lightSpeed)
+        * this.opts.lightIntensity;
+    }
+    // The default: three incommensurate rates per bulb plus a rare deeper
+    // dip, which reads as a loose contact rather than a pattern.
+    const t = time * this.opts.lightSpeed;
     const wobble =
-      0.5 * Math.sin(time * b.r1 + b.p1) +
-      0.3 * Math.sin(time * b.r2 + b.p2) +
-      0.2 * Math.sin(time * b.r3 + b.p3);
-    const dip = Math.max(0, Math.sin(time * 0.21 + b.p1 * 3.1)) ** 24;
+      0.5 * Math.sin(t * b.r1 + b.p1) +
+      0.3 * Math.sin(t * b.r2 + b.p2) +
+      0.2 * Math.sin(t * b.r3 + b.p3);
+    const dip = Math.max(0, Math.sin(t * 0.21 + b.p1 * 3.1)) ** 24;
     return Math.max(0.06, (b.base + 0.35 * wobble) * (1 - 0.55 * dip)) * this.opts.lightIntensity;
   }
 
@@ -760,7 +789,7 @@ export class ChristmasTree extends Layer {
     const d = this.bulbData;
     for (let i = 0; i < this.bulbs.length; i++) {
       const b = this.bulbs[i];
-      const level = this.bulbLevel(b, time);
+      const level = this.bulbLevel(b, time, i);
       b.level = level;
       const o = i * 8;
       d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z;
@@ -771,6 +800,7 @@ export class ChristmasTree extends Layer {
     // different fixture rather than the brightest bulb.
     this.starLevel = (0.72 + 0.28 * Math.sin(time * 0.55) + 0.06 * Math.sin(time * 3.3)) *
       this.opts.lightIntensity;
+    if (!this.star) return;
     const s = this.starData;
     s[0] = this.star.x; s[1] = this.star.y; s[2] = this.star.z;
     s[3] = 1.0; s[4] = 0.93; s[5] = 0.72;
@@ -795,10 +825,12 @@ export class ChristmasTree extends Layer {
         b.color, (b.level ?? 0.7) * 1.5, this.radius * 1.05
       );
     }
-    rig.add(
-      ox + this.star.x, oy + this.star.y, this.star.z,
-      [1.0, 0.92, 0.7], (this.starLevel ?? 0.8) * 2.4, this.radius * 1.5
-    );
+    if (this.star) {
+      rig.add(
+        ox + this.star.x, oy + this.star.y, this.star.z,
+        [1.0, 0.92, 0.7], (this.starLevel ?? 0.8) * 2.4, this.radius * 1.5
+      );
+    }
   }
 
   render(ctx) {
@@ -810,6 +842,7 @@ export class ChristmasTree extends Layer {
     this.originX = this.opts.anchor[0] * ctx.width + off.x * ctx.dpr;
     this.originY = this.opts.anchor[1] * ctx.height + off.y * ctx.dpr;
 
+    const flip = this.opts.flip ? -1 : 1;
     const focal = this.radius * 6.5;
     const zRange = this.radius * 1.6;
 
@@ -817,6 +850,7 @@ export class ChristmasTree extends Layer {
       gl.uniform2f(u.uResolution, ctx.width, ctx.height);
       gl.uniform2f(u.uOrigin, this.originX, this.originY);
       gl.uniform1f(u.uFocal, focal);
+      if (u.uFlip) gl.uniform1f(u.uFlip, flip);
       gl.uniform1f(u.uZRange, zRange);
     };
 
@@ -870,11 +904,13 @@ export class ChristmasTree extends Layer {
     this.bulbBatch.draw();
     // The star is the same program with its own sprite and one instance,
     // drawn without the depth test so it always crowns the tree.
-    gl.disable(gl.DEPTH_TEST);
-    gl.bindTexture(gl.TEXTURE_2D, this.starTex);
-    this.bulbBatch.upload(this.starData, 1);
-    this.bulbBatch.draw();
-    gl.enable(gl.DEPTH_TEST);
+    if (this.star) {
+      gl.disable(gl.DEPTH_TEST);
+      gl.bindTexture(gl.TEXTURE_2D, this.starTex);
+      this.bulbBatch.upload(this.starData, 1);
+      this.bulbBatch.draw();
+      gl.enable(gl.DEPTH_TEST);
+    }
     gl.depthMask(true);
     Blend.over(gl);
 

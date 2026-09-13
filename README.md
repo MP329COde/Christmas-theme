@@ -27,6 +27,13 @@ snow overlay isn't a security risk).
   topper in each bottom corner, a twinkling light garland strung across the top of the
   screen, and an animated fireplace with a flickering flame at bottom-center. Each is an
   independent toggle in settings.
+- **Hybrid renderer**: the Christmas trees are rendered by a WebGL2 engine
+  (real 3D branch geometry, per-needle lighting from a shared light rig,
+  wind in the vertex shader), stacked between two Canvas 2D layers that
+  draw the sky, snow, garlands and fireplaces. The engine is adopted only
+  once it has provably produced a frame, and only on a real GPU — a
+  software rasteriser is slower and no prettier than the Canvas 2D tree, so
+  it is refused. Settings → Performance → Tree renderer forces either.
 - **Animated light layers**, all toggleable and all driven by one "light animation"
   setting (twinkle / sparkle / chase / wave / steady) so the top garland, the tree
   strings, the mantel swag and the Dock all run the same show: drifting **aurora**

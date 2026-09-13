@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
   icicles: true,
   snowGlitter: true,
   fpsLimit: 0,
+  renderer: 'auto',
   soundVolume: 0.4,
   autostart: false,
   // Per-screen composition and saved presets. Null here rather than a

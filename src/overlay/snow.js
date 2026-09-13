@@ -17,8 +17,27 @@ import { drawGarland, drawTree, drawFireplace } from './decor.js';
 import { screenConfig, resolvePalette, TREE_STYLES, defaultScene } from '../shared/scene.js';
 import { drawSky, drawGlitter, drawIcicles, invalidateLights } from './lights.js';
 
+// TWO canvases, not one.
+//
+// The WebGL tree layer renders into its own canvas stacked between them,
+// so the compositing order of the whole scene survives the split:
+//
+//   #snow        background image, sky, far snow      (behind the trees)
+//   #snow-gl     the trees, on the GPU                (engine/renderer.js)
+//   #snow-front  icicles, garland, fireplaces, near snow, bank, glitter
+//
+// When WebGL is unavailable the trees are drawn into #snow instead, in
+// exactly the place they used to be, and nothing else changes — which is
+// what makes the fallback a one-line switch rather than a second renderer.
 const canvas = document.getElementById('snow');
 const ctx = canvas.getContext('2d');
+const frontCanvas = document.getElementById('snow-front');
+const fctx = frontCanvas.getContext('2d');
+
+/// 'gl' once the engine has taken the trees over; '2d' until then, and
+/// for good if the engine cannot start.
+let treeRenderer = '2d';
+const sceneListeners = new Set();
 
 let flakes = [];
 let config = {
@@ -229,6 +248,8 @@ function drawBackground(w, h) {
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  frontCanvas.width = canvas.width;
+  frontCanvas.height = canvas.height;
   accumulation = new Float32Array(Math.ceil(canvas.width / 4));
   bankDirty = true;
   // Every light layer bakes sprites cut to the current size; a resize has
@@ -302,7 +323,12 @@ export function getParticleCount() {
 }
 
 export function getStats() {
-  return { fps: stats.fps, frameMs: stats.frameMs, particles: flakes.length };
+  return {
+    fps: stats.fps,
+    frameMs: stats.frameMs,
+    particles: flakes.length,
+    renderer: treeRenderer === 'gl' ? 'webgl' : 'canvas2d',
+  };
 }
 
 export function stop() {
@@ -316,12 +342,12 @@ export function start() {
 /// Draws one snowflake, scaled and softened by its depth. Distant flakes
 /// are soft dots; nearer ones are faceted crystals picked from the
 /// pre-rotated strip. Either way it's a single blit.
-function drawFlake(f) {
-  ctx.globalAlpha = f.opacity;
+function drawFlake(target, f) {
+  target.globalAlpha = f.opacity;
 
   if (!f.isCrystal || f.r < 2.2) {
     const size = f.r * 4;
-    ctx.drawImage(flakeSprites[f.layer], f.x - size / 2, f.y - size / 2, size, size);
+    target.drawImage(flakeSprites[f.layer], f.x - size / 2, f.y - size / 2, size, size);
     return;
   }
 
@@ -329,7 +355,7 @@ function drawFlake(f) {
   let step = Math.floor(((f.rotation % sixth) / sixth) * CRYSTAL_STEPS);
   if (step < 0) step += CRYSTAL_STEPS;
   const size = f.r * 4.4;
-  ctx.drawImage(
+  target.drawImage(
     crystalStrip, step * CRYSTAL_SIZE, 0, CRYSTAL_SIZE, CRYSTAL_SIZE,
     f.x - size / 2, f.y - size / 2, size, size
   );
@@ -425,10 +451,9 @@ function rebuildBank() {
 
 function render(time) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  fctx.clearRect(0, 0, frontCanvas.width, frontCanvas.height);
 
-  // Compositing order is depth order: background photograph, sky, far
-  // snow, then the scene elements, then near snow in front of them, then
-  // the settled bank and the light bouncing off it.
+  // --- behind the trees --------------------------------------------------
   drawBackground(canvas.width, canvas.height);
 
   if (sceneCfg.aurora || sceneCfg.stars) {
@@ -447,17 +472,34 @@ function render(time) {
   for (const f of flakes) stepFlake(f, gust);
 
   for (const f of flakes) {
-    if (f.layer === 0) drawFlake(f);
+    if (f.layer === 0) drawFlake(ctx, f);
   }
   ctx.globalAlpha = 1;
 
+  // Elements are drawn in the order they appear in the composition, so
+  // "behind" and "in front of" is something the user controls by ordering
+  // the list rather than something baked into the renderer.
+  if (treeRenderer === '2d') {
+    for (const tree of sceneCfg.trees ?? []) {
+      const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
+      drawTree(ctx, canvas.width, canvas.height, themeColors, time, {
+        ...tree,
+        palette: resolvePalette(tree.lights),
+        styleWidth: style.width,
+        styleDensity: style.density,
+        snow: (tree.snow ?? 1) * (style.snow ?? 1),
+      }, decorConfig);
+    }
+  }
+
+  // --- in front of the trees ---------------------------------------------
   if (sceneCfg.icicles) {
-    drawIcicles(ctx, canvas.width, canvas.height, time, decorConfig);
+    drawIcicles(fctx, frontCanvas.width, frontCanvas.height, time, decorConfig);
   }
 
   const garland = sceneCfg.garland;
   if (garland?.enabled) {
-    drawGarland(ctx, canvas.width, time, resolvePalette(garland.lights), {
+    drawGarland(fctx, frontCanvas.width, time, resolvePalette(garland.lights), {
       animation: garland.lights?.mode,
       speed: garland.lights?.speed,
       size: garland.lights?.size,
@@ -467,31 +509,17 @@ function render(time) {
     });
   }
 
-  // Elements are drawn in the order they appear in the composition, so
-  // "behind" and "in front of" is something the user controls by ordering
-  // the list rather than something baked into the renderer.
-  for (const tree of sceneCfg.trees ?? []) {
-    const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
-    drawTree(ctx, canvas.width, canvas.height, themeColors, time, {
-      ...tree,
-      palette: resolvePalette(tree.lights),
-      styleWidth: style.width,
-      styleDensity: style.density,
-      snow: (tree.snow ?? 1) * (style.snow ?? 1),
-    }, decorConfig);
-  }
-
   for (const fire of sceneCfg.fireplaces ?? []) {
-    drawFireplace(ctx, canvas.width, canvas.height, time, themeColors, {
+    drawFireplace(fctx, frontCanvas.width, frontCanvas.height, time, themeColors, {
       ...fire,
       palette: resolvePalette(fire.lights),
     }, decorConfig);
   }
 
   for (const f of flakes) {
-    if (f.layer !== 0) drawFlake(f);
+    if (f.layer !== 0) drawFlake(fctx, f);
   }
-  ctx.globalAlpha = 1;
+  fctx.globalAlpha = 1;
 
   if (config.accumulate) {
     if (bankDirty && time - bankLastBuilt > 0.25) {
@@ -499,11 +527,11 @@ function render(time) {
       bankDirty = false;
       bankLastBuilt = time;
     }
-    if (bankCanvas) ctx.drawImage(bankCanvas, 0, 0);
+    if (bankCanvas) fctx.drawImage(bankCanvas, 0, 0);
     // Glitter goes on top of the bank, since it is light bouncing off the
     // surface we just drew.
     if (sceneCfg.snowGlitter) {
-      drawGlitter(ctx, canvas.width, canvas.height, time, accumulation, decorConfig);
+      drawGlitter(fctx, frontCanvas.width, frontCanvas.height, time, accumulation, decorConfig);
     }
   }
 }
@@ -546,6 +574,21 @@ tick();
 // Expose for Playwright / manual debugging without a module bundler step.
 window.snowOverlay = {
   setDensity, setConfig, setFpsLimit, getParticleCount, getStats, start, stop,
+  /// Hands the trees to the WebGL engine (or takes them back). Called by
+  /// the bootstrap once the engine has actually produced a frame — never
+  /// merely because a context could be created.
+  setTreeRenderer(which) {
+    treeRenderer = which === 'gl' ? 'gl' : '2d';
+    return treeRenderer;
+  },
+  getTreeRenderer: () => treeRenderer,
+  /// Subscribe to composition changes, so a second renderer can stay in
+  /// step with this one without polling.
+  onSceneChanged(listener) {
+    sceneListeners.add(listener);
+    listener(sceneCfg, null);
+    return () => sceneListeners.delete(listener);
+  },
 };
 
 function applyThemeAndSettings(theme, settings) {
@@ -583,6 +626,16 @@ function applyThemeAndSettings(theme, settings) {
   if (`${sceneCfg.background}|${sceneCfg.backgroundFit}` !== previousBackground
       || sceneCfg.background === 'image') {
     refreshBackground();
+  }
+
+  // The GL tree renderer, if it started, rebuilds from the same
+  // composition — there is one source of truth, not two.
+  for (const listener of sceneListeners) {
+    listener(sceneCfg, {
+      themeColors,
+      fpsLimit: settings?.fpsLimit ?? 0,
+      lightIntensity: decorConfig.lightIntensity,
+    });
   }
 }
 
