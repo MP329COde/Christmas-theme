@@ -15,7 +15,7 @@ import {
   listScreens, saveBackground, loadBackground,
 } from '../shared/bridge.js';
 import {
-  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, defaultScene, defaultScreen,
+  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, WEATHER_PROFILES, defaultScene, defaultScreen,
   defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
   resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
@@ -661,6 +661,11 @@ function renderSnow() {
   panel.append(el('h2', { text: 'This screen' }));
   const override = cfg.snowDensity !== 'inherit' && cfg.snowDensity != null;
   const card = el('div', { class: 'card' },
+    dropdown({
+      id: 'weather-profile', label: 'Weather profile', value: cfg.weatherProfile ?? 'winter',
+      options: Object.entries(WEATHER_PROFILES).map(([id, profile]) => [id, profile.label]),
+      onChange: (v) => editScreen((s) => { s.weatherProfile = v; }),
+    }),
     toggle({
       id: 'snow-density-override', label: 'Override density for this screen', checked: override,
       onChange: (v) => { editScreen((s) => { s.snowDensity = v ? settings.snowDensity : 'inherit'; }); renderSnow(); },

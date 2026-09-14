@@ -145,6 +145,15 @@ test('a screen can override the global snow density', async ({ page }) => {
   expect(density).toBe(500);
 });
 
+test('a weather profile is saved per screen', async ({ page }) => {
+  await page.click('[data-testid="tab-snow"]');
+  await page.selectOption('[data-testid="weather-profile"]', 'blizzard');
+  await page.waitForTimeout(300);
+  const profile = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].weatherProfile);
+  expect(profile).toBe('blizzard');
+});
+
 test('master light controls live on the lights tab', async ({ page }) => {
   await page.click('[data-testid="tab-lights"]');
   await expect(page.locator('[data-testid="light-animation"]')).toHaveValue('twinkle');

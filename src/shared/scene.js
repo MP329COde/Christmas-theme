@@ -47,6 +47,20 @@ export const AURORA_PALETTES = {
   },
 };
 
+/// Coordinated per-screen weather recipes. The numeric values are
+/// multipliers applied to the user's global snow controls, preserving a
+/// preferred baseline while letting each display have its own conditions.
+export const WEATHER_PROFILES = {
+  calm: { label: 'Calm', flakeScale: 0.7, wind: 0.35, accumulate: 0.45, glitterDensity: 0.45 },
+  gentle: { label: 'Gentle snowfall', flakeScale: 0.9, wind: 0.7, accumulate: 0.8, glitterDensity: 0.8 },
+  winter: { label: 'Winter day', flakeScale: 1, wind: 1, accumulate: 1, glitterDensity: 1 },
+  blizzard: { label: 'Blizzard', flakeScale: 1.35, wind: 1.65, accumulate: 1.5, glitterDensity: 1.35 },
+};
+
+export function resolveWeatherProfile(profile) {
+  return WEATHER_PROFILES[profile] ?? WEATHER_PROFILES.winter;
+}
+
 export function resolveAuroraPalette(palette) {
   return AURORA_PALETTES[palette] ?? AURORA_PALETTES.classic;
 }
@@ -217,6 +231,7 @@ export function defaultGarland(overrides = {}) {
 export function defaultScreen(overrides = {}) {
   return {
     enabled: true,
+    weatherProfile: 'winter',
     // 'inherit' means "use the global snow density"; a number overrides it,
     // so one screen can be a blizzard and another calm.
     snowDensity: 'inherit',

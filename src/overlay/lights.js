@@ -468,10 +468,11 @@ let glitterKey = '';
 export function drawGlitter(ctx, w, h, time, accumulation, opts = {}) {
   if (!accumulation || !accumulation.length) return;
   const gain = opts.lightIntensity ?? 1;
-  const key = `${w}x${h}`;
+  const density = Math.max(0, opts.density ?? 1);
+  const key = `${w}x${h}x${density}`;
   if (!glitterPoints || glitterKey !== key) {
     const rand = mulberry32(77345);
-    const count = Math.round(w / 14);
+    const count = Math.round((w / 14) * density);
     glitterPoints = [];
     for (let i = 0; i < count; i++) {
       glitterPoints.push({

@@ -15,7 +15,7 @@ import {
   listScreens,
 } from '../shared/bridge.js';
 import { drawGarland, drawTree, drawFireplace } from './decor.js';
-import { screenConfig, resolvePalette, TREE_STYLES, defaultScene } from '../shared/scene.js';
+import { screenConfig, resolvePalette, resolveWeatherProfile, TREE_STYLES, defaultScene } from '../shared/scene.js';
 import { drawSky, drawGlitter, drawIcicles, invalidateLights } from './lights.js';
 import { QualityGovernor, debugEnabled } from '../shared/perf.js';
 
@@ -56,6 +56,7 @@ let config = {
   flakeScale: 1,
   accumulate: true,
   maxSnowHeight: 60,
+  glitterDensity: 1,
   color: '#ffffff',
 };
 
@@ -682,7 +683,10 @@ function render(time) {
     // Glitter goes on top of the bank, since it is light bouncing off the
     // surface we just drew.
     if (sceneCfg.snowGlitter) {
-      drawGlitter(fctx, viewW, viewH, time, accumulation, decorConfig);
+      drawGlitter(fctx, viewW, viewH, time, accumulation, {
+        ...decorConfig,
+        density: config.glitterDensity,
+      });
     }
   }
 }
@@ -728,6 +732,7 @@ tick();
 // Expose for Playwright / manual debugging without a module bundler step.
 window.snowOverlay = {
   setDensity, setConfig, setFpsLimit, getParticleCount, getStats, start, stop,
+  getSnowConfig: () => ({ ...config }),
   onQualityTierChanged, getQualityTier,
   /// Test-only hook: feeds a synthetic frame cost straight into the
   /// quality governor, bypassing the real render loop entirely, so a
@@ -767,14 +772,16 @@ function applyThemeAndSettings(theme, settings) {
   const density = sceneCfg.snowDensity === 'inherit' || sceneCfg.snowDensity == null
     ? (settings?.snowDensity ?? theme.snow.density)
     : Number(sceneCfg.snowDensity);
+  const weather = resolveWeatherProfile(sceneCfg.weatherProfile);
 
   setConfig({
     density: sceneCfg.enabled === false ? 0 : density,
-    wind: settings?.snowWind ?? theme.snow.wind,
+    wind: (settings?.snowWind ?? theme.snow.wind) * weather.wind,
     flakeSize: theme.snow.flakeSize,
-    flakeScale: settings?.flakeScale ?? 1,
+    flakeScale: (settings?.flakeScale ?? 1) * weather.flakeScale,
     accumulate: settings?.snowAccumulate ?? theme.snow.accumulate,
-    maxSnowHeight: settings?.maxSnowHeight ?? 60,
+    maxSnowHeight: (settings?.maxSnowHeight ?? 60) * weather.accumulate,
+    glitterDensity: weather.glitterDensity,
   });
   setFpsLimit(settings?.fpsLimit ?? 0);
   themeColors = theme.colors;

@@ -8,9 +8,14 @@ The Christmas tree is validated and is intentionally out of scope for this roadm
 - Canvas 2D and WebGL resolve the same palette, so renderer fallback preserves the selected look.
 - The selected profile is persisted with the screen composition.
 
+## Completed: Weather profiles
+
+- Per-screen weather profiles coordinate snow size, wind, accumulation depth, and settled-snow sparkle density.
+- Profiles modulate the existing global snow controls, preserving a user's preferred baseline while allowing each display its own weather.
+- The selected profile is persisted with the screen composition and saved presets.
+
 ## Next tasks
 
-- Add a weather profile that coordinates snow size, wind, accumulation, and sparkle density.
 - Add a sky-density control for stars and shooting-star frequency.
 - Add an advanced camera-motion profile with reduced-motion support.
 - Add a lighting-rig editor for ambient warmth, bloom, and fireplace contribution.

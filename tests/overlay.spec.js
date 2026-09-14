@@ -76,6 +76,23 @@ test('the scene composition drives what this screen shows', async ({ page }) => 
   expect(cfg.aurora).toBe(false);
 });
 
+test('the selected weather profile coordinates snow rendering', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('christmas-theme-settings', JSON.stringify({
+      themeId: 'classic-red', snowDensity: 120, snowWind: 0.3, flakeScale: 1,
+      snowAccumulate: true, maxSnowHeight: 60,
+      scene: { screens: { 0: { weatherProfile: 'blizzard' } } },
+    }));
+  });
+  await page.reload();
+  await page.evaluate(() => window.snowOverlayReady);
+  const config = await page.evaluate(() => window.snowOverlay.getSnowConfig());
+  expect(config.wind).toBeCloseTo(0.495, 3);
+  expect(config.flakeScale).toBeCloseTo(1.35, 3);
+  expect(config.maxSnowHeight).toBe(90);
+  expect(config.glitterDensity).toBeCloseTo(1.35, 3);
+});
+
 test('an empty composition still renders the snow', async ({ page }) => {
   await page.evaluate(() => window.snowOverlayScene.setConfig({
     trees: [], fireplaces: [], garland: { enabled: false },
