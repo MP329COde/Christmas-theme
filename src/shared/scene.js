@@ -61,6 +61,19 @@ export function resolveWeatherProfile(profile) {
   return WEATHER_PROFILES[profile] ?? WEATHER_PROFILES.winter;
 }
 
+export const CAMERA_MOTION_PROFILES = {
+  system: { label: 'System preference', motion: 1 },
+  still: { label: 'Locked off', motion: 0 },
+  gentle: { label: 'Gentle drift', motion: 0.45 },
+  cinematic: { label: 'Cinematic drift', motion: 1 },
+  immersive: { label: 'Immersive drift', motion: 1.6 },
+};
+
+export function resolveCameraMotionProfile(profile, reducedMotion = false) {
+  if (profile === 'system' && reducedMotion) return 0;
+  return (CAMERA_MOTION_PROFILES[profile] ?? CAMERA_MOTION_PROFILES.system).motion;
+}
+
 export function resolveAuroraPalette(palette) {
   return AURORA_PALETTES[palette] ?? AURORA_PALETTES.classic;
 }
@@ -178,6 +191,7 @@ export function defaultLook(overrides = {}) {
     windGustiness: 1,
     windDirection: 0,
     cameraMotion: 1,
+    cameraMotionProfile: 'system',
     ...overrides,
   };
 }
@@ -240,6 +254,8 @@ export function defaultScreen(overrides = {}) {
     auroraIntensity: 1,
     auroraPalette: 'classic',
     stars: true,
+    starDensity: 1,
+    shootingStarFrequency: 1,
     icicles: true,
     snowGlitter: true,
     background: 'none', // 'none' | 'image'

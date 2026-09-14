@@ -179,6 +179,15 @@ test.describe('production overlay adoption', () => {
     expect(info.reason).toMatch(/software rasteriser/);
   });
 
+  test('the system camera profile honors reduced-motion preference', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer?.mode === 'webgl', null,
+      { polling: 300, timeout: 60000 });
+    expect(await page.evaluate(() => window.overlayGlTrees.renderer.camera.motion)).toBe(0);
+    await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
+
   test('forcing WebGL also hands the aurora to the engine, alongside the trees', async ({ page }) => {
     // The default scene composition has the aurora on (see
     // shared/scene.js's defaultScene) — the same "first real frame or

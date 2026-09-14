@@ -612,6 +612,8 @@ function render(time) {
       auroraDetail: quality.tier.auroraDetail,
       auroraPalette: sceneCfg.auroraPalette,
       starDetail: quality.tier.starDetail,
+      starDensity: sceneCfg.starDensity,
+      shootingStarFrequency: sceneCfg.shootingStarFrequency,
       lightIntensity: (decorConfig.lightIntensity ?? 1) * (sceneCfg.auroraIntensity ?? 1),
     });
   }

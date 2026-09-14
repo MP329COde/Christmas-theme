@@ -116,6 +116,27 @@ test('an aurora palette is saved per screen', async ({ page }) => {
   expect(palette).toBe('arctic');
 });
 
+test('sky density and shooting-star frequency are saved per screen', async ({ page }) => {
+  await page.locator('[data-testid="star-density"]').fill('150');
+  await page.locator('[data-testid="shooting-star-frequency"]').fill('50');
+  await page.waitForTimeout(300);
+  const sky = await page.evaluate(() => {
+    const screen = JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'];
+    return { density: screen.starDensity, frequency: screen.shootingStarFrequency };
+  });
+  expect(sky.density).toBe(1.5);
+  expect(sky.frequency).toBe(0.5);
+});
+
+test('a camera-motion profile is saved per screen', async ({ page }) => {
+  await page.click('[data-testid="tab-lights"]');
+  await page.selectOption('[data-testid="camera-motion-profile"]', 'gentle');
+  await page.waitForTimeout(300);
+  const profile = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].look.cameraMotionProfile);
+  expect(profile).toBe('gentle');
+});
+
 test('background image controls appear only in image mode', async ({ page }) => {
   await expect(page.locator('[data-testid="background-file"]')).toHaveCount(0);
   await page.selectOption('[data-testid="background-mode"]', 'image');

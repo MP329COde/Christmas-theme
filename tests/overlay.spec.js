@@ -138,6 +138,34 @@ test('recycling a landed flake allocates nothing', async ({ page }) => {
 // as one continuous sky across the shared edge instead of two independent
 // random fields that happen to abut.
 test.describe('star field multi-screen coherence', () => {
+  test('sky density and shooting-star frequency change the rendered sky', async ({ page }) => {
+    await page.goto('/overlay');
+    const result = await page.evaluate(async () => {
+      const mod = await import('/overlay/lights.js');
+      const W = 700;
+      const H = 500;
+      const render = (opts) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        mod.drawSky(canvas.getContext('2d'), W, H, 0.35, {
+          stars: true, aurora: false, lightIntensity: 1, ...opts,
+        });
+        return canvas.getContext('2d').getImageData(0, 0, W, H).data;
+      };
+      const sparse = render({ starDensity: 0.25, shootingStarFrequency: 0 });
+      const dense = render({ starDensity: 2, shootingStarFrequency: 0 });
+      const comet = render({ starDensity: 1, shootingStarFrequency: 1 });
+      const noComet = render({ starDensity: 1, shootingStarFrequency: 0 });
+      const alphaSum = (pixels) => pixels.reduce((sum, value, index) => index % 4 === 3 ? sum + value : sum, 0);
+      let cometDiff = 0;
+      for (let i = 0; i < comet.length; i++) cometDiff += Math.abs(comet[i] - noComet[i]);
+      return { sparseAlpha: alphaSum(sparse), denseAlpha: alphaSum(dense), cometDiff };
+    });
+    expect(result.denseAlpha).toBeGreaterThan(result.sparseAlpha);
+    expect(result.cometDiff).toBeGreaterThan(10_000);
+  });
+
   test('a star field split across two windows matches one wide window', async ({ page }) => {
     await page.goto('/overlay');
     const result = await page.evaluate(async () => {

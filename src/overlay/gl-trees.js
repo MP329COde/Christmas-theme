@@ -21,7 +21,9 @@ import { Renderer } from '../engine/renderer.js';
 import { Scene } from '../engine/scene.js';
 import { ChristmasTree } from '../layers/ChristmasTree.js';
 import { NorthernLights } from '../layers/NorthernLights.js';
-import { TREE_STYLES, resolvePalette, resolveNeedles, resolveFrost, defaultLook } from '../shared/scene.js';
+import {
+  TREE_STYLES, resolvePalette, resolveNeedles, resolveFrost, defaultLook, resolveCameraMotionProfile,
+} from '../shared/scene.js';
 
 /// Maps one scene tree spec onto the layer's options. The scene is the
 /// only source of truth: the same spec drives the Canvas 2D tree, so
@@ -203,7 +205,8 @@ export class GlTrees {
       gustiness: l.windGustiness,
       direction: l.windDirection,
     });
-    this.renderer.setCameraMotion(l.cameraMotion);
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    this.renderer.setCameraMotion(l.cameraMotion * resolveCameraMotionProfile(l.cameraMotionProfile, reducedMotion));
   }
 
   /// The GPU half of the automatic quality governor (src/shared/perf.js):

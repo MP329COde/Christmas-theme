@@ -14,10 +14,19 @@ The Christmas tree is validated and is intentionally out of scope for this roadm
 - Profiles modulate the existing global snow controls, preserving a user's preferred baseline while allowing each display its own weather.
 - The selected profile is persisted with the screen composition and saved presets.
 
+## Completed: Sky density and shooting-star frequency
+
+- Per-screen controls tune the density of the continuous star field and the cadence of shooting stars.
+- A zero shooting-star frequency disables comets without disabling the stars themselves.
+- Both controls are persisted with the screen composition and preserved by saved presets.
+
+## Completed: Camera-motion profiles
+
+- Per-screen profiles range from locked-off framing to immersive drift while preserving existing camera-motion values.
+- The default system profile honors the operating system's reduced-motion preference.
+
 ## Next tasks
 
-- Add a sky-density control for stars and shooting-star frequency.
-- Add an advanced camera-motion profile with reduced-motion support.
 - Add a lighting-rig editor for ambient warmth, bloom, and fireplace contribution.
 - Add preview thumbnails for saved scene presets.
 - Add a real-GPU performance diagnostic with frame-time history and quality-tier explanation.

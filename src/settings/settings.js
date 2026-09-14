@@ -15,7 +15,7 @@ import {
   listScreens, saveBackground, loadBackground,
 } from '../shared/bridge.js';
 import {
-  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, WEATHER_PROFILES, defaultScene, defaultScreen,
+  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, WEATHER_PROFILES, CAMERA_MOTION_PROFILES, defaultScene, defaultScreen,
   defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
   resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
@@ -401,7 +401,22 @@ function renderScene() {
   }
   sky.append(
     toggle({ id: 'stars-toggle', label: '⭐ Stars & shooting stars', checked: cfg.stars,
-      onChange: (v) => editScreen((s) => { s.stars = v; }) }),
+      onChange: (v) => editScreen((s) => { s.stars = v; }) })
+  );
+  if (cfg.stars) {
+    sky.append(el('div', { class: 'grid-2' },
+      slider({
+        id: 'star-density', label: 'Star density', min: 25, max: 200, step: 25,
+        value: Math.round((cfg.starDensity ?? 1) * 100), format: (v) => `${v}%`,
+        onInput: (v) => editScreen((s) => { s.starDensity = v / 100; }),
+      }),
+      slider({
+        id: 'shooting-star-frequency', label: 'Shooting stars', min: 0, max: 200, step: 25,
+        value: Math.round((cfg.shootingStarFrequency ?? 1) * 100), format: (v) => `${v}%`,
+        onInput: (v) => editScreen((s) => { s.shootingStarFrequency = v / 100; }),
+      })));
+  }
+  sky.append(
     toggle({ id: 'icicles-toggle', label: '🧊 Icicles', checked: cfg.icicles,
       onChange: (v) => editScreen((s) => { s.icicles = v; }) }),
     toggle({ id: 'glitter-toggle', label: '✨ Glitter on settled snow', checked: cfg.snowGlitter,
@@ -775,6 +790,11 @@ function renderLights() {
       value: Math.round(look.windDirection * 100),
       format: (v) => (v === 0 ? 'None' : v < 0 ? `← ${-v}%` : `${v}% →`),
       onInput: (v) => editLook('windDirection')(v / 100),
+    }),
+    dropdown({
+      id: 'camera-motion-profile', label: 'Camera motion', value: look.cameraMotionProfile,
+      options: Object.entries(CAMERA_MOTION_PROFILES).map(([id, profile]) => [id, profile.label]),
+      onChange: editLook('cameraMotionProfile'),
     }),
     slider({
       id: 'camera-motion', label: 'Camera drift', min: 0, max: 200, step: 10,

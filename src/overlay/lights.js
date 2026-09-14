@@ -347,15 +347,16 @@ let starFieldKey = '';
 /// space (the monitor's real desktop position, from Tauri's Monitor API);
 /// a window with no such info (outside Tauri, or before it resolves) just
 /// passes 0,0, which keeps the previous single-window behaviour exactly.
-function getStars(w, h, originX = 0, originY = 0) {
-  const key = `${w}x${h}x${originX}x${originY}`;
+function getStars(w, h, originX = 0, originY = 0, density = 1) {
+  const cellSize = STAR_CELL / Math.sqrt(Math.max(0.25, Math.min(2, density)));
+  const key = `${w}x${h}x${originX}x${originY}x${cellSize}`;
   if (starField && starFieldKey === key) return starField;
 
   const skyH = h * 0.62;
-  const cx0 = Math.floor(originX / STAR_CELL) - 1;
-  const cx1 = Math.floor((originX + w) / STAR_CELL) + 1;
-  const cy0 = Math.floor(originY / STAR_CELL) - 1;
-  const cy1 = Math.floor((originY + skyH) / STAR_CELL) + 1;
+  const cx0 = Math.floor(originX / cellSize) - 1;
+  const cx1 = Math.floor((originX + w) / cellSize) + 1;
+  const cy0 = Math.floor(originY / cellSize) - 1;
+  const cy1 = Math.floor((originY + skyH) / cellSize) + 1;
 
   const stars = [];
   for (let cy = cy0; cy <= cy1; cy++) {
@@ -364,8 +365,8 @@ function getStars(w, h, originX = 0, originY = 0) {
       // as a lattice rather than a sky. ~78% occupancy keeps the average
       // density right while breaking up the regularity.
       if (hashCell(cx, cy, 0) > 0.78) continue;
-      const gx = cx * STAR_CELL + hashCell(cx, cy, 1) * STAR_CELL;
-      const gy = cy * STAR_CELL + hashCell(cx, cy, 2) * STAR_CELL;
+      const gx = cx * cellSize + hashCell(cx, cy, 1) * cellSize;
+      const gy = cy * cellSize + hashCell(cx, cy, 2) * cellSize;
       if (gy < originY || gy > originY + skyH) continue;
       const x = gx - originX;
       const y = gy - originY;
@@ -414,7 +415,8 @@ export function drawSky(ctx, w, h, time, opts = {}) {
 
   if (opts.stars) {
     const starDetail = opts.starDetail ?? 1;
-    for (const s of getStars(w, h, opts.originX ?? 0, opts.originY ?? 0)) {
+    const starDensity = opts.starDensity ?? 1;
+    for (const s of getStars(w, h, opts.originX ?? 0, opts.originY ?? 0, starDensity)) {
       if (s.thin > starDetail) continue;
       const twinkle =
         0.62 + 0.26 * Math.sin(time * s.rate + s.phase) + 0.12 * Math.sin(time * s.rate2);
@@ -425,12 +427,13 @@ export function drawSky(ctx, w, h, time, opts = {}) {
       ctx.drawImage(starSprite, s.x - size / 2, s.y - size / 2, size, size);
     }
 
-    // One shooting star at a time, on a ~9s cycle, crossing in ~0.7s.
-    const CYCLE = 9;
-    const cycle = time % CYCLE;
-    if (cycle < 0.7) {
+    // One shooting star at a time, on a 9s cycle at the default rate.
+    const shootingStarFrequency = Math.max(0, opts.shootingStarFrequency ?? 1);
+    const cycleLength = shootingStarFrequency ? 9 / shootingStarFrequency : Infinity;
+    const cycle = time % cycleLength;
+    if (shootingStarFrequency && cycle < 0.7) {
       const p = cycle / 0.7;
-      const n = Math.floor(time / CYCLE);
+      const n = Math.floor(time / cycleLength);
       const rand = mulberry32(n * 977);
       const startX = rand() * w * 0.7;
       const startY = rand() * h * 0.3;
