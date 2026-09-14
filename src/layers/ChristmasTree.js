@@ -34,8 +34,9 @@ import { Layer } from '../engine/layer.js';
 import { createProgram, textureFromCanvas, Blend } from '../engine/gl.js';
 import { InstancedQuads, InstanceWriter } from '../engine/instanced.js';
 import { LIGHTING_GLSL, hexToRgb } from '../engine/lighting.js';
+import { WIND_GLSL } from '../engine/wind.js';
 import { bulbLevel } from '../shared/scene.js';
-import { SIMPLEX3, HASH, COLOR } from '../engine/noise.glsl.js';
+import { HASH, COLOR } from '../engine/noise.glsl.js';
 
 const TAU = Math.PI * 2;
 const GOLDEN_ANGLE = 2.39996323; // radians; consecutive tiers never line up
@@ -56,7 +57,15 @@ function mulberry32(seed) {
 
 const ATLAS_CELL = 256;
 const ATLAS_COLS = 4;
-const ATLAS_ROWS = 2;
+const ATLAS_ROWS = 3;
+// Which cell is what. Six plain sprigs and three snow-laden ones, because
+// a canopy is thousands of instances and the eye finds a repeat in a set
+// of five almost immediately — it is the cheapest realism there is, since
+// variety costs atlas space and nothing per frame.
+const CELL_SPRIG = 6;
+const CELL_SNOWY = 3;
+const CELL_BARK = 9;   // two variants: 9, 10
+const CELL_DRIFT = 11; // soft snow blob, used for the bank at the base
 
 /// Draws one sprig: a stem with needle pairs along it. Needles get their
 /// own length, angle and brightness, and a dark core with a lighter edge,
@@ -68,6 +77,7 @@ function drawSprig(c, size, rand, { snowy = false } = {}) {
   const tipY = size * 0.06;
   const len = baseY - tipY;
   const curve = (rand() - 0.5) * size * 0.16;
+  const density = 0.8 + rand() * 0.5;
 
   // Stem.
   c.strokeStyle = 'rgba(48,42,26,0.9)';
@@ -78,60 +88,92 @@ function drawSprig(c, size, rand, { snowy = false } = {}) {
   c.quadraticCurveTo(cx + curve, baseY - len * 0.5, cx + curve * 0.6, tipY);
   c.stroke();
 
-  const pairs = 9 + Math.floor(rand() * 4);
-  for (let i = 0; i <= pairs; i++) {
-    const t = i / pairs;
-    // Point on the stem's quadratic.
-    const sx = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * (cx + curve) + t * t * (cx + curve * 0.6);
-    const sy = (1 - t) * (1 - t) * baseY + 2 * (1 - t) * t * (baseY - len * 0.5) + t * t * tipY;
-    // Needles are longest at the base of the sprig and shorten toward the
-    // tip, which is what gives the sprig its taper.
-    const nlen = size * (0.30 - t * 0.17) * (0.75 + rand() * 0.5);
-    for (const side of [-1, 1]) {
-      const spread = 0.62 + rand() * 0.5 - t * 0.18;
-      const ax = side * Math.sin(spread);
-      const ay = -Math.cos(spread);
-      const ex = sx + ax * nlen;
-      const ey = sy + ay * nlen;
+  const pairs = Math.round((11 + rand() * 5) * density);
+  // Two passes: the needles pointing AWAY from the viewer first, darker
+  // and shorter, then the near ones over them. A single flat fan of
+  // strokes has no interior — this is what gives one sprig its own
+  // front-to-back depth, before the canopy's depth buffer sees it at all.
+  for (const pass of [0, 1]) {
+    const behind = pass === 0;
+    for (let i = 0; i <= pairs; i++) {
+      const t = i / pairs;
+      // Point on the stem's quadratic.
+      const sx = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * (cx + curve) + t * t * (cx + curve * 0.6);
+      const sy = (1 - t) * (1 - t) * baseY + 2 * (1 - t) * t * (baseY - len * 0.5) + t * t * tipY;
+      // Needles are longest at the base of the sprig and shorten toward the
+      // tip, which is what gives the sprig its taper.
+      const nlen = size * (0.30 - t * 0.17) * (0.75 + rand() * 0.5) * (behind ? 0.78 : 1);
+      for (const side of [-1, 1]) {
+        const spread = 0.62 + rand() * 0.5 - t * 0.18 + (behind ? 0.22 : 0);
+        const ax = side * Math.sin(spread);
+        const ay = -Math.cos(spread);
+        const ex = sx + ax * nlen;
+        const ey = sy + ay * nlen;
 
-      // Dark core.
-      const shade = 0.35 + rand() * 0.45 + t * 0.2;
-      c.strokeStyle = `rgba(${Math.round(40 + shade * 60)},${Math.round(70 + shade * 105)},${Math.round(38 + shade * 55)},0.95)`;
-      c.lineWidth = size * (0.028 - t * 0.008);
-      c.beginPath();
-      c.moveTo(sx, sy);
-      c.lineTo(ex, ey);
-      c.stroke();
-
-      // Specular edge along one flank: a needle is a waxy cylinder and
-      // catches a line of light, not a uniform tone.
-      if (rand() > 0.45) {
-        c.strokeStyle = `rgba(${Math.round(150 + rand() * 70)},${Math.round(200 + rand() * 55)},${Math.round(140 + rand() * 60)},0.5)`;
-        c.lineWidth = size * 0.009;
+        // Dark core, tapering to a point: a needle is a cone, and a
+        // constant-width stroke is the classic giveaway of drawn foliage.
+        const shade = (0.35 + rand() * 0.45 + t * 0.2) * (behind ? 0.5 : 1);
+        c.strokeStyle = `rgba(${Math.round(40 + shade * 60)},${Math.round(70 + shade * 105)},${Math.round(38 + shade * 55)},${behind ? 0.8 : 0.95})`;
+        c.lineCap = 'round';
+        c.lineWidth = size * (0.026 - t * 0.008);
         c.beginPath();
-        c.moveTo(sx + ax * nlen * 0.25, sy + ay * nlen * 0.25);
-        c.lineTo(ex - ax * nlen * 0.08, ey - ay * nlen * 0.08);
+        c.moveTo(sx, sy);
+        c.quadraticCurveTo(
+          sx + ax * nlen * 0.55 + ay * nlen * 0.06,
+          sy + ay * nlen * 0.55 - ax * nlen * 0.06,
+          ex, ey
+        );
         c.stroke();
-      }
-
-      if (snowy && ay < -0.2 && rand() > 0.35) {
-        // Snow only settles on the upward-facing side.
-        c.strokeStyle = `rgba(236,244,255,${0.55 + rand() * 0.4})`;
-        c.lineWidth = size * (0.030 - t * 0.008);
+        c.lineWidth = size * 0.006;
         c.beginPath();
-        c.moveTo(sx + ax * nlen * 0.3, sy + ay * nlen * 0.3 - size * 0.008);
-        c.lineTo(ex, ey - size * 0.01);
+        c.moveTo(ex - ax * nlen * 0.14, ey - ay * nlen * 0.14);
+        c.lineTo(ex, ey);
         c.stroke();
+
+        // Specular edge along one flank: a needle is a waxy cylinder and
+        // catches a line of light, not a uniform tone.
+        if (!behind && rand() > 0.45) {
+          c.strokeStyle = `rgba(${Math.round(150 + rand() * 70)},${Math.round(200 + rand() * 55)},${Math.round(140 + rand() * 60)},0.5)`;
+          c.lineWidth = size * 0.009;
+          c.beginPath();
+          c.moveTo(sx + ax * nlen * 0.25, sy + ay * nlen * 0.25);
+          c.lineTo(ex - ax * nlen * 0.08, ey - ay * nlen * 0.08);
+          c.stroke();
+        }
+
+        if (snowy && !behind && ay < -0.2 && rand() > 0.35) {
+          // Snow only settles on the upward-facing side. Drawn as a chain of
+          // soft blobs rather than a hard stroke: a stroke traced the needle
+          // exactly and produced a crisp white chevron, which on a hundred
+          // sprigs at once reads as a scatter of paper arrows rather than a
+          // dusting of snow.
+          const steps = 3;
+          for (let k = 1; k <= steps; k++) {
+            const f = k / steps;
+            const px = sx + ax * nlen * f * 0.95;
+            const py = sy + ay * nlen * f * 0.95 - size * 0.012;
+            const rr = size * (0.030 - t * 0.010) * (1.1 - f * 0.45) * (0.7 + rand() * 0.6);
+            const g = c.createRadialGradient(px, py, 0, px, py, rr);
+            const alpha = (0.5 + rand() * 0.35) * (1 - f * 0.35);
+            g.addColorStop(0, `rgba(240,247,255,${alpha})`);
+            g.addColorStop(0.55, `rgba(224,236,252,${alpha * 0.55})`);
+            g.addColorStop(1, 'rgba(214,228,248,0)');
+            c.fillStyle = g;
+            c.beginPath();
+            c.arc(px, py, rr, 0, Math.PI * 2);
+            c.fill();
+          }
+        }
       }
     }
   }
 }
 
-/// Bark: vertical fibre with knots. One cell, used for the trunk.
+/// Bark: vertical fibre with knots. Used for the trunk.
 function drawBark(c, size, rand) {
   c.fillStyle = '#3a2415';
   c.fillRect(size * 0.22, 0, size * 0.56, size);
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 140; i++) {
     const x = size * 0.22 + rand() * size * 0.56;
     const y = rand() * size;
     const h = size * (0.05 + rand() * 0.3);
@@ -141,6 +183,36 @@ function drawBark(c, size, rand) {
     c.moveTo(x, y);
     c.quadraticCurveTo(x + (rand() - 0.5) * size * 0.04, y + h * 0.5, x + (rand() - 0.5) * size * 0.05, y + h);
     c.stroke();
+  }
+  // A rim of light down one edge: a trunk is a cylinder, and without a
+  // terminator it reads as a flat brown plank whatever is drawn on it.
+  const rim = c.createLinearGradient(size * 0.22, 0, size * 0.78, 0);
+  rim.addColorStop(0, 'rgba(0,0,0,0.45)');
+  rim.addColorStop(0.35, 'rgba(0,0,0,0)');
+  rim.addColorStop(0.72, 'rgba(255,225,180,0.16)');
+  rim.addColorStop(1, 'rgba(0,0,0,0.5)');
+  c.fillStyle = rim;
+  c.fillRect(size * 0.22, 0, size * 0.56, size);
+}
+
+/// A soft lump of snow. The bank around the foot of the tree is built out
+/// of a dozen of these at different sizes, which is enough to read as a
+/// drift and costs nothing — they ride in the existing foliage batch.
+function drawDrift(c, size, rand) {
+  const cx = size / 2;
+  const cy = size * 0.62;
+  for (let i = 0; i < 7; i++) {
+    const px = cx + (rand() - 0.5) * size * 0.5;
+    const py = cy + (rand() - 0.5) * size * 0.22;
+    const rr = size * (0.18 + rand() * 0.2);
+    const g = c.createRadialGradient(px, py - rr * 0.3, rr * 0.1, px, py, rr);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.5, 'rgba(228,238,252,0.7)');
+    g.addColorStop(1, 'rgba(198,214,238,0)');
+    c.fillStyle = g;
+    c.beginPath();
+    c.ellipse(px, py, rr, rr * 0.72, 0, 0, Math.PI * 2);
+    c.fill();
   }
 }
 
@@ -159,9 +231,10 @@ function buildAtlas(seed) {
     c.beginPath();
     c.rect(0, 0, ATLAS_CELL, ATLAS_CELL);
     c.clip();
-    if (i < 5) drawSprig(c, ATLAS_CELL, rand);
-    else if (i < 7) drawSprig(c, ATLAS_CELL, rand, { snowy: true });
-    else drawBark(c, ATLAS_CELL, rand);
+    if (i < CELL_SPRIG) drawSprig(c, ATLAS_CELL, rand);
+    else if (i < CELL_SPRIG + CELL_SNOWY) drawSprig(c, ATLAS_CELL, rand, { snowy: true });
+    else if (i < CELL_DRIFT) drawBark(c, ATLAS_CELL, rand);
+    else drawDrift(c, ATLAS_CELL, rand);
     c.restore();
   }
   return canvas;
@@ -264,53 +337,56 @@ vec4 project(vec3 p, out float persp) {
 
 const FOLIAGE_VS = /* glsl */ `#version 300 es
 precision highp float;
-${SIMPLEX3}
+${WIND_GLSL}
 ${PROJECT_GLSL}
 in vec2 aCorner;
 in vec3 aPos;    // position in tree space (pixels, y up, z toward viewer)
 in vec3 aNrm;    // outward normal of the sprig
 in vec4 aParam;  // size, windPhase, windAmount, billboardRotation
 in vec2 aCell;   // atlas cell
+in float aMat;   // 0 = needle, 1 = settled snow, 2 = bark
 uniform float uTime;
 uniform float uWind;
 uniform vec2  uAtlasCells;
 out vec2 vUV;
+out vec2 vLocal;
 out vec3 vNrm;
 out vec3 vWorld;
 out float vZ;
 out float vSeed;
+out float vMat;
+out float vMotion;
 
 void main() {
-  vec3 p = aPos;
-
-  // Wind: a slow noise field sampled at the sprig's position, so nearby
-  // sprigs move together (they are on the same branch, in the same gust)
-  // while distant ones do not — which is the difference between a tree
-  // breathing and every leaf jittering independently.
-  float field = snoise(vec3(p.xy * 0.0022, uTime * 0.19));
-  float gust  = 0.65 + 0.35 * sin(uTime * 0.23 + field * 2.0);
-  float sway  = field * 0.7
-              + 0.35 * sin(uTime * 1.10 + aParam.y)
-              + 0.18 * sin(uTime * 2.37 + aParam.y * 1.7);
-  float amp = aParam.z * uWind * gust;
-  p.x += sway * 9.0 * amp;
-  p.z += sway * 5.0 * amp;
-  // A branch pushed sideways also dips: it is pivoting, not sliding.
-  p.y -= abs(sway) * 3.2 * amp;
+  // Wind comes from the SHARED field (engine/wind.js), not from a noise
+  // function private to this shader: the baubles, the bulbs and the
+  // ribbon displace by the same call, so everything hanging on a branch
+  // rides the same gust the branch itself does. Neighbouring sprigs stay
+  // together because the field is sampled at the anchor, which they
+  // nearly share.
+  vec3 push = windOffset(aPos, aParam.z * uWind, aParam.y);
+  vec3 p = aPos + push;
 
   float persp;
   vec4 clip = project(p, persp);
 
   float s = aParam.x * persp;
-  float ca = cos(aParam.w), sa = sin(aParam.w);
+  // A sprig pushed sideways also rolls about its own stem — a frond is
+  // not a rigid card being translated, and the roll is what keeps the
+  // canopy from looking like a sheet of decals sliding in unison.
+  float roll = aParam.w + clamp(push.x, -30.0, 30.0) * 0.011;
+  float ca = cos(roll), sa = sin(roll);
   vec2 corner = vec2(aCorner.x * ca - aCorner.y * sa, aCorner.x * sa + aCorner.y * ca);
   clip.xy += corner * s / uResolution * 2.0;
 
   vUV = (aCell + (aCorner * 0.5 + 0.5)) / uAtlasCells;
+  vLocal = aCorner * 0.5 + 0.5;
   vNrm = aNrm;
   vWorld = vec3(uOrigin + p.xy, p.z);
   vZ = p.z;
   vSeed = float(gl_InstanceID);
+  vMat = aMat;
+  vMotion = clamp(length(push.xz) * 0.04, 0.0, 1.0);
   gl_Position = clip;
 }`;
 
@@ -320,14 +396,22 @@ ${COLOR}
 ${HASH}
 ${LIGHTING_GLSL}
 in vec2 vUV;
+in vec2 vLocal;
 in vec3 vNrm;
 in vec3 vWorld;
 in float vZ;
 in float vSeed;
+in float vMat;
+in float vMotion;
 uniform sampler2D uAtlas;
 uniform vec3 uDarkGreen;
 uniform vec3 uLightGreen;
+uniform vec3 uTrunkColor;
+uniform vec3 uSnowTint;
 uniform float uRadius;
+uniform float uTime;
+uniform float uFrost;
+uniform float uAlphaCut;
 out vec4 outColor;
 
 void main() {
@@ -336,7 +420,10 @@ void main() {
   // overlapping sprites, and sorting them every frame would cost more than
   // the whole canopy is worth. The depth buffer gives correct occlusion
   // for free at the price of a crisp edge, which needles have anyway.
-  if (tex.a < 0.36) discard;
+  // The snow bank at the foot of the tree is the exception — it is drawn
+  // blended, with the cut dropped, because a hard edge there would show
+  // as a row of cut-out circles against the desktop.
+  if (tex.a < uAlphaCut) discard;
   vec3 albedoTex = tex.rgb / max(tex.a, 1e-3);
 
   // Per-sprig hue and value variation. A canopy of one green is the
@@ -344,6 +431,20 @@ void main() {
   vec3 h = hash31(vSeed * 7.13 + 1.7);
   vec3 base = mix(uDarkGreen, uLightGreen, h.x * 0.85 + 0.15);
   base *= 0.7 + h.y * 0.55;
+  // Needles are not one hue either: real spruce runs blue-green at the
+  // shaded base of a sprig and yellow-green at the sunlit growing tip,
+  // and reproducing that gradient along the sprite is most of what stops
+  // the canopy reading as one flat colour field.
+  base = mix(base * vec3(0.88, 0.97, 1.06), base * vec3(1.10, 1.06, 0.82), vLocal.y);
+
+  float isSnow = step(0.5, vMat) * step(vMat, 1.5);
+  float isBark = step(1.5, vMat);
+  // Barely, not fully: the snow is already IN the sprite (the atlas draws
+  // white deposits over the needles), so tinting the albedo white as well
+  // double-counts it and turns every snow sprig into a paper cut-out.
+  base = mix(base, uSnowTint * 0.9, isSnow * 0.28);
+  base = mix(base, uTrunkColor, isBark);
+
   vec3 albedo = toLinear(base) * albedoTex;
 
   vec3 n = normalize(vNrm);
@@ -353,32 +454,81 @@ void main() {
   // receive far less sky, which is what gives the tree its interior
   // darkness and therefore its sense of depth.
   float ao = mix(0.28, 1.0, smoothstep(-uRadius, uRadius * 0.75, vZ));
+  // A sprig at the tip of a branch is on the outside of the canopy and
+  // catches more of everything; one near the stem is buried.
+  ao *= mix(0.82, 1.0, vLocal.y);
 
-  vec3 lit = ambientTerm(n) * ao + lightTerm(vWorld, n, viewDir, 0.85) * mix(0.55, 1.0, ao);
+  float translucency = mix(0.85, 0.35, isSnow + isBark);
+  vec3 lit = ambientTerm(n) * ao + lightTerm(vWorld, n, viewDir, translucency) * mix(0.55, 1.0, ao);
   vec3 color = albedo * lit;
+
+  // Rime on the needle tips: a cold night frosts the outermost growth
+  // first, which is exactly where the eye looks for the silhouette.
+  float rime = uFrost * smoothstep(0.68, 1.0, vLocal.y) * (0.35 + 0.65 * h.z) * (1.0 - isBark);
+  color = mix(color, color * 0.8 + toLinear(uSnowTint) * ambientTerm(n) * 1.6, rime * 0.45);
+
+  // Snow and rime are made of facets: a handful of them catch a light
+  // dead-on and flash. Gated hard so only a few crystals per frame fire,
+  // because constant glitter reads as video noise rather than ice.
+  float crystals = max(isSnow, rime);
+  if (crystals > 0.02) {
+    float seed = vSeed * 0.317 + floor(vLocal.x * 3.0) + floor(vLocal.y * 3.0) * 7.0;
+    float flash = sin(uTime * 1.9 + seed * 12.9898);
+    flash = pow(max(flash, 0.0), 48.0) * step(0.86, fract(seed * 0.618));
+    color += vec3(0.9, 0.96, 1.0) * flash * crystals * 1.2;
+  }
+
+  // Motion lets a touch more sky through the canopy: a branch in a gust
+  // opens up and brightens, which is the cue that sells the movement as
+  // physical rather than as a sprite sliding sideways.
+  color *= 1.0 + vMotion * 0.12;
 
   outColor = vec4(color * tex.a, tex.a);
 }`;
 
 const ORNAMENT_VS = /* glsl */ `#version 300 es
 precision highp float;
+${WIND_GLSL}
 ${PROJECT_GLSL}
 in vec2 aCorner;
 in vec3 aPos;
 in vec3 aColor;
-in vec2 aParam; // radius, kind (0 = glossy ball, 1 = matte)
+in vec4 aParam; // radius, kind (0 = glossy ball, 1 = matte), windAmount, phase
+uniform float uWind;
 out vec2 vQ;
 out vec3 vColor;
 out vec3 vWorld;
 out float vKind;
+out float vSwing;
 void main() {
+  // A bauble is not glued to the branch: it hangs from it on a hook, so
+  // it BOTH rides the branch's own displacement and swings behind it as a
+  // pendulum. Leaving the baubles static while the needles moved was the
+  // most visible artificial thing left in the layer.
+  vec3 push = windOffset(aPos, aParam.z * uWind, aParam.w);
+  vec3 p = aPos + push * 0.72;
+
+  float hang = aParam.x * 2.1;
+  // The swing lags the gust (a mass on a string does not arrive with the
+  // air) and adds its own small natural oscillation, faster for a short
+  // hook than a long one, which is what a pendulum actually does.
+  float natural = inversesqrt(max(hang, 1.0)) * 34.0;
+  float theta = clamp(push.x * 0.010, -0.55, 0.55)
+              + 0.055 * sin(uWindPhase * natural + aParam.w);
+  p.x += hang * sin(theta);
+  p.y -= hang * (1.0 - cos(theta));
+
   float persp;
-  vec4 clip = project(aPos, persp);
+  vec4 clip = project(p, persp);
   clip.xy += aCorner * (aParam.x * persp) / uResolution * 2.0;
+  // Same decal bias as the bulbs: a bauble hanging off the front of a
+  // branch loses the depth test against the sprigs it is resting among.
+  clip.z -= 0.03;
   vQ = aCorner;
   vColor = aColor;
-  vWorld = vec3(uOrigin + aPos.xy, aPos.z);
+  vWorld = vec3(uOrigin + p.xy, p.z);
   vKind = aParam.y;
+  vSwing = theta;
   gl_Position = clip;
 }`;
 
@@ -390,6 +540,8 @@ in vec2 vQ;
 in vec3 vColor;
 in vec3 vWorld;
 in float vKind;
+in float vSwing;
+uniform float uGloss;
 out vec4 outColor;
 
 void main() {
@@ -407,12 +559,27 @@ void main() {
   // Glass is smooth and takes a tight highlight; a matte finish takes a
   // broad soft one. Both come from the same rig, so a bauble reflects
   // whichever bulb happens to be bright this instant.
-  float shininess = mix(64.0, 9.0, vKind);
-  float strength = mix(1.5, 0.25, vKind);
+  float shininess = mix(64.0, 9.0, vKind) * mix(0.4, 1.6, uGloss);
+  float strength = mix(1.5, 0.25, vKind) * uGloss;
   color += specularTerm(vWorld, n, viewDir, shininess, strength);
   // Fresnel rim: grazing angles reflect more, which is what makes the
   // silhouette of a glass ball brighter than its middle.
-  color += toLinear(vColor) * pow(1.0 - n.z, 4.0) * 0.6;
+  color += albedo * pow(1.0 - n.z, 4.0) * 0.45;
+  // A ball is a mirror, and the biggest thing in its mirror is the sky
+  // above and the dark ground below. One extra term, and it is the
+  // difference between a shaded circle and something with a surface —
+  // tinted by the bauble, because a coloured ball does not reflect the
+  // sky white, it reflects it its own colour.
+  color += mix(albedo, vec3(1.0), 0.35) * ambientTerm(reflect(-viewDir, n))
+         * mix(0.9, 0.25, vKind) * (0.25 + 0.75 * uGloss);
+
+  // The metal cap and its hook, rotated with the swing so the whole
+  // ornament reads as one rigid object hanging off one point.
+  float ca = cos(vSwing), sa = sin(vSwing);
+  vec2 q = vec2(vQ.x * ca + vQ.y * sa, -vQ.x * sa + vQ.y * ca);
+  float cap = smoothstep(0.62, 0.72, q.y) * (1.0 - smoothstep(0.30, 0.38, abs(q.x)));
+  vec3 capColor = vec3(0.62, 0.58, 0.48) * (ambientTerm(n) * 3.0 + lightTerm(vWorld, n, viewDir, 0.0));
+  color = mix(color, capColor, cap);
 
   float edge = smoothstep(1.0, 0.93, r2);
   outColor = vec4(color * edge, edge);
@@ -420,21 +587,32 @@ void main() {
 
 const BULB_VS = /* glsl */ `#version 300 es
 precision highp float;
+${WIND_GLSL}
 ${PROJECT_GLSL}
 in vec2 aCorner;
 in vec3 aPos;
 in vec3 aColor;
-in vec2 aParam; // size, brightness
+in vec4 aParam; // size, brightness, windAmount, wind phase
+in float aSpin; // billboard rotation: 0 for a bulb, animated for the star
+uniform float uWind;
 out vec2 vUV;
 out vec3 vColor;
 out float vBright;
 void main() {
+  // The string is wired to the branches, so it travels with them. A bulb
+  // that stays put while the needles around it move detaches visibly,
+  // and that detachment is much easier to see than the movement itself.
+  vec3 p = aPos + windOffset(aPos, aParam.z * uWind, aParam.w) * 0.85;
   float persp;
-  vec4 clip = project(aPos, persp);
+  vec4 clip = project(p, persp);
   // A brighter bulb blooms physically larger, which is how an eye reads
   // intensity on a small light source.
   float s = aParam.x * persp * (0.7 + 0.5 * aParam.y);
-  clip.xy += aCorner * s / uResolution * 2.0;
+  // Spin is 0 for a bulb and animated for the star, whose flare has to
+  // turn or its spikes read as a painted-on decal.
+  float ca = cos(aSpin), sa = sin(aSpin);
+  clip.xy += vec2(aCorner.x * ca - aCorner.y * sa, aCorner.x * sa + aCorner.y * ca)
+             * s / uResolution * 2.0;
   // Depth bias toward the viewer. A bulb clipped to the branch it is
   // wired to sits level with the sprigs around it, so half the string
   // lost the depth test and only the ones on the silhouette survived.
@@ -458,6 +636,13 @@ uniform sampler2D uGlow;
 out vec4 outColor;
 void main() {
   float g = texture(uGlow, vUV).a;
+  // A small point source seen through any real optic — a lens, an
+  // eyelash, a wet window — throws a cross. Adding it here, scaled by
+  // brightness so it only appears on a bulb that is actually bright,
+  // is what separates a lit bulb from a coloured dot.
+  vec2 d = abs(vUV - 0.5) * 2.0;
+  float streak = (exp(-d.x * 26.0) + exp(-d.y * 26.0)) * exp(-length(d) * 2.2);
+  g = min(1.0, g + streak * 0.12 * vBright);
   // Only the very centre is allowed to desaturate toward white. Letting
   // the whole sprite blow out is what turns a warm bulb into a featureless
   // white blob — the colour has to survive everywhere except the core.
@@ -495,6 +680,110 @@ void main() {
   outColor = vec4(0.0, 0.0, 0.0, a);
 }`;
 
+// The ribbon: a spiral of short oriented segments wound round the tree.
+//
+// It is a strip of cloth, not a line, so it is drawn as quads that are
+// long along the spiral's tangent and narrow across it — which means each
+// segment carries its own tangent angle and each one turns to face the
+// viewer differently as it goes round the back. It rides the same wind
+// field as everything else, with a small extra flutter of its own,
+// because a loose satin band moves considerably more than a branch does.
+const RIBBON_VS = /* glsl */ `#version 300 es
+precision highp float;
+${WIND_GLSL}
+${PROJECT_GLSL}
+in vec2 aCorner;
+in vec3 aPos;
+in vec4 aParam;  // halfLength, halfWidth, tangent angle, windAmount
+in vec4 aShape;  // facing (-1 back / 1 front), wind phase, u along the ribbon, twist rate
+uniform float uWind;
+uniform float uTime;
+out vec2 vLocal;
+out vec3 vWorld;
+out float vFacing;
+out float vU;
+out float vTwist;
+void main() {
+  vec3 push = windOffset(aPos, aParam.w * uWind, aShape.y);
+  // Cloth flutters on top of the gust it is riding: a travelling ripple
+  // along the band's own length, which is what a satin ribbon does and a
+  // branch does not.
+  float ripple = sin(aShape.z * 26.0 - uWindPhase * 3.4 + aShape.y) * uWindGust;
+  vec3 p = aPos + push * 1.25 + vec3(0.0, ripple * 2.2, ripple * 1.4);
+
+  float persp;
+  vec4 clip = project(p, persp);
+
+  // The band narrows as it turns edge-on going round the back of the
+  // tree, which is the only cue that says "this is wrapped around
+  // something" rather than "this is painted on the silhouette".
+  float twist = cos(aShape.w + ripple * 0.35);
+  float ca = cos(aParam.z), sa = sin(aParam.z);
+  vec2 local = vec2(aCorner.x * aParam.x, aCorner.y * aParam.y * mix(0.45, 1.0, abs(twist)));
+  vec2 rotated = vec2(local.x * ca - local.y * sa, local.x * sa + local.y * ca);
+  clip.xy += rotated * persp / uResolution * 2.0;
+  // Biased toward the viewer only on the near half of the spiral. A
+  // uniform bias drew the BACK of the ribbon over the canopy it is
+  // supposed to be hidden behind, which flattened the whole wrap.
+  clip.z -= 0.035 * aShape.x;
+
+  vLocal = aCorner;
+  vWorld = vec3(uOrigin + p.xy, p.z);
+  vFacing = aShape.x;
+  vU = aShape.z;
+  vTwist = twist;
+  gl_Position = clip;
+}`;
+
+const RIBBON_FS = /* glsl */ `#version 300 es
+precision highp float;
+${COLOR}
+${LIGHTING_GLSL}
+in vec2 vLocal;
+in vec3 vWorld;
+in float vFacing;
+in float vU;
+in float vTwist;
+uniform vec3 uColor;
+uniform float uTime;
+uniform float uGlitter;
+out vec4 outColor;
+void main() {
+  // Soft on every side, so consecutive segments cross-fade into one
+  // continuous band instead of showing a chain of rectangles.
+  float across = abs(vLocal.y);
+  float along = abs(vLocal.x);
+  float a = (1.0 - smoothstep(0.58, 1.0, across)) * (1.0 - smoothstep(0.45, 1.0, along));
+  if (a < 0.01) discard;
+
+  // The band's normal turns with the twist, so the cloth catches the
+  // light rig at a different angle on the near side and the far side.
+  vec3 n = normalize(vec3(vLocal.y * 0.2, vTwist * 0.3, max(vTwist, 0.25)));
+  vec3 viewDir = vec3(0.0, 0.0, 1.0);
+  vec3 albedo = toLinear(uColor);
+
+  vec3 lit = ambientTerm(n) * 0.45 + lightTerm(vWorld, n, viewDir, 0.3);
+  vec3 color = albedo * lit;
+  // Satin has an anisotropic sheen running ACROSS the weave: a bright
+  // line along the band, offset from its centre because the fold that
+  // catches the light is never exactly in the middle of the cloth.
+  float sheen = exp(-(vLocal.y - 0.28) * (vLocal.y - 0.28) * 9.0);
+  color += specularTerm(vWorld, n, viewDir, 30.0, 0.25) * sheen;
+  color += albedo * sheen * 0.12 * (ambientTerm(n) * 2.0 + 0.1);
+
+  // Metallic thread woven through it, firing one glint at a time.
+  float seed = floor(vU * 240.0);
+  float flash = pow(max(sin(uTime * 2.3 + seed * 12.9898), 0.0), 44.0)
+              * step(0.78, fract(seed * 0.618));
+  color += vec3(1.0, 0.92, 0.66) * flash * uGlitter * 1.2;
+
+  // The far half of the spiral is behind the trunk and must read darker,
+  // or the ribbon looks like a flat ring drawn over the tree.
+  color *= mix(0.42, 1.0, vFacing * 0.5 + 0.5);
+
+  outColor = vec4(color * a, a);
+}`;
+
 // ---------------------------------------------------------------------------
 // layer
 // ---------------------------------------------------------------------------
@@ -508,18 +797,30 @@ export class ChristmasTree extends Layer {
       anchor: [0.5, 0.0], // fraction of frame; y measured from the bottom
       needleDark: '#0c2013',
       needleLight: '#3c6b2b',
+      trunkColor: '#4a3019',
+      snowTint: '#e8f1ff',
       bulbColors: ['#ffc169', '#ffa93f', '#ffd79b'],
       ornamentColors: ['#c0392b', '#e8c25a', '#e9edf2', '#8fb7d8', '#b0392b'],
       bulbCount: 96,
       ornamentCount: 38,
+      ornamentGloss: 1,
       wind: 1.0,
+      sway: 1.0,
       lightIntensity: 1.0,
       // Scene-driven knobs, so one layer class covers every tree a
       // composition can ask for rather than one hard-coded tree.
       styleWidth: 1.0,    // spruce is narrow, pine is broad
       styleDensity: 1.0,  // branches per tier
       snowAmount: 1.0,
+      frost: 0.18,
       star: true,
+      starSize: 1,
+      starColor: '#fff0c2',
+      ribbon: false,
+      ribbonColor: '#c0392b',
+      ribbonWidth: 1,
+      ribbonTurns: 4,
+      ribbonGlitter: 1,
       lightsOn: true,
       lightMode: 'twinkle',
       lightSpeed: 1,
@@ -544,25 +845,34 @@ export class ChristmasTree extends Layer {
     this.ornaments = createProgram(gl, ORNAMENT_VS, ORNAMENT_FS, 'tree.ornaments');
     this.bulbProg = createProgram(gl, BULB_VS, BULB_FS, 'tree.bulbs');
     this.shadowProg = createProgram(gl, SHADOW_VS, SHADOW_FS, 'tree.shadow');
+    this.ribbonProg = createProgram(gl, RIBBON_VS, RIBBON_FS, 'tree.ribbon');
 
     const foliageAttribs = [
       { name: 'aPos', size: 3 },
       { name: 'aNrm', size: 3 },
       { name: 'aParam', size: 4 },
       { name: 'aCell', size: 2 },
+      { name: 'aMat', size: 1 },
     ];
     this.needleBatch = new InstancedQuads(gl, this.foliage.program, foliageAttribs);
     this.snowBatch = new InstancedQuads(gl, this.foliage.program, foliageAttribs);
     this.trunkBatch = new InstancedQuads(gl, this.foliage.program, foliageAttribs);
+    this.driftBatch = new InstancedQuads(gl, this.foliage.program, foliageAttribs);
     this.ornamentBatch = new InstancedQuads(gl, this.ornaments.program, [
       { name: 'aPos', size: 3 },
       { name: 'aColor', size: 3 },
-      { name: 'aParam', size: 2 },
+      { name: 'aParam', size: 4 },
     ]);
     this.bulbBatch = new InstancedQuads(gl, this.bulbProg.program, [
       { name: 'aPos', size: 3 },
       { name: 'aColor', size: 3 },
-      { name: 'aParam', size: 2 },
+      { name: 'aParam', size: 4 },
+      { name: 'aSpin', size: 1 },
+    ]);
+    this.ribbonBatch = new InstancedQuads(gl, this.ribbonProg.program, [
+      { name: 'aPos', size: 3 },
+      { name: 'aParam', size: 4 },
+      { name: 'aShape', size: 4 },
     ]);
     this.shadowBatch = new InstancedQuads(gl, this.shadowProg.program, [
       { name: 'aPos', size: 3 },
@@ -594,20 +904,22 @@ export class ChristmasTree extends Layer {
     const foliageTop = height * 0.985;
     const TIERS = 22;
 
-    const needles = new InstanceWriter(12, 7000);
-    const snow = new InstanceWriter(12, 1200);
-    const trunk = new InstanceWriter(12, 12);
+    const needles = new InstanceWriter(13, 7000);
+    const snow = new InstanceWriter(13, 1200);
+    const trunk = new InstanceWriter(13, 12);
 
     // --- trunk ------------------------------------------------------------
     // Barely visible under the canopy, but its absence is noticeable: the
     // tree would appear to hover.
     for (let i = 0; i < 4; i++) {
       const t = i / 4;
+      const barkCell = CELL_BARK + (i % 2);
       trunk.push(
         (rand() - 0.5) * radius * 0.04, trunkTop * (0.2 + t * 0.45), (rand() - 0.5) * radius * 0.08,
         0, 0.25, 1,
         radius * 0.13, rand() * 6.28, 0.02, 0,
-        3, 1 // bark cell
+        barkCell % ATLAS_COLS, Math.floor(barkCell / ATLAS_COLS),
+        2 // material: bark
       );
     }
 
@@ -668,23 +980,25 @@ export class ChristmasTree extends Layer {
           // the silhouette.
           if (rand() < 0.22) rot += Math.PI * (0.75 + rand() * 0.5);
 
-          const cell = Math.floor(rand() * 5);
+          const cell = Math.floor(rand() * CELL_SPRIG);
           needles.push(
             bx, by, bz,
             nx / nl, ny / nl, nz / nl,
             size, rand() * TAU, windAmount, rot,
-            cell % ATLAS_COLS, Math.floor(cell / ATLAS_COLS)
+            cell % ATLAS_COLS, Math.floor(cell / ATLAS_COLS),
+            0 // material: needle
           );
 
           // Snow settles on sprigs that face upward and are not buried
           // deep inside the canopy.
           if (ny / nl > 0.42 && u > 0.3 && rand() > 1 - 0.4 * this.opts.snowAmount) {
-            const snowCell = 5 + Math.floor(rand() * 2);
+            const snowCell = CELL_SPRIG + Math.floor(rand() * CELL_SNOWY);
             snow.push(
               bx, by + size * 0.06, bz + size * 0.02,
               nx / nl * 0.4, 0.9, nz / nl * 0.4,
               size * 1.02, rand() * TAU, windAmount, rot,
-              snowCell % ATLAS_COLS, Math.floor(snowCell / ATLAS_COLS)
+              snowCell % ATLAS_COLS, Math.floor(snowCell / ATLAS_COLS),
+              1 // material: settled snow
             );
           }
         }
@@ -696,9 +1010,29 @@ export class ChristmasTree extends Layer {
     this.trunkBatch.upload(trunk.data, trunk.count, gl.STATIC_DRAW);
     this.instanceCount = needles.count + snow.count + trunk.count;
 
+    // --- snow bank --------------------------------------------------------
+    // A tree standing on nothing floats, and a contact shadow alone only
+    // says "something is above the ground here". A drift piled against the
+    // trunk is what actually plants it, and it is where the lowest boughs
+    // disappear into rather than ending in mid-air.
+    const drift = new InstanceWriter(13, 24);
+    const driftCount = Math.round(16 * Math.min(1.6, this.opts.snowAmount));
+    for (let i = 0; i < driftCount; i++) {
+      const a = (i / driftCount) * TAU + rand() * 0.6;
+      const spread = radius * (0.2 + rand() * 0.75);
+      drift.push(
+        Math.cos(a) * spread, radius * (-0.02 + rand() * 0.04), Math.sin(a) * spread * 0.7,
+        0, 1, 0.15, // a drift faces the sky
+        radius * (0.16 + rand() * 0.16), rand() * TAU, 0, (rand() - 0.5) * 0.5,
+        CELL_DRIFT % ATLAS_COLS, Math.floor(CELL_DRIFT / ATLAS_COLS),
+        1 // material: snow
+      );
+    }
+    this.driftBatch.upload(drift.data, drift.count, gl.STATIC_DRAW);
+    this.driftCount = drift.count;
     // --- baubles ----------------------------------------------------------
     const ornamentCount = Math.max(0, Math.round(this.opts.ornamentCount));
-    const orn = new InstanceWriter(8, Math.max(1, ornamentCount));
+    const orn = new InstanceWriter(10, Math.max(1, ornamentCount));
     for (let i = 0; i < ornamentCount; i++) {
       const f = 0.08 + rand() * 0.82;
       const y = trunkTop + (foliageTop - trunkTop) * f;
@@ -708,10 +1042,55 @@ export class ChristmasTree extends Layer {
       orn.push(
         Math.cos(a) * r, y, Math.sin(a) * r,
         col[0], col[1], col[2],
-        radius * (0.035 + rand() * 0.026), rand() > 0.75 ? 1 : 0
+        radius * (0.035 + rand() * 0.026), rand() > 0.75 ? 1 : 0,
+        // A bauble hangs on the outer half of a branch, so it gets most
+        // of that branch's lever arm, plus its own phase.
+        0.55 + f * 0.5, rand() * TAU
       );
     }
     this.ornamentBatch.upload(orn.data, orn.count, gl.STATIC_DRAW);
+
+    // --- ribbon -----------------------------------------------------------
+    this.ribbonCount = 0;
+    if (this.opts.ribbon) {
+      const turns = Math.max(1, Math.min(9, this.opts.ribbonTurns));
+      // One segment every few degrees: enough that consecutive quads
+      // overlap into a continuous band at any size, still one draw call.
+      const segments = Math.round(turns * 96);
+      const band = new InstanceWriter(11, segments);
+      const bandWidth = radius * 0.032 * this.opts.ribbonWidth;
+      const point = (t) => {
+        const f = 0.06 + t * 0.86;
+        const ang = t * TAU * turns + 0.7;
+        // Tucked just inside the canopy's own radius: a band sitting
+        // proudly outside it reads as a hoop hung around the tree rather
+        // than a ribbon threaded into the branches.
+        const rr = radius * (1 - f) ** 0.78 * 0.94;
+        return {
+          x: Math.cos(ang) * rr,
+          y: trunkTop + (foliageTop - trunkTop) * f,
+          z: Math.sin(ang) * rr,
+          ang,
+        };
+      };
+      for (let i = 0; i < segments; i++) {
+        const t = i / segments;
+        const p = point(t);
+        const q = point(Math.min(1, t + 1 / segments));
+        // The segment's own tangent, in screen space: a spiral changes
+        // direction constantly and a fixed angle would make the band
+        // shear against itself at the turns.
+        const tangent = Math.atan2(q.y - p.y, q.x - p.x);
+        const halfLen = Math.hypot(q.x - p.x, q.y - p.y) * 1.6 + bandWidth * 0.6;
+        band.push(
+          p.x, p.y, p.z,
+          halfLen, bandWidth, tangent, 0.3 + t * 0.55,
+          Math.sin(p.ang) > 0 ? 1 : -1, (i % 17) * 0.37, t, p.ang
+        );
+      }
+      this.ribbonBatch.upload(band.data, band.count, gl.STATIC_DRAW);
+      this.ribbonCount = band.count;
+    }
 
     // --- bulbs ------------------------------------------------------------
     // Wound as a spiral, which is how a string actually goes on a tree,
@@ -745,15 +1124,25 @@ export class ChristmasTree extends Layer {
         p2: rand() * TAU,
         p3: rand() * TAU,
         base: 0.55 + rand() * 0.3,
+        // The string is wired along the outer face of the branches, so a
+        // bulb near the top (where the branches are short) travels less
+        // in a gust than one out on a long lower bough.
+        windAmount: 0.45 + (1 - f) * 0.55,
+        windPhase: rand() * TAU,
       });
     }
-    this.bulbData = new Float32Array(this.bulbs.length * 8);
+    this.bulbData = new Float32Array(this.bulbs.length * 11);
 
     // --- star -------------------------------------------------------------
     this.star = this.opts.star === false
       ? null
-      : { x: 0, y: foliageTop + radius * 0.07, z: 0, size: radius * 0.78 };
-    this.starData = new Float32Array(8);
+      : { x: 0, y: foliageTop + radius * 0.07, z: 0, size: radius * 0.5 * this.opts.starSize };
+    this.starRgb = null;
+    // Two instances, not one: a slow flare and a faster counter-rotating
+    // one. A single spinning sprite reads as a pinwheel; two turning
+    // against each other read as light scattering, which is what a real
+    // star filter does.
+    this.starData = new Float32Array(22);
 
     // --- contact shadow ---------------------------------------------------
     const sh = new InstanceWriter(5, 1);
@@ -791,20 +1180,31 @@ export class ChristmasTree extends Layer {
       const b = this.bulbs[i];
       const level = this.bulbLevel(b, time, i);
       b.level = level;
-      const o = i * 8;
+      const o = i * 11;
       d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z;
       d[o + 3] = b.color[0]; d[o + 4] = b.color[1]; d[o + 5] = b.color[2];
       d[o + 6] = b.size; d[o + 7] = level;
+      d[o + 8] = b.windAmount; d[o + 9] = b.windPhase;
+      d[o + 10] = 0; // no spin on a bulb
     }
     // The star pulses far more slowly than the string, so it reads as a
     // different fixture rather than the brightest bulb.
-    this.starLevel = (0.72 + 0.28 * Math.sin(time * 0.55) + 0.06 * Math.sin(time * 3.3)) *
+    this.starLevel = (0.5 + 0.2 * Math.sin(time * 0.55) + 0.05 * Math.sin(time * 3.3)) *
       this.opts.lightIntensity;
     if (!this.star) return;
     const s = this.starData;
-    s[0] = this.star.x; s[1] = this.star.y; s[2] = this.star.z;
-    s[3] = 1.0; s[4] = 0.93; s[5] = 0.72;
-    s[6] = this.star.size; s[7] = this.starLevel;
+    const col = this.starRgb ?? (this.starRgb = hexToRgb(this.opts.starColor));
+    for (let k = 0; k < 2; k++) {
+      const o = k * 11;
+      s[o] = this.star.x; s[o + 1] = this.star.y; s[o + 2] = this.star.z;
+      s[o + 3] = col[0]; s[o + 4] = col[1]; s[o + 5] = col[2];
+      // The counter-rotating flare is smaller and dimmer: it is the
+      // secondary scatter, not a second star.
+      s[o + 6] = this.star.size * (k === 0 ? 1 : 0.64);
+      s[o + 7] = this.starLevel * (k === 0 ? 1 : 0.55);
+      s[o + 8] = 0; s[o + 9] = 0; // the topper is rigid; no wind
+      s[o + 10] = k === 0 ? time * 0.06 : -time * 0.135 + 0.6;
+    }
   }
 
   /// Only a spread subset of the bulbs becomes a real light — the rig holds
@@ -828,7 +1228,7 @@ export class ChristmasTree extends Layer {
     if (this.star) {
       rig.add(
         ox + this.star.x, oy + this.star.y, this.star.z,
-        [1.0, 0.92, 0.7], (this.starLevel ?? 0.8) * 2.4, this.radius * 1.5
+        hexToRgb(this.opts.starColor), (this.starLevel ?? 0.8) * 2.4, this.radius * 1.5
       );
     }
   }
@@ -854,6 +1254,17 @@ export class ChristmasTree extends Layer {
       gl.uniform1f(u.uZRange, zRange);
     };
 
+    // Every program that moves with the air reads the SAME three numbers,
+    // straight off the shared field — that identity is the whole reason a
+    // bauble and the branch it hangs from arrive in a gust together.
+    const w = ctx.wind?.uniforms(this.opts.sway) ?? { gust: 1, phase: ctx.time, direction: 0 };
+    const setWind = (u) => {
+      if (u.uWindGust) gl.uniform1f(u.uWindGust, w.gust);
+      if (u.uWindPhase) gl.uniform1f(u.uWindPhase, w.phase);
+      if (u.uWindDir) gl.uniform1f(u.uWindDir, w.direction);
+      if (u.uWind) gl.uniform1f(u.uWind, this.opts.wind);
+    };
+
     // --- contact shadow, first and without depth ------------------------
     gl.useProgram(this.shadowProg.program);
     setShared(this.shadowProg.uniforms);
@@ -867,25 +1278,56 @@ export class ChristmasTree extends Layer {
     gl.useProgram(this.foliage.program);
     const fu = this.foliage.uniforms;
     setShared(fu);
+    setWind(fu);
     gl.uniform1f(fu.uTime, ctx.time);
-    gl.uniform1f(fu.uWind, this.opts.wind);
     gl.uniform1f(fu.uRadius, this.radius);
+    gl.uniform1f(fu.uFrost, this.opts.frost);
     gl.uniform2f(fu.uAtlasCells, ATLAS_COLS, ATLAS_ROWS);
     gl.uniform3fv(fu.uDarkGreen, hexToRgb(this.opts.needleDark));
     gl.uniform3fv(fu.uLightGreen, hexToRgb(this.opts.needleLight));
+    gl.uniform3fv(fu.uTrunkColor, hexToRgb(this.opts.trunkColor));
+    gl.uniform3fv(fu.uSnowTint, hexToRgb(this.opts.snowTint));
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
     gl.uniform1i(fu.uAtlas, 0);
     ctx.rig.upload(gl, fu);
     Blend.over(gl);
+    gl.uniform1f(fu.uAlphaCut, 0.36);
     this.trunkBatch.draw();
     this.needleBatch.draw();
     this.snowBatch.draw();
+
+    // The bank is blended, not alpha-tested, and does not write depth: it
+    // is a soft thing sitting under everything else, so it must neither
+    // show a cut-out edge nor occlude the boughs settling into it.
+    if (this.driftCount > 0) {
+      gl.uniform1f(fu.uAlphaCut, 0.004);
+      gl.depthMask(false);
+      this.driftBatch.draw();
+      gl.depthMask(true);
+      ctx.draws += 1;
+    }
+
+    // --- ribbon ----------------------------------------------------------
+    if (this.ribbonCount > 0) {
+      gl.useProgram(this.ribbonProg.program);
+      const ru = this.ribbonProg.uniforms;
+      setShared(ru);
+      setWind(ru);
+      gl.uniform1f(ru.uTime, ctx.time);
+      gl.uniform3fv(ru.uColor, hexToRgb(this.opts.ribbonColor));
+      gl.uniform1f(ru.uGlitter, this.opts.ribbonGlitter);
+      ctx.rig.upload(gl, ru);
+      this.ribbonBatch.draw();
+      ctx.draws += 1;
+    }
 
     // --- baubles ---------------------------------------------------------
     gl.useProgram(this.ornaments.program);
     const ou = this.ornaments.uniforms;
     setShared(ou);
+    setWind(ou);
+    gl.uniform1f(ou.uGloss, this.opts.ornamentGloss);
     ctx.rig.upload(gl, ou);
     this.ornamentBatch.draw();
 
@@ -895,6 +1337,7 @@ export class ChristmasTree extends Layer {
     gl.useProgram(this.bulbProg.program);
     const bu = this.bulbProg.uniforms;
     setShared(bu);
+    setWind(bu);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.glowTex);
     gl.uniform1i(bu.uGlow, 0);
@@ -902,12 +1345,12 @@ export class ChristmasTree extends Layer {
     Blend.add(gl);
     this.bulbBatch.upload(this.bulbData, this.bulbs.length);
     this.bulbBatch.draw();
-    // The star is the same program with its own sprite and one instance,
+    // The star is the same program with its own sprite and two instances,
     // drawn without the depth test so it always crowns the tree.
     if (this.star) {
       gl.disable(gl.DEPTH_TEST);
       gl.bindTexture(gl.TEXTURE_2D, this.starTex);
-      this.bulbBatch.upload(this.starData, 1);
+      this.bulbBatch.upload(this.starData, 2);
       this.bulbBatch.draw();
       gl.enable(gl.DEPTH_TEST);
     }
@@ -920,9 +1363,10 @@ export class ChristmasTree extends Layer {
   dispose() {
     const gl = this.gl;
     if (!gl) return;
-    for (const b of [this.needleBatch, this.snowBatch, this.trunkBatch,
-      this.ornamentBatch, this.bulbBatch, this.shadowBatch]) b?.dispose();
-    for (const p of [this.foliage, this.ornaments, this.bulbProg, this.shadowProg]) {
+    for (const b of [this.needleBatch, this.snowBatch, this.trunkBatch, this.driftBatch,
+      this.ornamentBatch, this.bulbBatch, this.ribbonBatch, this.shadowBatch]) b?.dispose();
+    for (const p of [this.foliage, this.ornaments, this.bulbProg, this.ribbonProg,
+      this.shadowProg]) {
       if (p) gl.deleteProgram(p.program);
     }
     gl.deleteTexture(this.atlasTex);

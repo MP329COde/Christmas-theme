@@ -21,7 +21,7 @@ import { Renderer } from '../engine/renderer.js';
 import { Scene } from '../engine/scene.js';
 import { ChristmasTree } from '../layers/ChristmasTree.js';
 import { NorthernLights } from '../layers/NorthernLights.js';
-import { TREE_STYLES, resolvePalette } from '../shared/scene.js';
+import { TREE_STYLES, resolvePalette, resolveNeedles, resolveFrost, defaultLook } from '../shared/scene.js';
 
 /// Maps one scene tree spec onto the layer's options. The scene is the
 /// only source of truth: the same spec drives the Canvas 2D tree, so
@@ -29,6 +29,7 @@ import { TREE_STYLES, resolvePalette } from '../shared/scene.js';
 function layerOptionsFor(tree, index, themeColors) {
   const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
   const palette = resolvePalette(tree.lights);
+  const needles = resolveNeedles(tree);
   return {
     id: `tree-${tree.id ?? index}`,
     z: 0.5 + index * 0.001, // stable draw order, no two layers equal
@@ -41,7 +42,15 @@ function layerOptionsFor(tree, index, themeColors) {
     styleWidth: style.width,
     styleDensity: style.density,
     snowAmount: (tree.snow ?? 1) * (style.snow ?? 1),
+    frost: resolveFrost(tree),
+    sway: tree.sway ?? 1,
     star: tree.star !== false,
+    starSize: tree.starSize ?? 1,
+    starColor: tree.starColor ?? '#fff0c2',
+    ribbon: tree.ribbon !== false,
+    ribbonColor: tree.ribbonColor ?? themeColors.primary,
+    ribbonWidth: tree.ribbonWidth ?? 1,
+    ribbonTurns: tree.ribbonTurns ?? 4,
     lightsOn: tree.lightsOn !== false,
     bulbCount: Math.round(96 * (tree.lights?.size ? 1 : 1)),
     bulbColors: palette,
@@ -50,12 +59,13 @@ function layerOptionsFor(tree, index, themeColors) {
     lightSpeed: tree.lights?.speed ?? 1,
     lightIntensity: tree.lights?.intensity ?? 1,
     ornamentCount: Math.round(38 * (tree.ornaments ?? 1)),
+    ornamentGloss: tree.ornamentGloss ?? 1,
     ornamentColors: [
       themeColors.primary, themeColors.accent, '#e9edf2', '#8fb7d8',
       themeColors.primary,
     ],
-    needleDark: '#0c2013',
-    needleLight: '#3c6b2b',
+    needleDark: needles.dark,
+    needleLight: needles.light,
     wind: 1,
   };
 }
@@ -132,6 +142,12 @@ export class GlTrees {
   /// matters changed, so it can be wired straight to every settings save.
   async sync(sceneCfg, themeColors) {
     if (!this.renderer?.supported || this.failed) return false;
+    // The grade, the weather and the camera are per-frame uniforms, so
+    // they are applied on EVERY sync, before the signature check bails
+    // out: dragging an exposure slider must take effect immediately and
+    // must never rebuild the layer set to do it.
+    this.applyLook(sceneCfg.look);
+
     const trees = sceneCfg.trees ?? [];
     const aurora = !!sceneCfg.aurora;
     const auroraGain = sceneCfg.auroraIntensity ?? 1;
@@ -169,6 +185,24 @@ export class GlTrees {
 
   setFpsLimit(limit) {
     this.renderer?.setFpsLimit(limit);
+  }
+
+  /// Applies the scene's global look. Cheap enough to call every frame;
+  /// in practice it is called on every settings save.
+  applyLook(look) {
+    if (!this.renderer) return;
+    const l = { ...defaultLook(), ...(look ?? {}) };
+    this.renderer.setGrade({
+      exposure: l.exposure,
+      bloomStrength: l.bloom,
+      saturation: l.saturation,
+    });
+    this.renderer.setWind({
+      strength: l.windStrength,
+      gustiness: l.windGustiness,
+      direction: l.windDirection,
+    });
+    this.renderer.setCameraMotion(l.cameraMotion);
   }
 
   /// The GPU half of the automatic quality governor (src/shared/perf.js):

@@ -28,11 +28,36 @@ export const LIGHT_PALETTES = {
 
 export const LIGHT_MODES = ['twinkle', 'sparkle', 'chase', 'wave', 'steady'];
 
+/// Species. `dark`/`light` are the two ends of the needle gradient the
+/// WebGL foliage shader mixes between per sprig — they are part of the
+/// species, not a theme colour, because what separates a Nordmann from a
+/// blue spruce at a glance is the colour of the needles, not its width.
+/// A tree may still override them (`needleDark` / `needleLight`).
 export const TREE_STYLES = {
-  nordmann: { needle: 'secondary', density: 1.0, width: 1.0, label: 'Nordmann (full)' },
-  spruce: { needle: 'secondary', density: 0.85, width: 0.82, label: 'Spruce (narrow)' },
-  pine: { needle: 'secondary', density: 1.15, width: 1.12, label: 'Pine (broad)' },
-  snowy: { needle: 'secondary', density: 1.0, width: 1.0, snow: 2.0, label: 'Snow-laden' },
+  nordmann: {
+    needle: 'secondary', density: 1.0, width: 1.0,
+    dark: '#0c2013', light: '#3c6b2b', label: 'Nordmann (full)',
+  },
+  spruce: {
+    needle: 'secondary', density: 0.85, width: 0.82,
+    dark: '#0a1c18', light: '#2f5f43', label: 'Spruce (narrow)',
+  },
+  pine: {
+    needle: 'secondary', density: 1.15, width: 1.12,
+    dark: '#12210e', light: '#4d7a2c', label: 'Pine (broad)',
+  },
+  snowy: {
+    needle: 'secondary', density: 1.0, width: 1.0, snow: 2.0, frost: 0.55,
+    dark: '#152a24', light: '#4a7566', label: 'Snow-laden',
+  },
+  blue: {
+    needle: 'secondary', density: 0.95, width: 0.9, frost: 0.4,
+    dark: '#0d1c2b', light: '#4a7a92', label: 'Blue spruce',
+  },
+  golden: {
+    needle: 'accent', density: 1.05, width: 1.0,
+    dark: '#1d2410', light: '#7e8a34', label: 'Golden fir',
+  },
 };
 
 /// A light string's appearance. Used by garlands, tree strings and the
@@ -75,11 +100,66 @@ export function defaultTree(overrides = {}) {
     lightsOn: true,
     lights: defaultLightStyle({ palette: 'warm', mode: 'twinkle' }),
     ornaments: 1,
+    // 0 = matte painted baubles, 1 = mirror-glass. The same geometry
+    // either way; only how much of the light rig it reflects changes.
+    ornamentGloss: 1,
+    // 'auto' takes the species' own needle colours (see TREE_STYLES);
+    // anything else is a hex pair the shader uses verbatim, which is what
+    // makes a black-and-gold or an all-white tree possible at all.
+    needleColors: 'auto',
+    needleDark: '#0c2013',
+    needleLight: '#3c6b2b',
     snow: 1,
+    // Rime on the outermost needles. 'auto' follows the species.
+    frost: 'auto',
+    // How much this particular tree moves in the shared wind field: a
+    // tree tucked behind a wall does not sway like one on a ridge.
+    sway: 1,
     ribbon: true,
+    ribbonColor: '#c0392b',
+    ribbonWidth: 1,
+    ribbonTurns: 4,
     star: true,
+    starSize: 1,
+    starColor: '#fff0c2',
     ...overrides,
   };
+}
+
+/// The look of the scene as a whole: the grade the post chain applies,
+/// the weather every layer answers to, and how much the camera drifts.
+/// Separate from the element list because it is not a thing on the
+/// screen, it is how everything on the screen is rendered — and because
+/// all of it is a per-frame uniform, so changing any of it is free and
+/// never rebuilds geometry.
+export function defaultLook(overrides = {}) {
+  return {
+    exposure: 1,
+    bloom: 0.85,
+    saturation: 1,
+    windStrength: 1,
+    windGustiness: 1,
+    windDirection: 0,
+    cameraMotion: 1,
+    ...overrides,
+  };
+}
+
+/// Resolves a tree's needle colours: the species' own unless the tree has
+/// been given explicit ones. One place, because both renderers and the
+/// settings preview need the same answer.
+export function resolveNeedles(tree) {
+  const style = TREE_STYLES[tree?.style] ?? TREE_STYLES.nordmann;
+  if (tree?.needleColors === 'custom') {
+    return { dark: tree.needleDark ?? style.dark, light: tree.needleLight ?? style.light };
+  }
+  return { dark: style.dark, light: style.light };
+}
+
+export function resolveFrost(tree) {
+  if (tree?.frost !== undefined && tree.frost !== 'auto') return Number(tree.frost) || 0;
+  const style = TREE_STYLES[tree?.style] ?? TREE_STYLES.nordmann;
+  return style.frost ?? 0.18;
 }
 
 export function defaultFireplace(overrides = {}) {
@@ -117,6 +197,7 @@ export function defaultScreen(overrides = {}) {
     // 'inherit' means "use the global snow density"; a number overrides it,
     // so one screen can be a blizzard and another calm.
     snowDensity: 'inherit',
+    look: defaultLook(),
     aurora: true,
     auroraIntensity: 1,
     stars: true,
@@ -161,6 +242,7 @@ export function screenConfig(scene, index) {
   // by an older version is missing the newest keys, and must pick up
   // their defaults rather than rendering as undefined.
   const merged = { ...base, ...(fallback ?? {}), ...(own ?? {}) };
+  merged.look = { ...defaultLook(), ...(merged.look ?? {}) };
   merged.garland = { ...defaultGarland(), ...(merged.garland ?? {}) };
   merged.garland.lights = defaultLightStyle(merged.garland.lights ?? {});
   merged.trees = (merged.trees ?? []).map((t) => {

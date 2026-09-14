@@ -42,6 +42,9 @@ if (!renderer.supported) {
     heightFraction: 0.72,
     anchor: [0.5, 0.03],
     wind: params.has('wind') ? Number(params.get('wind')) : 1,
+    ribbon: params.get('ribbon') !== '0',
+    ribbonColor: params.get('ribbonColor') ?? '#c0392b',
+    frost: params.has('frost') ? Number(params.get('frost')) : 0.35,
   });
   scene.add(tree);
 
@@ -65,6 +68,17 @@ if (!renderer.supported) {
     setFpsLimit: (n) => renderer.setFpsLimit(n),
     setWind: (w) => { tree.opts.wind = w; },
     getInstanceCount: () => tree.instanceCount ?? 0,
+    /// The knobs the settings window drives in production, reachable here
+    /// so a change to any of them can be exercised without the Tauri
+    /// shell — including the ones that must NOT rebuild geometry.
+    setGrade: (g) => renderer.setGrade(g),
+    setWindField: (w) => renderer.setWind(w),
+    setCameraMotion: (m) => renderer.setCameraMotion(m),
+    getWind: () => ({ gust: renderer.wind.gust, phase: renderer.wind.phase }),
+    setTreeOption: (key, value, { rebuild = false } = {}) => {
+      tree.opts[key] = value;
+      if (rebuild) tree.build(renderer);
+    },
     /// Reads one composited pixel, alpha included. Coordinates are in CSS
     /// pixels from the TOP-left, like the DOM; WebGL reads from the
     /// bottom, so the y flip happens here rather than in every test.

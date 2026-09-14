@@ -11,15 +11,30 @@
 // no period a viewer can learn, and it is bounded, so it never wanders off.
 
 export class Camera {
-  constructor({ amplitude = 26, breathe = 0.012 } = {}) {
-    this.amplitude = amplitude; // pixels of travel at z = 1
-    this.breathe = breathe; // fractional zoom
+  constructor({ amplitude = 26, breathe = 0.012, motion = 1 } = {}) {
+    this.baseAmplitude = amplitude; // pixels of travel at z = 1
+    this.baseBreathe = breathe; // fractional zoom
+    // 0 freezes the camera entirely (for anyone who finds any drift on a
+    // permanent wallpaper distracting), 2 doubles it. Applied through a
+    // follow below rather than directly, so dragging the slider eases the
+    // camera into its new range instead of snapping the whole scene.
+    this.motion = motion;
+    this._motion = motion;
+    this.amplitude = amplitude * motion;
+    this.breathe = breathe * motion;
     this.x = 0;
     this.y = 0;
     this.zoom = 1;
   }
 
-  update(time) {
+  setMotion(amount) {
+    this.motion = Math.max(0, Math.min(2, Number(amount) ?? 1));
+  }
+
+  update(time, dt = 1 / 60) {
+    this._motion += (this.motion - this._motion) * (1 - Math.exp(-3 * dt));
+    this.amplitude = this.baseAmplitude * this._motion;
+    this.breathe = this.baseBreathe * this._motion;
     // Ratios chosen irrational-ish (no small common multiple) so the two
     // axes never come back into step.
     this.x = this.amplitude * (

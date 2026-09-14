@@ -18,6 +18,7 @@ import { createGL, Blend } from './gl.js';
 import { ShaderPass, RenderTarget } from './pass.js';
 import { LightRig } from './lighting.js';
 import { Camera } from './camera.js';
+import { Wind } from './wind.js';
 
 const BRIGHT_PASS = /* glsl */ `
 uniform sampler2D uScene;
@@ -51,11 +52,25 @@ uniform sampler2D uScene;
 uniform sampler2D uBloom;
 uniform float uBloomStrength;
 uniform float uExposure;
+uniform float uSaturation;
+uniform vec2 uInvResolution;
 void main() {
   vec4 scene = texture(uScene, vUV);
   vec4 bloom = texture(uBloom, vUV) * uBloomStrength;
   vec3 lit = (scene.rgb + bloom.rgb) * uExposure;
   lit = tonemap(lit);
+  // Saturation is applied AFTER the tonemap, where the values are the
+  // ones the eye will actually see: pushing it before the curve just
+  // moves highlights around and desaturates them again on the way out.
+  float luma = dot(lit, vec3(0.2126, 0.7152, 0.0722));
+  lit = mix(vec3(luma), lit, uSaturation);
+  // An ordered dither of well under one 8-bit step. Night skies and the
+  // wide soft falloff of a bloom are exactly the content that bands on
+  // an 8-bit surface, and a sub-LSB dither is what removes the rings
+  // without being visible as noise.
+  vec2 px = vUV / max(uInvResolution, vec2(1e-6));
+  float dither = fract(sin(dot(floor(px), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+  lit += dither * (0.6 / 255.0);
   // Alpha carries through so the window stays transparent where nothing
   // was drawn; bloom contributes opacity, because light spilling in front
   // of the desktop should actually cover it.
@@ -83,6 +98,7 @@ export class Renderer {
     this.caps = created.caps;
 
     this.camera = new Camera(options.camera);
+    this.wind = new Wind(options.wind);
     this.rig = new LightRig();
     this.scene = null;
 
@@ -110,10 +126,17 @@ export class Renderer {
     this.renderScale = Math.min(1, Math.max(0.35, options.renderScale ?? 1));
     this.bloomStrength = options.bloomStrength ?? 0.85;
     this.exposure = options.exposure ?? 1.0;
+    this.saturation = options.saturation ?? 1.0;
 
     this.time = 0;
     this.lastFrameAt = 0;
     this.lastTick = 0;
+    // The smoothed frame interval the simulation is advanced by. Vsync
+    // delivers rAF timestamps that jitter by a millisecond or two even
+    // when nothing is dropping frames, and feeding that raw jitter into
+    // a position integrator is precisely what reads as micro-stutter on
+    // a slow, smooth motion like a drifting camera or a swaying branch.
+    this.smoothDt = 1 / 60;
     this.running = false;
     this.rafId = null;
     this._stats = { fps: 0, cpuMs: 0, frames: 0, accum: 0, since: 0, draws: 0 };
@@ -149,6 +172,33 @@ export class Renderer {
     this.fpsLimit = this.caps.software
       ? (requested > 0 ? Math.min(requested, 20) : 20)
       : requested;
+    // Re-phase rather than carry a stale deadline: without this, raising
+    // the cap mid-session waits out the OLD period once before the first
+    // faster frame, which is felt as a hitch exactly at the moment the
+    // user expected things to get smoother.
+    this.lastFrameAt = 0;
+  }
+
+  /// Grade controls. All three are per-frame uniforms on the composite
+  /// pass, so they are free to change every frame and never trigger a
+  /// resize or a reallocation — which is what makes them safe to drive
+  /// straight from a settings slider.
+  setGrade({ exposure, bloomStrength, saturation } = {}) {
+    if (exposure !== undefined) this.exposure = Math.max(0.2, Math.min(2.5, Number(exposure) || 1));
+    if (bloomStrength !== undefined) {
+      this.bloomStrength = Math.max(0, Math.min(2.5, Number(bloomStrength) || 0));
+    }
+    if (saturation !== undefined) {
+      this.saturation = Math.max(0, Math.min(2, Number(saturation) || 1));
+    }
+  }
+
+  setWind(opts) {
+    this.wind.set(opts);
+  }
+
+  setCameraMotion(amount) {
+    this.camera.setMotion(amount);
   }
 
   /// Called by the automatic quality governor, never directly by user
@@ -219,12 +269,34 @@ export class Renderer {
     const tick = (now) => {
       this.rafId = requestAnimationFrame(tick);
       if (!this.running) return;
-      if (this.fpsLimit > 0 && now - this.lastFrameAt < 1000 / this.fpsLimit - 0.5) return;
-      this.lastFrameAt = now;
+      if (this.fpsLimit > 0) {
+        const period = 1000 / this.fpsLimit;
+        // Advance the DEADLINE by exactly one period rather than resetting
+        // it to `now`. Snapping to `now` quantises every frame up to the
+        // next display refresh and then starts the next period from there,
+        // so a 30 fps cap on a 120 Hz panel drifts to ~26 and the interval
+        // alternates 33/42 ms — visible as a limp in any steady motion.
+        // Half a refresh of tolerance lets a frame that arrives a hair
+        // early still count, instead of being pushed a whole refresh late.
+        if (now < this.lastFrameAt + period - 1.0) return;
+        this.lastFrameAt = this.lastFrameAt + period;
+        // If we fell more than a period behind (a stall, a hidden window,
+        // a cap that just changed) the deadline is stale and catching it
+        // up would burst several frames back to back. Re-phase to now.
+        if (now - this.lastFrameAt > period) this.lastFrameAt = now;
+      }
       // Clamped: a hidden window or a sleeping display produces a dt of
       // seconds, which would teleport every particle in one step.
-      const dt = Math.min(0.05, (now - this.lastTick) / 1000);
+      const raw = Math.min(0.05, Math.max(0, (now - this.lastTick) / 1000));
       this.lastTick = now;
+      // Smoothed for the simulation, but only while the interval is
+      // stable: a genuine change of pace (the cap moved, the machine is
+      // struggling) must be followed immediately, or the scene would run
+      // in slow motion for a second every time the frame rate changes.
+      this.smoothDt = Math.abs(raw - this.smoothDt) > this.smoothDt * 0.5
+        ? raw
+        : this.smoothDt + (raw - this.smoothDt) * 0.2;
+      const dt = this.smoothDt;
       this.time += dt;
       this.frame(dt, now);
     };
@@ -241,13 +313,15 @@ export class Renderer {
     const gl = this.gl;
     const t0 = performance.now();
 
-    this.camera.update(this.time);
+    this.camera.update(this.time, dt);
+    this.wind.update(dt, this.time);
     this.rig.clear();
 
     const ctx = {
       gl,
       renderer: this,
       camera: this.camera,
+      wind: this.wind,
       rig: this.rig,
       time: this.time,
       dt,
@@ -309,6 +383,8 @@ export class Renderer {
     gl.uniform1i(u.uBloom, this.bloomA ? this.bloomA.bindTexture(1) : this.sceneTarget.bindTexture(1));
     gl.uniform1f(u.uBloomStrength, this.bloomA ? this.bloomStrength : 0);
     gl.uniform1f(u.uExposure, this.exposure);
+    gl.uniform1f(u.uSaturation, this.saturation);
+    gl.uniform2f(u.uInvResolution, 1 / this.width, 1 / this.height);
     this.composite.draw();
 
     // --- stats ---------------------------------------------------------

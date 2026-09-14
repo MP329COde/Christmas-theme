@@ -94,6 +94,61 @@ test('CPU cost per frame stays small', async ({ page }) => {
   expect(cpuMs).toBeLessThan(2);
 });
 
+test.describe('the shared wind field', () => {
+  test('advances continuously and can be stilled', async ({ page }) => {
+    const a = await page.evaluate(() => window.sceneLab.getWind());
+    await page.waitForTimeout(600);
+    const b = await page.evaluate(() => window.sceneLab.getWind());
+    // The wind clock is what every layer's displacement is sampled
+    // against. If it stops advancing, the whole tree freezes while still
+    // rendering, which no pixel test would notice.
+    expect(b.phase).toBeGreaterThan(a.phase);
+
+    await page.evaluate(() => window.sceneLab.setWindField({ strength: 0 }));
+    await page.waitForTimeout(500);
+    const still = await page.evaluate(() => window.sceneLab.renderer.wind.uniforms(1).gust);
+    // Strength 0 must mean genuinely no displacement, not merely a small
+    // one: "still air" is a setting a user can pick.
+    expect(still).toBe(0);
+  });
+
+  test('gusts, rather than oscillating on one rate', async ({ page }) => {
+    const samples = [];
+    for (let i = 0; i < 12; i++) {
+      samples.push(await page.evaluate(() => window.sceneLab.getWind().gust));
+      await page.waitForTimeout(220);
+    }
+    const min = Math.min(...samples);
+    const max = Math.max(...samples);
+    // Every value positive (a gust never inverts into a suction) and the
+    // envelope actually varies — a constant field would animate nothing.
+    expect(min).toBeGreaterThan(0);
+    expect(max - min).toBeGreaterThan(0.01);
+  });
+});
+
+test('the ribbon is one extra draw call, and switching it off costs nothing', async ({ page }) => {
+  await page.waitForTimeout(600);
+  const withRibbon = (await page.evaluate(() => window.sceneLab.getStats())).draws;
+  await page.evaluate(() => window.sceneLab.setTreeOption('ribbon', false, { rebuild: true }));
+  await page.waitForTimeout(900);
+  const without = (await page.evaluate(() => window.sceneLab.getStats())).draws;
+  expect(withRibbon - without).toBe(1);
+});
+
+test('grade controls never rebuild geometry', async ({ page }) => {
+  const before = await page.evaluate(() => window.sceneLab.getInstanceCount());
+  await page.evaluate(() => {
+    window.sceneLab.setGrade({ exposure: 1.6, bloomStrength: 0.2, saturation: 0.4 });
+    window.sceneLab.setCameraMotion(0);
+  });
+  await page.waitForTimeout(500);
+  // These are per-frame uniforms. If any of them reallocated a batch,
+  // dragging the slider in the settings window would stutter the scene.
+  expect(await page.evaluate(() => window.sceneLab.getInstanceCount())).toBe(before);
+  expect(page.errorsSeen).toEqual([]);
+});
+
 test.describe('production overlay adoption', () => {
   // Small viewport on purpose: this project rasterises in software, where
   // a full-size frame takes long enough to starve the page. What is being

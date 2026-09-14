@@ -16,7 +16,8 @@ import {
 } from '../shared/bridge.js';
 import {
   LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, defaultScene, defaultScreen,
-  defaultTree, defaultFireplace, screenConfig, makePreset,
+  defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
+  resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
 
 const panels = {
@@ -98,6 +99,34 @@ function dropdown({ id, label, value, options, onChange }) {
     select.append(el('option', { value: val, selected: String(val) === String(value) }, text));
   }
   return label ? el('div', {}, el('label', { for: id, text: label }), select) : select;
+}
+
+/// A labelled colour well. Deep customisation is mostly colour, and a
+/// bare colour input gives no clue what it belongs to.
+function colorField({ id, label, value, onInput }) {
+  return el('div', { class: 'color-field' },
+    el('label', { for: id, text: label }),
+    el('input', {
+      type: 'color', id, 'data-testid': id, value,
+      oninput: (e) => onInput(e.target.value),
+    }));
+}
+
+/// A collapsed group. The per-element cards now carry a lot of controls,
+/// and showing all of them at once turns the panel into a wall of
+/// sliders: the common half stays visible, the rest is one click away
+/// and REMEMBERS being open across re-renders — every edit rebuilds the
+/// panel, so without this a drawer would slam shut on every keystroke.
+const openSections = new Set();
+function section(key, title, ...children) {
+  return el('details', {
+    class: 'section', open: openSections.has(key) || undefined,
+    'data-testid': `section-${key}`,
+    ontoggle: (e) => {
+      if (e.target.open) openSections.add(key);
+      else openSections.delete(key);
+    },
+  }, el('summary', { text: title }), ...children);
 }
 
 function setStatus(text) {
@@ -401,6 +430,7 @@ function renderScene() {
   // --- trees -----------------------------------------------------------
   panel.append(el('h2', { text: `Trees (${cfg.trees.length})` }));
   cfg.trees.forEach((tree, i) => {
+    const needles = resolveNeedles(tree);
     panel.append(el('div', { class: 'card', 'data-testid': `tree-card-${i}` },
       el('div', { class: 'card-head' },
         el('div', { class: 'card-title' }, '🎄 Tree',
@@ -442,11 +472,86 @@ function renderScene() {
           value: Math.round(tree.snow * 100), format: (v) => `${v}%`,
           onInput: (v) => editScreen((s) => { s.trees[i].snow = v / 100; }),
         })),
-      toggle({ id: `tree-${i}-ribbon`, label: 'Ribbon', checked: tree.ribbon,
+
+      // --- foliage -------------------------------------------------------
+      section(`tree-${i}-foliage`, '🌲 Foliage & finish',
+        dropdown({
+          id: `tree-${i}-needle-mode`, label: 'Needle colour',
+          value: tree.needleColors ?? 'auto',
+          options: [['auto', 'From the species'], ['custom', 'Custom']],
+          onChange: (v) => editScreen((s) => {
+            // Seed the custom pair from whatever is on screen right now,
+            // so switching to Custom is a starting point rather than a
+            // jump to an unrelated green.
+            if (v === 'custom') {
+              s.trees[i].needleDark = needles.dark;
+              s.trees[i].needleLight = needles.light;
+            }
+            s.trees[i].needleColors = v;
+          }),
+        }),
+        (tree.needleColors === 'custom') && el('div', { class: 'grid-2' },
+          colorField({
+            id: `tree-${i}-needle-dark`, label: 'Shadow', value: needles.dark,
+            onInput: (v) => editScreen((s) => { s.trees[i].needleDark = v; }),
+          }),
+          colorField({
+            id: `tree-${i}-needle-light`, label: 'Highlight', value: needles.light,
+            onInput: (v) => editScreen((s) => { s.trees[i].needleLight = v; }),
+          })),
+        el('div', { class: 'grid-2' },
+          slider({
+            id: `tree-${i}-frost`, label: 'Frost on the tips', min: 0, max: 100, step: 5,
+            value: Math.round(resolveFrost(tree) * 100), format: (v) => `${v}%`,
+            onInput: (v) => editScreen((s) => { s.trees[i].frost = v / 100; }),
+          }),
+          slider({
+            id: `tree-${i}-sway`, label: 'Sway in the wind', min: 0, max: 200, step: 10,
+            value: Math.round((tree.sway ?? 1) * 100), format: (v) => `${v}%`,
+            onInput: (v) => editScreen((s) => { s.trees[i].sway = v / 100; }),
+          })),
+        slider({
+          id: `tree-${i}-gloss`, label: 'Bauble finish', min: 0, max: 100, step: 5,
+          value: Math.round((tree.ornamentGloss ?? 1) * 100),
+          format: (v) => (v < 25 ? 'Matte' : v > 75 ? 'Mirror glass' : 'Satin'),
+          onInput: (v) => editScreen((s) => { s.trees[i].ornamentGloss = v / 100; }),
+        })),
+
+      // --- ribbon --------------------------------------------------------
+      toggle({ id: `tree-${i}-ribbon`, label: '🎀 Ribbon wrapped round the tree', checked: tree.ribbon,
         onChange: (v) => editScreen((s) => { s.trees[i].ribbon = v; }) }),
-      toggle({ id: `tree-${i}-star`, label: 'Star on top', checked: tree.star,
+      tree.ribbon && section(`tree-${i}-ribbon-style`, '🎀 Ribbon style',
+        colorField({
+          id: `tree-${i}-ribbon-color`, label: 'Colour', value: tree.ribbonColor ?? '#c0392b',
+          onInput: (v) => editScreen((s) => { s.trees[i].ribbonColor = v; }),
+        }),
+        el('div', { class: 'grid-2' },
+          slider({
+            id: `tree-${i}-ribbon-width`, label: 'Width', min: 40, max: 220, step: 10,
+            value: Math.round((tree.ribbonWidth ?? 1) * 100), format: (v) => `${v}%`,
+            onInput: (v) => editScreen((s) => { s.trees[i].ribbonWidth = v / 100; }),
+          }),
+          slider({
+            id: `tree-${i}-ribbon-turns`, label: 'Turns', min: 1, max: 9, step: 1,
+            value: tree.ribbonTurns ?? 4, format: (v) => `${v}×`,
+            onInput: (v) => editScreen((s) => { s.trees[i].ribbonTurns = v; }),
+          }))),
+
+      // --- star ----------------------------------------------------------
+      toggle({ id: `tree-${i}-star`, label: '⭐ Star on top', checked: tree.star,
         onChange: (v) => editScreen((s) => { s.trees[i].star = v; }) }),
-      toggle({ id: `tree-${i}-lights`, label: 'String lights', checked: tree.lightsOn,
+      tree.star && section(`tree-${i}-star-style`, '⭐ Star style',
+        colorField({
+          id: `tree-${i}-star-color`, label: 'Colour', value: tree.starColor ?? '#fff0c2',
+          onInput: (v) => editScreen((s) => { s.trees[i].starColor = v; }),
+        }),
+        slider({
+          id: `tree-${i}-star-size`, label: 'Flare size', min: 40, max: 200, step: 10,
+          value: Math.round((tree.starSize ?? 1) * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.trees[i].starSize = v / 100; }),
+        })),
+
+      toggle({ id: `tree-${i}-lights`, label: '💡 String lights', checked: tree.lightsOn,
         onChange: (v) => editScreen((s) => { s.trees[i].lightsOn = v; }) }),
       tree.lightsOn && el('div', { class: 'card nested' },
         ...lightStyleEditor(`tree-${i}`, tree.lights,
@@ -604,6 +709,67 @@ function renderLights() {
       id: 'theme-select', label: 'Colour theme', value: settings.themeId,
       options: themes.map((t) => [t.id, t.name]),
       onChange: (v) => { settings.themeId = v; applyThemeColors(); persist(); },
+    })));
+
+  // --- atmosphere ------------------------------------------------------
+  // Everything here is a per-frame uniform on the GPU renderer: the grade
+  // the post chain applies, the weather every layer answers to, and how
+  // much the camera drifts. None of it rebuilds geometry, so all of it is
+  // safe to drag continuously — which is exactly why it belongs on a
+  // slider rather than in a JSON file.
+  const look = { ...defaultLook(), ...(currentScreen().look ?? {}) };
+  const editLook = (key) => (v) => editScreen((s) => {
+    s.look = { ...defaultLook(), ...(s.look ?? {}), [key]: v };
+  });
+
+  panel.append(el('h2', { text: 'Atmosphere' }));
+  panel.append(el('div', { class: 'card' },
+    el('p', { class: 'hint', text: 'Applies to the 3D scene on the selected screen. These are render settings, not decorations — they change every frame instantly and cost nothing.' }),
+    el('div', { class: 'grid-2' },
+      slider({
+        id: 'look-exposure', label: 'Exposure', min: 40, max: 200, step: 5,
+        value: Math.round(look.exposure * 100), format: (v) => `${v}%`,
+        onInput: (v) => editLook('exposure')(v / 100),
+      }),
+      slider({
+        id: 'look-bloom', label: 'Light bloom', min: 0, max: 200, step: 5,
+        value: Math.round(look.bloom * 100), format: (v) => `${v}%`,
+        onInput: (v) => editLook('bloom')(v / 100),
+      })),
+    slider({
+      id: 'look-saturation', label: 'Colour intensity', min: 0, max: 180, step: 5,
+      value: Math.round(look.saturation * 100),
+      format: (v) => (v === 0 ? 'Black & white' : `${v}%`),
+      onInput: (v) => editLook('saturation')(v / 100),
+    })));
+
+  panel.append(el('h2', { text: 'Wind' }));
+  panel.append(el('div', { class: 'card' },
+    el('p', { class: 'hint', text: 'One wind field drives the whole scene, so the baubles, the lights and the ribbon ride the same gust as the branch they hang from.' }),
+    el('div', { class: 'grid-2' },
+      slider({
+        id: 'wind-strength', label: 'Strength', min: 0, max: 250, step: 10,
+        value: Math.round(look.windStrength * 100),
+        format: (v) => (v === 0 ? 'Still air' : `${v}%`),
+        onInput: (v) => editLook('windStrength')(v / 100),
+      }),
+      slider({
+        id: 'wind-gustiness', label: 'Gustiness', min: 0, max: 200, step: 10,
+        value: Math.round(look.windGustiness * 100),
+        format: (v) => (v === 0 ? 'Steady' : `${v}%`),
+        onInput: (v) => editLook('windGustiness')(v / 100),
+      })),
+    slider({
+      id: 'wind-direction', label: 'Prevailing direction', min: -100, max: 100, step: 10,
+      value: Math.round(look.windDirection * 100),
+      format: (v) => (v === 0 ? 'None' : v < 0 ? `← ${-v}%` : `${v}% →`),
+      onInput: (v) => editLook('windDirection')(v / 100),
+    }),
+    slider({
+      id: 'camera-motion', label: 'Camera drift', min: 0, max: 200, step: 10,
+      value: Math.round(look.cameraMotion * 100),
+      format: (v) => (v === 0 ? 'Locked off' : `${v}%`),
+      onInput: (v) => editLook('cameraMotion')(v / 100),
     })));
 }
 
