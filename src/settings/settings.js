@@ -15,7 +15,7 @@ import {
   listScreens, saveBackground, loadBackground,
 } from '../shared/bridge.js';
 import {
-  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, defaultScene, defaultScreen,
+  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, defaultScene, defaultScreen,
   defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
   resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
@@ -387,11 +387,17 @@ function renderScene() {
     toggle({ id: 'aurora-toggle', label: '🌌 Aurora curtains', checked: cfg.aurora,
       onChange: (v) => editScreen((s) => { s.aurora = v; }) }));
   if (cfg.aurora) {
-    sky.append(slider({
-      id: 'aurora-intensity', label: 'Aurora strength', min: 20, max: 200, step: 10,
-      value: Math.round((cfg.auroraIntensity ?? 1) * 100), format: (v) => `${v}%`,
-      onInput: (v) => editScreen((s) => { s.auroraIntensity = v / 100; }),
-    }));
+    sky.append(
+      dropdown({
+        id: 'aurora-palette', label: 'Aurora palette', value: cfg.auroraPalette ?? 'classic',
+        options: Object.keys(AURORA_PALETTES).map((name) => [name, name[0].toUpperCase() + name.slice(1)]),
+        onChange: (v) => editScreen((s) => { s.auroraPalette = v; }),
+      }),
+      slider({
+        id: 'aurora-intensity', label: 'Aurora strength', min: 20, max: 200, step: 10,
+        value: Math.round((cfg.auroraIntensity ?? 1) * 100), format: (v) => `${v}%`,
+        onInput: (v) => editScreen((s) => { s.auroraIntensity = v / 100; }),
+      }));
   }
   sky.append(
     toggle({ id: 'stars-toggle', label: '⭐ Stars & shooting stars', checked: cfg.stars,

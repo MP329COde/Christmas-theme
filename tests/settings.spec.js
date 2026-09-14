@@ -108,6 +108,14 @@ test('sky toggles default on and respond', async ({ page }) => {
   }
 });
 
+test('an aurora palette is saved per screen', async ({ page }) => {
+  await page.selectOption('[data-testid="aurora-palette"]', 'arctic');
+  await page.waitForTimeout(300);
+  const palette = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].auroraPalette);
+  expect(palette).toBe('arctic');
+});
+
 test('background image controls appear only in image mode', async ({ page }) => {
   await expect(page.locator('[data-testid="background-file"]')).toHaveCount(0);
   await page.selectOption('[data-testid="background-mode"]', 'image');

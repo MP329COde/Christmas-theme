@@ -15,6 +15,8 @@
 // 'lighter'`), which is both what real light does and what lets these
 // layers sit over a transparent overlay without dimming the desktop.
 
+import { resolveAuroraPalette } from '../shared/scene.js';
+
 // ---------------------------------------------------------------------------
 // helpers (kept local so this module has no import cycle with decor.js)
 // ---------------------------------------------------------------------------
@@ -210,19 +212,21 @@ function bakeHaze(color) {
   return cv;
 }
 
-let auroraCurtains = null;
-function getAurora() {
-  if (auroraCurtains) return auroraCurtains;
+const auroraCurtains = new Map();
+function getAurora(paletteName) {
+  if (auroraCurtains.has(paletteName)) return auroraCurtains.get(paletteName);
   const rand = mulberry32(80211);
+  const palette = resolveAuroraPalette(paletteName);
   // Three curtains at different depths. The far one is slow, wide and
   // dim; the near one is faster and sharper. That difference alone gives
   // the sky depth the old single band never had.
   const specs = [
-    { color: '92,255,176', haze: '64,190,140', depth: 0.35, ray: bakeRay('92,255,176', 0.85), rays: 120, drift: 0.010, base: 0.15, amp: 0.045, alpha: 0.27 },
-    { color: '130,235,255', haze: '80,170,220', depth: 0.65, ray: bakeRay('130,235,255', 0.7), rays: 90, drift: -0.017, base: 0.11, amp: 0.06, alpha: 0.17 },
-    { color: '214,120,255', haze: '150,90,210', depth: 1.0, ray: bakeRay('214,120,255', 0.6), rays: 60, drift: 0.026, base: 0.19, amp: 0.04, alpha: 0.12 },
+    { color: palette.colors[0].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), haze: palette.haze[0].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), depth: 0.35, softness: 0.85, rays: 120, drift: 0.010, base: 0.15, amp: 0.045, alpha: 0.27 },
+    { color: palette.colors[1].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), haze: palette.haze[1].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), depth: 0.65, softness: 0.7, rays: 90, drift: -0.017, base: 0.11, amp: 0.06, alpha: 0.17 },
+    { color: palette.colors[2].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), haze: palette.haze[2].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), depth: 1.0, softness: 0.6, rays: 60, drift: 0.026, base: 0.19, amp: 0.04, alpha: 0.12 },
   ];
   for (const s of specs) {
+    s.ray = bakeRay(s.color, s.softness);
     s.hazeSprite = bakeHaze(s.haze);
     s.phases = new Float32Array(s.rays);
     s.rates = new Float32Array(s.rays);
@@ -233,8 +237,8 @@ function getAurora() {
       s.widths[i] = 0.7 + rand() * 1.5;
     }
   }
-  auroraCurtains = specs;
-  return auroraCurtains;
+  auroraCurtains.set(paletteName, specs);
+  return specs;
 }
 
 /// Where a curtain's lower edge sits at horizontal position `t` (0..1).
@@ -267,9 +271,9 @@ function curtainBase(spec, t, time, h) {
 /// lopsided. The dropped rays' contribution is folded back into the ones
 /// that remain (alpha scaled by the stride) so the curtain doesn't also
 /// go dim as it goes sparse.
-function drawAurora(ctx, w, h, time, gain, detail = 1) {
+function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
   const stride = Math.max(1, Math.round(1 / Math.max(0.08, Math.min(1, detail))));
-  for (const spec of getAurora()) {
+  for (const spec of getAurora(palette)) {
     // Slow horizontal drift, wrapped, so the whole curtain migrates the
     // way a real one does over minutes.
     const shift = ((time * spec.drift) % 1 + 1) % 1;
@@ -405,7 +409,7 @@ export function drawSky(ctx, w, h, time, opts = {}) {
   ctx.globalCompositeOperation = 'lighter';
 
   if (opts.aurora) {
-    drawAurora(ctx, w, h, time, gain, opts.auroraDetail ?? 1);
+    drawAurora(ctx, w, h, time, gain, opts.auroraDetail ?? 1, opts.auroraPalette);
   }
 
   if (opts.stars) {

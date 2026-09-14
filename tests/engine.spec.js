@@ -221,4 +221,27 @@ test.describe('production overlay adoption', () => {
 
     await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
   });
+
+  test('an aurora palette preserves the WebGL geometry budget', async ({ page }) => {
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer, null,
+      { polling: 300, timeout: 60000 });
+
+    const before = await page.evaluate(
+      () => window.overlayGlTrees.scene.get('northern-lights').instanceCount
+    );
+    await page.evaluate(() => window.overlayGlTrees.sync(
+      { trees: [], aurora: true, auroraPalette: 'arctic' },
+      { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' }
+    ));
+    const aurora = await page.evaluate(() => {
+      const layer = window.overlayGlTrees.scene.get('northern-lights');
+      return { count: layer.instanceCount, palette: layer.opts.palette };
+    });
+
+    expect(aurora.palette).toBe('arctic');
+    expect(aurora.count).toBe(before);
+    expect(page.errorsSeen).toEqual([]);
+    await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
 });

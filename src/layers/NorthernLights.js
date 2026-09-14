@@ -31,6 +31,7 @@
 import { Layer } from '../engine/layer.js';
 import { createProgram, Blend } from '../engine/gl.js';
 import { InstancedQuads, InstanceWriter } from '../engine/instanced.js';
+import { resolveAuroraPalette } from '../shared/scene.js';
 
 function mulberry32(seed) {
   return function () {
@@ -61,11 +62,23 @@ function vanDerCorput(n) {
 // Same three curtains, same numbers, as src/overlay/lights.js's
 // getAurora() — the Canvas 2D fallback and this layer are meant to look
 // like the same aurora, not two different ones depending on the GPU.
-const CURTAINS = [
-  { color: [92, 255, 176], haze: [64, 190, 140], depth: 0.35, rays: 120, drift: 0.010, base: 0.15, amp: 0.045, alpha: 0.27 },
-  { color: [130, 235, 255], haze: [80, 170, 220], depth: 0.65, rays: 90, drift: -0.017, base: 0.11, amp: 0.06, alpha: 0.17 },
-  { color: [214, 120, 255], haze: [150, 90, 210], depth: 1.0, rays: 60, drift: 0.026, base: 0.19, amp: 0.04, alpha: 0.12 },
+const CURTAIN_SHAPES = [
+  { depth: 0.35, rays: 120, drift: 0.010, base: 0.15, amp: 0.045, alpha: 0.27 },
+  { depth: 0.65, rays: 90, drift: -0.017, base: 0.11, amp: 0.06, alpha: 0.17 },
+  { depth: 1.0, rays: 60, drift: 0.026, base: 0.19, amp: 0.04, alpha: 0.12 },
 ];
+
+function hexToRgb(hex) {
+  const value = hex.slice(1);
+  return [parseInt(value.slice(0, 2), 16), parseInt(value.slice(2, 4), 16), parseInt(value.slice(4, 6), 16)];
+}
+
+function curtainsForPalette(paletteName) {
+  const palette = resolveAuroraPalette(paletteName);
+  return CURTAIN_SHAPES.map((shape, index) => ({
+    ...shape, color: hexToRgb(palette.colors[index]), haze: hexToRgb(palette.haze[index]),
+  }));
+}
 // i in 0..HAZE_SEGMENTS inclusive: 13 overlapping segments per curtain,
 // matching the Canvas 2D bake's `segs = 12` loop exactly.
 const HAZE_SEGMENTS = 12;
@@ -184,12 +197,13 @@ export class NorthernLights extends Layer {
   _buildInstances() {
     const rand = mulberry32(this.opts.seed);
     const writer = new InstanceWriter(INSTANCE_STRIDE, 320);
+    const curtains = curtainsForPalette(this.opts.palette);
 
     // Haze always comes first and is always drawn in full, whatever the
     // quality tier — it is what keeps the sky reading as a sheet of light
     // rather than going flat black at the lowest tier.
     let hazeCount = 0;
-    for (const c of CURTAINS) {
+    for (const c of curtains) {
       const [hr, hg, hb] = c.haze.map((v) => v / 255);
       for (let i = 0; i <= HAZE_SEGMENTS; i++) {
         const t = i / HAZE_SEGMENTS;
@@ -211,7 +225,7 @@ export class NorthernLights extends Layer {
     // merged by fractional position (0.5, 1.5, 2.5.../length) so a global
     // prefix — the thing automatic degrade actually truncates to — keeps
     // all three depths represented in their original proportion.
-    const perCurtain = CURTAINS.map((c) => {
+    const perCurtain = curtains.map((c) => {
       const [r, g, b] = c.color.map((v) => v / 255);
       const phases = new Float32Array(c.rays);
       const rates = new Float32Array(c.rays);

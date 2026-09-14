@@ -28,6 +28,29 @@ export const LIGHT_PALETTES = {
 
 export const LIGHT_MODES = ['twinkle', 'sparkle', 'chase', 'wave', 'steady'];
 
+export const AURORA_PALETTES = {
+  classic: {
+    colors: ['#5cffb0', '#82ebff', '#d678ff'],
+    haze: ['#40be8c', '#50aadc', '#965ad2'],
+  },
+  emerald: {
+    colors: ['#4dff8a', '#5dffc2', '#8fffd2'],
+    haze: ['#2ca866', '#36b88a', '#4aa88a'],
+  },
+  arctic: {
+    colors: ['#8ff5ff', '#78b9ff', '#d4c8ff'],
+    haze: ['#58c2d2', '#4e7fc4', '#9078c8'],
+  },
+  twilight: {
+    colors: ['#ff7eb6', '#b98cff', '#718cff'],
+    haze: ['#bd5d8c', '#8064be', '#4d63b2'],
+  },
+};
+
+export function resolveAuroraPalette(palette) {
+  return AURORA_PALETTES[palette] ?? AURORA_PALETTES.classic;
+}
+
 /// Species. `dark`/`light` are the two ends of the needle gradient the
 /// WebGL foliage shader mixes between per sprig — they are part of the
 /// species, not a theme colour, because what separates a Nordmann from a
@@ -200,6 +223,7 @@ export function defaultScreen(overrides = {}) {
     look: defaultLook(),
     aurora: true,
     auroraIntensity: 1,
+    auroraPalette: 'classic',
     stars: true,
     icicles: true,
     snowGlitter: true,
