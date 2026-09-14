@@ -149,25 +149,6 @@ test('grade controls never rebuild geometry', async ({ page }) => {
   expect(page.errorsSeen).toEqual([]);
 });
 
-test('lighting-rig controls warm ambient light and add fireplace spill', async ({ page }) => {
-  const before = await page.evaluate(() => window.sceneLab.getInstanceCount());
-  const rig = await page.evaluate(() => {
-    window.sceneLab.renderer.setLightingRig({
-      ambientWarmth: 2, fireplaceContribution: 0.5, fireplaces: [{ x: 0.25 }],
-    });
-    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve({
-      sky: window.sceneLab.renderer.rig.ambientSky,
-      fireplaceContribution: window.sceneLab.renderer.fireplaceContribution,
-      lightCount: window.sceneLab.renderer.rig.count,
-    }))));
-  });
-  expect(rig.sky[0]).toBeGreaterThan(rig.sky[2] / 3);
-  expect(rig.fireplaceContribution).toBe(0.5);
-  expect(rig.lightCount).toBeGreaterThan(10);
-  expect(await page.evaluate(() => window.sceneLab.getInstanceCount())).toBe(before);
-  expect(page.errorsSeen).toEqual([]);
-});
-
 test.describe('production overlay adoption', () => {
   // Small viewport on purpose: this project rasterises in software, where
   // a full-size frame takes long enough to starve the page. What is being

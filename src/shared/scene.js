@@ -187,8 +187,6 @@ export function defaultLook(overrides = {}) {
     exposure: 1,
     bloom: 0.85,
     saturation: 1,
-    ambientWarmth: 1,
-    fireplaceContribution: 1,
     windStrength: 1,
     windGustiness: 1,
     windDirection: 0,

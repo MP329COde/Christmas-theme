@@ -137,17 +137,6 @@ test('a camera-motion profile is saved per screen', async ({ page }) => {
   expect(profile).toBe('gentle');
 });
 
-test('lighting-rig controls are saved per screen', async ({ page }) => {
-  await page.click('[data-testid="tab-lights"]');
-  await page.locator('[data-testid="ambient-warmth"]').fill('150');
-  await page.locator('[data-testid="look-bloom"]').fill('60');
-  await page.locator('[data-testid="fireplace-contribution"]').fill('40');
-  await page.waitForTimeout(300);
-  const look = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].look);
-  expect(look).toMatchObject({ ambientWarmth: 1.5, bloom: 0.6, fireplaceContribution: 0.4 });
-});
-
 test('background image controls appear only in image mode', async ({ page }) => {
   await expect(page.locator('[data-testid="background-file"]')).toHaveCount(0);
   await page.selectOption('[data-testid="background-mode"]', 'image');

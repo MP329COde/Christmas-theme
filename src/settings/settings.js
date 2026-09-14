@@ -762,17 +762,6 @@ function renderLights() {
         value: Math.round(look.bloom * 100), format: (v) => `${v}%`,
         onInput: (v) => editLook('bloom')(v / 100),
       })),
-    el('div', { class: 'grid-2' },
-      slider({
-        id: 'ambient-warmth', label: 'Ambient warmth', min: 0, max: 200, step: 5,
-        value: Math.round(look.ambientWarmth * 100), format: (v) => `${v}%`,
-        onInput: (v) => editLook('ambientWarmth')(v / 100),
-      }),
-      slider({
-        id: 'fireplace-contribution', label: 'Fireplace contribution', min: 0, max: 200, step: 5,
-        value: Math.round(look.fireplaceContribution * 100), format: (v) => `${v}%`,
-        onInput: (v) => editLook('fireplaceContribution')(v / 100),
-      })),
     slider({
       id: 'look-saturation', label: 'Colour intensity', min: 0, max: 180, step: 5,
       value: Math.round(look.saturation * 100),

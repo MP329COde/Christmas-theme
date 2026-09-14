@@ -35,6 +35,7 @@ async function boot() {
   // real GPU, 'webgl' forces it even on a software rasteriser, 'canvas'
   // never uses it. The query parameter overrides it, which is how the
   // test harness drives both paths on one machine.
+  await window.snowOverlayReady;
   const params = new URLSearchParams(location.search);
   const stored = await getSettings().catch(() => ({}));
   const preference = params.get('renderer') ?? stored?.renderer ?? 'auto';
