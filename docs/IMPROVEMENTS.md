@@ -25,9 +25,13 @@ The Christmas tree is validated and is intentionally out of scope for this roadm
 - Per-screen profiles range from locked-off framing to immersive drift while preserving existing camera-motion values.
 - The default system profile honors the operating system's reduced-motion preference.
 
+## Completed: Lighting-rig editor
+
+- Per-screen controls tune ambient warmth, bloom, and fireplace contribution while preserving the existing default look.
+- The Canvas fireplace spill and WebGL tree rig resolve the same fireplace contribution.
+
 ## Next tasks
 
-- Add a lighting-rig editor for ambient warmth, bloom, and fireplace contribution.
 - Add preview thumbnails for saved scene presets.
 - Add a real-GPU performance diagnostic with frame-time history and quality-tier explanation.
 - Add visual regression coverage for every sky palette and degraded quality tier.

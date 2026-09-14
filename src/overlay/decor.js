@@ -1094,7 +1094,7 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   }
   const fireCacheEntry = cached;
   const { sprite, geom, lights, flame } = cached;
-  const gain = (opts.lightIntensity ?? 1) * (spec.lights?.intensity ?? 1);
+  const gain = (opts.lightIntensity ?? 1) * (opts.fireplaceContribution ?? 1) * (spec.lights?.intensity ?? 1);
   const palette = spec.palette ?? ['#ffd79a'];
   const mode = spec.lights?.mode ?? opts.lightAnimation;
   const speed = spec.lights?.speed ?? 1;

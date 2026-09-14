@@ -735,6 +735,7 @@ tick();
 window.snowOverlay = {
   setDensity, setConfig, setFpsLimit, getParticleCount, getStats, start, stop,
   getSnowConfig: () => ({ ...config }),
+  getDecorConfig: () => ({ ...decorConfig }),
   onQualityTierChanged, getQualityTier,
   /// Test-only hook: feeds a synthetic frame cost straight into the
   /// quality governor, bypassing the real render loop entirely, so a
@@ -794,6 +795,7 @@ function applyThemeAndSettings(theme, settings) {
   decorConfig = {
     lightAnimation: settings?.lightAnimation ?? 'twinkle',
     lightIntensity: settings?.lightIntensity ?? 1,
+    fireplaceContribution: sceneCfg.look?.fireplaceContribution ?? 1,
     decorScale: settings?.decorScale ?? 1,
   };
 

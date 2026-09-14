@@ -127,6 +127,9 @@ export class Renderer {
     this.bloomStrength = options.bloomStrength ?? 0.85;
     this.exposure = options.exposure ?? 1.0;
     this.saturation = options.saturation ?? 1.0;
+    this.ambientWarmth = 1;
+    this.fireplaceContribution = 1;
+    this.fireplaces = [];
 
     this.time = 0;
     this.lastFrameAt = 0;
@@ -191,6 +194,16 @@ export class Renderer {
     if (saturation !== undefined) {
       this.saturation = Math.max(0, Math.min(2, Number(saturation) || 1));
     }
+  }
+
+  /// Lighting rig controls are uniforms and a small fixed light list, so
+  /// they remain safe to adjust continuously from the settings window.
+  setLightingRig({ ambientWarmth, fireplaceContribution, fireplaces } = {}) {
+    if (ambientWarmth !== undefined) this.ambientWarmth = Math.max(0, Math.min(2, Number(ambientWarmth) || 0));
+    if (fireplaceContribution !== undefined) {
+      this.fireplaceContribution = Math.max(0, Math.min(2, Number(fireplaceContribution) || 0));
+    }
+    if (fireplaces !== undefined) this.fireplaces = fireplaces ?? [];
   }
 
   setWind(opts) {
@@ -316,6 +329,9 @@ export class Renderer {
     this.camera.update(this.time, dt);
     this.wind.update(dt, this.time);
     this.rig.clear();
+    const warmth = this.ambientWarmth;
+    this.rig.ambientSky = [0.04 + 0.015 * warmth, 0.06 + 0.022 * warmth, 0.16 - 0.015 * warmth];
+    this.rig.ambientGround = [0.012 + 0.004 * warmth, 0.014 + 0.005 * warmth, 0.034 - 0.006 * warmth];
 
     const ctx = {
       gl,
@@ -333,6 +349,12 @@ export class Renderer {
 
     this.scene?.update(dt, this.time, ctx);
     this.scene?.contributeLights(this.rig, this.time);
+    for (const fireplace of this.fireplaces) {
+      this.rig.add(
+        (fireplace.x ?? 0.5) * this.width, this.height * 0.16, 0.5,
+        [1, 0.28, 0.07], 2.4 * this.fireplaceContribution, Math.min(this.width, this.height) * 0.42
+      );
+    }
 
     // --- scene pass ---------------------------------------------------
     this.sceneTarget.bind();

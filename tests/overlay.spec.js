@@ -93,6 +93,17 @@ test('the selected weather profile coordinates snow rendering', async ({ page })
   expect(config.glitterDensity).toBeCloseTo(1.35, 3);
 });
 
+test('the selected fireplace contribution reaches the Canvas renderer', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('christmas-theme-settings', JSON.stringify({
+      themeId: 'classic-red', scene: { screens: { 0: { look: { fireplaceContribution: 0.4 } } } },
+    }));
+  });
+  await page.reload();
+  await page.evaluate(() => window.snowOverlayReady);
+  expect(await page.evaluate(() => window.snowOverlay.getDecorConfig().fireplaceContribution)).toBe(0.4);
+});
+
 test('an empty composition still renders the snow', async ({ page }) => {
   await page.evaluate(() => window.snowOverlayScene.setConfig({
     trees: [], fireplaces: [], garland: { enabled: false },

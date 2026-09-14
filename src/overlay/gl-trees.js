@@ -200,6 +200,11 @@ export class GlTrees {
       bloomStrength: l.bloom,
       saturation: l.saturation,
     });
+    this.renderer.setLightingRig({
+      ambientWarmth: l.ambientWarmth,
+      fireplaceContribution: l.fireplaceContribution,
+      fireplaces: sceneCfg?.fireplaces,
+    });
     this.renderer.setWind({
       strength: l.windStrength,
       gustiness: l.windGustiness,
