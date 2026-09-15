@@ -1163,10 +1163,16 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Fire, clipped to the firebox.
+  // Fire, clipped to the firebox. Rounded to whole pixels: a fractional
+  // clip boundary leaves a 1px semi-transparent fringe around the
+  // additive glow that reads as a dotted/dashed outline once the flame's
+  // breathing animation makes it flicker frame to frame.
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x + geom.ox, y + geom.oy, geom.openW, geom.openH);
+  ctx.rect(
+    Math.round(x + geom.ox), Math.round(y + geom.oy),
+    Math.round(geom.openW), Math.round(geom.openH)
+  );
   ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
 

@@ -489,7 +489,12 @@ export function start() {
 function drawFlake(target, f) {
   target.globalAlpha = f.opacity;
 
-  if (!f.isCrystal || f.r < 2.2) {
+  // Below this size the dendrite's thin arms downscale past legibility —
+  // the six branch tips sit at a near-constant radius, so anti-aliasing
+  // blurs them into a faint ring instead of a visible star. The soft
+  // gradient sprite reads correctly at any size, so small crystals fall
+  // back to it rather than draw an illegible hollow circle.
+  if (!f.isCrystal || f.r < 4) {
     const size = f.r * 4;
     target.drawImage(flakeSprites[f.layer], f.x - size / 2, f.y - size / 2, size, size);
     return;
@@ -534,6 +539,10 @@ function stepFlake(f, gust) {
   }
 }
 
+function clampHeight(v) {
+  return Number.isFinite(v) ? Math.max(0, Math.min(config.maxSnowHeight, v)) : 0;
+}
+
 function rebuildBank() {
   if (!bankCanvas || bankCanvas.width !== viewW || bankCanvas.height !== viewH) {
     bankCanvas = document.createElement('canvas');
@@ -555,9 +564,13 @@ function rebuildBank() {
   }
   const ridge = ridgeBuffer;
   for (let i = 0; i < accumulation.length; i++) {
-    const a = accumulation[Math.max(0, i - 1)];
-    const m = accumulation[i];
-    const c = accumulation[Math.min(accumulation.length - 1, i + 1)];
+    // Guard against NaN/negative/out-of-range columns — a resize can land
+    // between two accumulate() calls, and a single corrupt column here
+    // used to stretch the smoothed curve into a jagged spike across the
+    // whole width instead of a soft bank.
+    const a = clampHeight(accumulation[Math.max(0, i - 1)]);
+    const m = clampHeight(accumulation[i]);
+    const c = clampHeight(accumulation[Math.min(accumulation.length - 1, i + 1)]);
     ridge[i] = (a + m * 2 + c) / 4;
   }
 

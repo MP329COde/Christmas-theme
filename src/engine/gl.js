@@ -36,6 +36,19 @@ export function createGL(canvas, overrides = {}) {
   }
   if (!gl) return null;
 
+  // A webview can silently grant a context that ignores the alpha/
+  // premultipliedAlpha we asked for (composites the canvas as opaque
+  // instead of blending it into the desktop behind it). That is exactly
+  // how an additive-blended layer like the aurora turns into solid white
+  // bars, and how any area the shaders leave untouched paints black
+  // instead of transparent. `getContextAttributes()` reports what was
+  // ACTUALLY negotiated, not what we requested, so this is the only
+  // reliable way to catch it before adopting the renderer.
+  const attrs = gl.getContextAttributes?.();
+  if (!attrs?.alpha || !attrs?.premultipliedAlpha) {
+    return null;
+  }
+
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   const caps = {
     renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
