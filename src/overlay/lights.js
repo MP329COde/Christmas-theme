@@ -249,12 +249,16 @@ function getAurora(paletteName) {
 }
 
 /// Where a curtain's lower edge sits at horizontal position `t` (0..1).
-/// Two slow waves of different wavelength beating against each other: the
-/// curtain folds and unfolds instead of sliding as a rigid shape.
+/// Three waves of unrelated wavelength beating against each other: two
+/// slow ones fold and unfold the curtain as a whole, and a third, faster
+/// one breaks up the resulting line with the small irregular wrinkles a
+/// real curtain has along its base — without it the fold reads as one
+/// smooth, symmetrical arc, which is closer to a diagram than a sky.
 function curtainBase(spec, t, time, h) {
   return h * spec.base
     + Math.sin(t * 6.0 + time * 0.09 + spec.depth * 3.0) * h * spec.amp
-    + Math.sin(t * 2.3 - time * 0.055) * h * spec.amp * 1.4;
+    + Math.sin(t * 2.3 - time * 0.055) * h * spec.amp * 1.4
+    + Math.sin(t * 17.0 + spec.depth * 7.0 + time * 0.14) * h * spec.amp * 0.32;
 }
 
 /// Drawn straight onto the scene canvas, at full resolution.

@@ -112,10 +112,14 @@ void main() {
   float shift = fract(uTime * aBase.w);
   float t = fract(aBase.x + aPhase.z + shift);
 
-  // Two slow waves beating against each other: the curtain's base line
-  // folds and unfolds rather than sliding as a rigid shape.
+  // Three waves of unrelated wavelength beating against each other: two
+  // slow ones fold and unfold the curtain as a whole, and a third, faster
+  // one breaks the base line up with small irregular wrinkles — matches
+  // the Canvas 2D curtainBase() in overlay/lights.js exactly, so the two
+  // renderers resolve the same shape.
   float wave = sin(t * 6.0 + uTime * 0.09 + depth * 3.0) * aBase.z
-             + sin(t * 2.3 - uTime * 0.055) * aBase.z * 1.4;
+             + sin(t * 2.3 - uTime * 0.055) * aBase.z * 1.4
+             + sin(t * 17.0 + depth * 7.0 + uTime * 0.14) * aBase.z * 0.32;
   float distFromTop = uResolution.y * (aBase.y + wave);
 
   // Each ray breathes on its own rate, and a slow travelling wave runs
