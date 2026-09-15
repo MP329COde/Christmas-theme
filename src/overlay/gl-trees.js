@@ -148,7 +148,7 @@ export class GlTrees {
     // they are applied on EVERY sync, before the signature check bails
     // out: dragging an exposure slider must take effect immediately and
     // must never rebuild the layer set to do it.
-    this.applyLook(sceneCfg.look);
+    this.applyLook(sceneCfg.look, sceneCfg.fireplaces);
 
     const trees = sceneCfg.trees ?? [];
     const aurora = !!sceneCfg.aurora;
@@ -192,13 +192,18 @@ export class GlTrees {
 
   /// Applies the scene's global look. Cheap enough to call every frame;
   /// in practice it is called on every settings save.
-  applyLook(look) {
+  applyLook(look, fireplaces) {
     if (!this.renderer) return;
     const l = { ...defaultLook(), ...(look ?? {}) };
     this.renderer.setGrade({
       exposure: l.exposure,
       bloomStrength: l.bloom,
       saturation: l.saturation,
+    });
+    this.renderer.setLightingRig({
+      ambientWarmth: l.ambientWarmth,
+      fireplaceContribution: l.fireplaceContribution,
+      fireplaces,
     });
     this.renderer.setWind({
       strength: l.windStrength,
