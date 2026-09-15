@@ -894,6 +894,83 @@ function renderPresets() {
     select.append(el('option', { value: p.id, text: p.name }));
   }
   select.value = current;
+  updatePresetThumb(select.value);
+}
+
+function updatePresetThumb(id) {
+  const img = document.getElementById('preset-thumb');
+  const preset = presetList().find((p) => p.id === id);
+  if (preset?.thumbnail) {
+    img.src = preset.thumbnail;
+    img.hidden = false;
+  } else {
+    img.removeAttribute('src');
+    img.hidden = true;
+  }
+}
+
+/// A small (96x60) rendering of a look's sky, snow and trees — sampled
+/// from the settings snapshot rather than the live overlay, since the
+/// settings window has no canvas of its own to capture. Stylised, not a
+/// screenshot: it just needs to read apart from the other presets at a
+/// glance.
+function makePresetThumbnail(snapshot) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 60;
+  const ctx = canvas.getContext('2d');
+  const screen = screenConfig(snapshot.scene, 0);
+  const aurora = AURORA_PALETTES[screen.auroraPalette] ?? AURORA_PALETTES.classic;
+  const weather = WEATHER_PROFILES[screen.weatherProfile] ?? WEATHER_PROFILES.winter;
+
+  const sky = ctx.createLinearGradient(0, 0, 0, 40);
+  sky.addColorStop(0, '#05070f');
+  sky.addColorStop(1, '#101a33');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 96, 40);
+
+  if (screen.aurora) {
+    ctx.globalAlpha = 0.55 * (screen.auroraIntensity ?? 1);
+    aurora.colors.forEach((color, i) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 4 + i * 6, 96, 5);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  if (screen.stars) {
+    ctx.fillStyle = '#ffffff';
+    const count = Math.round(8 * (screen.starDensity ?? 1));
+    for (let i = 0; i < count; i += 1) {
+      const x = (i * 37) % 96;
+      const y = (i * 17) % 34;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  ctx.fillStyle = `rgba(230, 240, 255, ${0.6 + 0.4 * weather.accumulate})`;
+  ctx.fillRect(0, 40, 96, 20);
+
+  for (const fireplace of screen.fireplaces ?? []) {
+    ctx.fillStyle = 'rgba(255, 150, 60, 0.5)';
+    ctx.beginPath();
+    ctx.arc(fireplace.x * 96, 40, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (const tree of screen.trees ?? []) {
+    const { dark, light } = resolveNeedles(tree);
+    ctx.fillStyle = light ?? dark ?? '#2f5f43';
+    const x = tree.x * 96;
+    ctx.beginPath();
+    ctx.moveTo(x, 40 - 18 * (tree.scale ?? 1));
+    ctx.lineTo(x - 6 * (tree.scale ?? 1), 40);
+    ctx.lineTo(x + 6 * (tree.scale ?? 1), 40);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.7);
 }
 
 /// Applying a preset replaces the whole look — scene included — but never
@@ -918,6 +995,7 @@ function applyPreset(id) {
 
 function setupPresetBar() {
   document.getElementById('preset-select').addEventListener('change', (e) => {
+    updatePresetThumb(e.target.value);
     if (e.target.value) applyPreset(e.target.value);
   });
 
@@ -926,8 +1004,12 @@ function setupPresetBar() {
     if (!name) return;
     const snapshot = { ...settings };
     delete snapshot.presets; // a preset never contains the preset list
-    settings.presets = [...presetList(), makePreset(name, snapshot)];
+    const thumbnail = makePresetThumbnail(snapshot);
+    const preset = makePreset(name, snapshot, thumbnail);
+    settings.presets = [...presetList(), preset];
     renderPresets();
+    document.getElementById('preset-select').value = preset.id;
+    updatePresetThumb(preset.id);
     persist({ immediate: true });
     setStatus(`Saved “${name}”`);
   });

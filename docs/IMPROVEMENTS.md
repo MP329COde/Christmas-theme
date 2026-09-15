@@ -30,8 +30,12 @@ The Christmas tree is validated and is intentionally out of scope for this roadm
 - Per-screen controls tune ambient warmth, bloom, and fireplace contribution while preserving the existing default look.
 - The Canvas fireplace spill and WebGL tree rig resolve the same fireplace contribution.
 
+## Completed: Preview thumbnails for saved scene presets
+
+- Saving a preset renders a small stylised thumbnail (sky, aurora, snow line, trees, fireplace glow) from the settings snapshot and stores it alongside the preset.
+- The preset bar shows the thumbnail of the currently selected preset next to the picker.
+
 ## Next tasks
 
-- Add preview thumbnails for saved scene presets.
 - Add a real-GPU performance diagnostic with frame-time history and quality-tier explanation.
 - Add visual regression coverage for every sky palette and degraded quality tier.

@@ -318,11 +318,15 @@ export function screenConfig(scene, index) {
 /// Preset = a named snapshot of the whole look. Stored with the settings
 /// so it survives a restart, and exportable as a plain JSON file so it can
 /// be shared — which is also how a community theme would be distributed.
-export function makePreset(name, settings) {
+export function makePreset(name, settings, thumbnail = null) {
   return {
     id: `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     name,
     createdAt: new Date().toISOString(),
+    // A small dataURL rendering of the look, so a preset list reads at a
+    // glance instead of by name alone. Optional: older presets and
+    // imports from before this existed simply show no thumbnail.
+    thumbnail,
     settings: JSON.parse(JSON.stringify(settings)),
   };
 }

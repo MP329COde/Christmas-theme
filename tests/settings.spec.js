@@ -221,6 +221,20 @@ test('presets can be saved and re-applied', async ({ page }) => {
   await expect(page.locator('[data-testid="snow-density"]')).toHaveValue('500');
 });
 
+test('a saved preset carries a thumbnail image', async ({ page }) => {
+  page.once('dialog', (d) => d.accept('Snowy'));
+  await page.click('[data-testid="preset-save"]');
+  await page.waitForTimeout(250);
+
+  const thumbnail = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).presets[0].thumbnail);
+  expect(thumbnail).toMatch(/^data:image\/jpeg;base64,/);
+
+  const img = page.locator('[data-testid="preset-thumb"]');
+  await expect(img).toBeVisible();
+  await expect(img).toHaveAttribute('src', thumbnail);
+});
+
 test('a preset never carries autostart or the dock toggle', async ({ page }) => {
   page.once('dialog', (d) => d.accept('Look'));
   await page.click('[data-testid="preset-save"]');
