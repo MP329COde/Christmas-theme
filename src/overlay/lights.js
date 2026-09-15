@@ -231,10 +231,17 @@ function getAurora(paletteName) {
     s.phases = new Float32Array(s.rays);
     s.rates = new Float32Array(s.rays);
     s.widths = new Float32Array(s.rays);
+    // Jitters each ray off its even i/rays slot, by up to ~60% of a
+    // slot's width. Without this the rays sit on a perfectly regular
+    // grid, and a regular grid reads as a comb of parallel bars — the
+    // "radio-wave diagram" look — rather than an organic curtain, no
+    // matter how much the rays themselves shimmer.
+    s.offsets = new Float32Array(s.rays);
     for (let i = 0; i < s.rays; i++) {
       s.phases[i] = rand() * Math.PI * 2;
       s.rates[i] = 0.35 + rand() * 1.25;
       s.widths[i] = 0.7 + rand() * 1.5;
+      s.offsets[i] = (rand() - 0.5) * 0.6 / s.rays;
     }
   }
   auroraCurtains.set(paletteName, specs);
@@ -292,7 +299,7 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
     }
 
     for (let i = 0; i < spec.rays; i += stride) {
-      const t = (i / spec.rays + shift) % 1;
+      const t = ((i / spec.rays + spec.offsets[i] + shift) % 1 + 1) % 1;
       const x = t * w;
       const base = curtainBase(spec, t, time, h);
       // Each ray breathes on its own rate, and a slow travelling wave runs
@@ -644,4 +651,11 @@ export function invalidateLights() {
   starField = null;
   glitterPoints = null;
   icicleCache = null;
+}
+
+/// Exposed for tests only: the per-ray off-grid jitter for one curtain of
+/// a palette, so a test can assert on the actual fix (rays not landing on
+/// an even i/rays grid) rather than inferring it from noisy pixel data.
+export function _testAuroraRayOffsets(paletteName = 'classic', curtainIndex = 0) {
+  return Array.from(getAurora(paletteName)[curtainIndex].offsets);
 }

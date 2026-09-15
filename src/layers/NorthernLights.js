@@ -89,7 +89,7 @@ precision highp float;
 in vec2 aCorner;  // shared unit quad corner, from InstancedQuads
 in vec4 aBase;    // t (curtain-fraction position), baseFrac, ampFrac, drift
 in vec4 aShape;   // widthJitter, depth, isRay (1) / isHaze (0), unused
-in vec4 aPhase;   // shimmer phase, shimmer rate, unused, unused
+in vec4 aPhase;   // shimmer phase, shimmer rate, horizontal off-grid jitter, unused
 in vec4 aColorA;  // r, g, b, base alpha
 uniform vec2 uResolution;
 uniform float uTime;
@@ -105,9 +105,11 @@ void main() {
   float isRay = aShape.z;
 
   // Slow horizontal drift, wrapped — the whole curtain migrates sideways
-  // over minutes, same as the Canvas 2D version.
+  // over minutes, same as the Canvas 2D version. aPhase.z is the ray's
+  // fixed off-grid jitter (0 for haze), which keeps rays from landing on
+  // an even i/rays grid — see the module header.
   float shift = fract(uTime * aBase.w);
-  float t = fract(aBase.x + shift);
+  float t = fract(aBase.x + aPhase.z + shift);
 
   // Two slow waves beating against each other: the curtain's base line
   // folds and unfolds rather than sliding as a rigid shape.
@@ -230,15 +232,20 @@ export class NorthernLights extends Layer {
       const phases = new Float32Array(c.rays);
       const rates = new Float32Array(c.rays);
       const widths = new Float32Array(c.rays);
+      // Same off-grid jitter as the Canvas 2D fallback (src/overlay/lights.js)
+      // — without it every ray sits on the even i/rays slot and the whole
+      // curtain reads as a comb of parallel bars instead of an organic sheet.
+      const offsets = new Float32Array(c.rays);
       for (let i = 0; i < c.rays; i++) {
         phases[i] = rand() * Math.PI * 2;
         rates[i] = 0.35 + rand() * 1.25;
         widths[i] = 0.7 + rand() * 1.5;
+        offsets[i] = (rand() - 0.5) * 0.6 / c.rays;
       }
       const order = [...Array(c.rays).keys()].sort(
         (a, b2) => vanDerCorput(a) - vanDerCorput(b2)
       );
-      return { c, r, g, b, phases, rates, widths, order };
+      return { c, r, g, b, phases, rates, widths, offsets, order };
     });
 
     const merged = [];
@@ -256,7 +263,7 @@ export class NorthernLights extends Layer {
       writer.push(
         t, c.base, c.amp, c.drift,
         pc.widths[rayIdx], c.depth, 1, 0,
-        pc.phases[rayIdx], pc.rates[rayIdx], 0, 0,
+        pc.phases[rayIdx], pc.rates[rayIdx], pc.offsets[rayIdx], 0,
         pc.r, pc.g, pc.b, c.alpha
       );
       rayCount++;

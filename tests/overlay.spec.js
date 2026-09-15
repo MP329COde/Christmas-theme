@@ -235,6 +235,30 @@ test.describe('star field multi-screen coherence', () => {
 });
 
 // ---------------------------------------------------------------------------
+// aurora ray spacing (src/overlay/lights.js)
+// ---------------------------------------------------------------------------
+//
+// Rays used to sit on a perfectly even i/rays grid, which read as a comb of
+// regularly spaced vertical bars — the "radio-wave diagram" look — no
+// matter how much each ray shimmered individually. The fix jitters each
+// ray off its slot by a fixed per-ray offset, so the gaps between bright
+// columns are uneven.
+test('aurora rays are not spaced on a perfectly even grid', async ({ page }) => {
+  await page.goto('/overlay');
+  const offsets = await page.evaluate(async () => {
+    const mod = await import('/overlay/lights.js');
+    return mod._testAuroraRayOffsets('classic', 0);
+  });
+
+  expect(offsets.length).toBeGreaterThan(5);
+  // A rigid grid has every ray at offset 0. The fix jitters each ray off
+  // its i/rays slot, so offsets must actually vary from ray to ray.
+  expect(offsets.some((v) => v !== 0)).toBe(true);
+  const distinct = new Set(offsets.map((v) => v.toFixed(6)));
+  expect(distinct.size).toBeGreaterThan(offsets.length / 2);
+});
+
+// ---------------------------------------------------------------------------
 // modern fireplace variant (src/overlay/decor.js)
 // ---------------------------------------------------------------------------
 test.describe('fireplace style variants', () => {
