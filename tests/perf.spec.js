@@ -65,6 +65,27 @@ test('sustained overage degrades quality, then recovers once load clears', async
   expect(result.afterRecovery).toBe('full');
 });
 
+test('getStats exposes a frame-time history and why the tier degraded', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const overlay = window.snowOverlay;
+    let now = performance.now();
+    // Same sustained-overage recipe as above, just enough to reach a
+    // degraded tier rather than walk all the way to the bottom.
+    for (let i = 0; i < 200; i++) {
+      now += 16.7;
+      overlay.__simulateFrameCost(200, now);
+    }
+    return overlay.getStats();
+  });
+
+  expect(result.qualityLabel).not.toBe('full');
+  expect(Array.isArray(result.frameHistory)).toBe(true);
+  expect(result.frameHistory.length).toBeGreaterThan(0);
+  // Every fed sample was 200ms, well over any plausible target.
+  expect(result.frameHistory[result.frameHistory.length - 1]).toBeCloseTo(200, 0);
+  expect(result.qualityTarget).toBeGreaterThan(0);
+});
+
 test('a degraded tier measurably reduces star and aurora density', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const mod = await import('/overlay/lights.js');

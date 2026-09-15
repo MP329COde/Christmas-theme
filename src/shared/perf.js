@@ -41,6 +41,20 @@ export class FrameMonitor {
     return this.count ? this.sum / this.count : 0;
   }
 
+  /// The samples in the order they were pushed (oldest first), for a
+  /// caller that wants to draw a history rather than just read the
+  /// rolling average — a settings-window diagnostic, say. Only called a
+  /// couple of times a second from outside the render loop, so the
+  /// allocation here is not the one this module's header warns against.
+  history() {
+    const out = new Array(this.count);
+    const start = this.count < this.size ? 0 : this.idx;
+    for (let i = 0; i < this.count; i++) {
+      out[i] = this.buf[(start + i) % this.size];
+    }
+    return out;
+  }
+
   reset() {
     this.buf.fill(0);
     this.idx = 0;

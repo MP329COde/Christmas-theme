@@ -252,6 +252,32 @@ test('a preset never carries autostart or the dock toggle', async ({ page }) => 
   await expect(page.locator('[data-testid="autostart-toggle"]')).toBeChecked();
 });
 
+test('the performance panel explains a degraded quality tier', async ({ page }) => {
+  await page.click('[data-testid="tab-system"]');
+
+  await page.evaluate(() => {
+    window.__applyStats({
+      fps: 22, frameMs: 44, particles: 120,
+      qualityLabel: 'low', qualityTarget: 6.7,
+      frameHistory: [40, 42, 44, 46, 48],
+      renderer: 'canvas2d', rendererReason: 'software rasteriser (llvmpipe)',
+    });
+  });
+
+  await expect(page.locator('[data-testid="perf-tier-explain"]'))
+    .toContainText('reduced to “low”');
+  await expect(page.locator('[data-testid="perf-tier-explain"]'))
+    .toContainText('software rasteriser');
+
+  const painted = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-testid="perf-sparkline"]');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+    return false;
+  });
+  expect(painted).toBe(true);
+});
+
 test('dock status line explains what was detected', async ({ page }) => {
   await page.click('[data-testid="tab-system"]');
   await expect(page.locator('[data-testid="dock-status"]'))

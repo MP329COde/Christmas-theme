@@ -860,7 +860,12 @@ function renderSystem() {
       ],
       onChange: (v) => { settings.renderer = v; persist(); },
     }),
-    el('p', { class: 'hint', text: 'Automatic uses the WebGL engine only on a real GPU. On a software rasteriser it stays on Canvas 2D, which there is both faster and no less detailed. Takes effect on the next launch.' })));
+    el('p', { class: 'hint', text: 'Automatic uses the WebGL engine only on a real GPU. On a software rasteriser it stays on Canvas 2D, which there is both faster and no less detailed. Takes effect on the next launch.' }),
+    el('canvas', {
+      id: 'perf-sparkline', 'data-testid': 'perf-sparkline', class: 'perf-sparkline',
+      width: 280, height: 40,
+    }),
+    el('p', { class: 'hint', id: 'perf-tier-explain', 'data-testid': 'perf-tier-explain', text: '' })));
 
   panel.append(el('h2', { text: 'Startup' }));
   panel.append(el('div', { class: 'card' },
@@ -1100,7 +1105,59 @@ document.getElementById('disable-btn').addEventListener('click', async () => {
   setStatus('Everything disabled');
 });
 
-onStats(({ fps, frameMs, particles, qualityLabel }) => {
+/// Draws a bare frame-time history: one bar per sample, red above the
+/// target the quality governor is actually budgeting against. This is
+/// the same measurement the automatic degrade acts on, not a separate
+/// reading, so a bar crossing the line is the reason a tier step is
+/// coming, not just decoration.
+function drawPerfSparkline(history, target) {
+  const canvas = document.getElementById('perf-sparkline');
+  if (!canvas) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const g = canvas.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  if (!history.length) return;
+
+  const maxMs = Math.max(target * 2, ...history);
+  const barW = w / history.length;
+  history.forEach((ms, i) => {
+    const barH = Math.max(1, (ms / maxMs) * h);
+    g.fillStyle = ms > target ? '#e0554d' : '#4caf7d';
+    g.fillRect(i * barW, h - barH, Math.max(1, barW - 1), barH);
+  });
+
+  const targetY = h - Math.min(h, (target / maxMs) * h);
+  g.strokeStyle = 'rgba(255,255,255,0.5)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(0, targetY);
+  g.lineTo(w, targetY);
+  g.stroke();
+}
+
+/// Explains WHY the current quality tier is active, in the same terms the
+/// governor itself uses (see shared/perf.js), rather than leaving "quality:
+/// reduced" as an unexplained fact — and separately, whether the tree
+/// renderer is actually on a GPU or fell back, and why.
+function explainPerfTier({ qualityLabel, qualityTarget, frameHistory, renderer, rendererReason }) {
+  const node = document.getElementById('perf-tier-explain');
+  if (!node) return;
+  const parts = [];
+  if (qualityLabel && qualityLabel !== 'full') {
+    const avg = frameHistory.length
+      ? Math.round((frameHistory.reduce((a, b) => a + b, 0) / frameHistory.length) * 10) / 10
+      : 0;
+    parts.push(`Quality reduced to “${qualityLabel}”: recent frames averaged ${avg} ms against a ${qualityTarget} ms budget.`);
+  }
+  if (renderer === 'canvas2d' && rendererReason) {
+    parts.push(`Trees are on Canvas 2D, not the WebGL engine: ${rendererReason}.`);
+  }
+  node.textContent = parts.join(' ');
+}
+
+function applyStats(snapshot) {
+  const { fps, frameMs, particles, qualityLabel, frameHistory = [], qualityTarget = 16.7 } = snapshot;
   const node = document.getElementById('fps-readout');
   if (node) {
     // The quality label only appears once it has actually degraded once
@@ -1109,7 +1166,18 @@ onStats(({ fps, frameMs, particles, qualityLabel }) => {
     const tierNote = qualityLabel && qualityLabel !== 'full' ? ` · quality: ${qualityLabel}` : '';
     node.textContent = `${fps} fps · ${frameMs} ms/frame · ${particles} flakes${tierNote}`;
   }
-});
+  drawPerfSparkline(frameHistory, qualityTarget);
+  explainPerfTier(snapshot);
+}
+
+onStats(applyStats);
+
+// `onStats` is a no-op outside Tauri (see bridge.js), so a Playwright test
+// — which runs the settings window standalone, with no overlay window
+// publishing real stats — has no event to listen for. Exposed here so a
+// test can drive the same code path deterministically, the same way
+// snow.js exposes `__simulateFrameCost` for the overlay side.
+window.__applyStats = applyStats;
 
 async function init() {
   [themes, screens, settings] = await Promise.all([listThemes(), listScreens(), getSettings()]);

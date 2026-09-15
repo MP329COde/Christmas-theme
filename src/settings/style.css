@@ -483,3 +483,13 @@ button.remove:hover { color: #fff; background: var(--primary); border-color: tra
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+.perf-sparkline {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: 40px;
+  margin-top: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.15);
+}

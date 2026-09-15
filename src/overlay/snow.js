@@ -468,8 +468,18 @@ export function getStats() {
   return {
     fps: stats.fps,
     frameMs: stats.frameMs,
+    // Oldest-first per-frame costs behind the rolling average the
+    // governor itself acts on — what a diagnostic panel needs to draw a
+    // history instead of just the current instant.
+    frameHistory: quality.monitor.history(),
+    qualityTarget: Math.round(quality.targetFrameMs * 10) / 10,
     particles: flakes.length,
     renderer: treeRenderer === 'gl' ? 'webgl' : 'canvas2d',
+    // Why the tree renderer ended up on Canvas 2D, if it did — set by
+    // overlay.js's adoption gate (software rasteriser, no GPU, a failed
+    // first frame, ...). Null once WebGL was adopted, since there is
+    // nothing to explain then.
+    rendererReason: treeRenderer === 'gl' ? null : (window.overlayRenderer?.reason ?? null),
     qualityTier: quality.tierIndex,
     qualityLabel: quality.tier.label,
   };

@@ -35,7 +35,12 @@ The Christmas tree is validated and is intentionally out of scope for this roadm
 - Saving a preset renders a small stylised thumbnail (sky, aurora, snow line, trees, fireplace glow) from the settings snapshot and stores it alongside the preset.
 - The preset bar shows the thumbnail of the currently selected preset next to the picker.
 
+## Completed: Real-GPU performance diagnostic
+
+- The System panel's Performance card now shows a frame-time sparkline (last ~180 samples, red above the quality governor's own budget line) alongside the existing fps readout.
+- A plain-language explanation names the active quality tier and, if the tree renderer fell back to Canvas 2D, why (software rasteriser, no GPU, failed first frame, ...).
+- Both are driven by the same measurement the automatic degrade already acts on, not a separate reading.
+
 ## Next tasks
 
-- Add a real-GPU performance diagnostic with frame-time history and quality-tier explanation.
 - Add visual regression coverage for every sky palette and degraded quality tier.
