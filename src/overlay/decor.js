@@ -101,6 +101,9 @@ export function glowSprite(color, size = 64) {
   return cv;
 }
 
+const TREE_SHADOW_SPRITE = glowSprite('#000000', 128);
+const FIREPLACE_SHADOW_SPRITE = glowSprite('#000000', 160);
+
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -487,13 +490,12 @@ export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
 
   if (shadowStrength > 0) {
-    const shadow = glowSprite('#000000', 128);
     const sw = tree.sprite.width * (0.64 + 0.24 * shadowSoftness);
     const sh = 46 * scale * (0.72 + 0.45 * shadowSoftness);
     ctx.save();
     ctx.globalAlpha = Math.min(0.42, 0.18 + 0.16 * shadowStrength);
     ctx.drawImage(
-      shadow,
+      TREE_SHADOW_SPRITE,
       originX + tree.sprite.width / 2 - sw / 2,
       originY + tree.groundY - sh * 0.55,
       sw,
@@ -1128,11 +1130,10 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   ctx.save();
 
   if (shadowStrength > 0) {
-    const shadow = glowSprite('#000000', 160);
     const sw = geom.w * (0.86 + 0.28 * shadowSoftness);
     const sh = geom.h * (0.34 + 0.15 * shadowSoftness);
     ctx.globalAlpha = Math.min(0.34, 0.12 + 0.14 * shadowStrength);
-    ctx.drawImage(shadow, x + geom.w / 2 - sw / 2, y + geom.h * 0.56 - sh * 0.2, sw, sh);
+    ctx.drawImage(FIREPLACE_SHADOW_SPRITE, x + geom.w / 2 - sw / 2, y + geom.h * 0.56 - sh * 0.2, sw, sh);
     ctx.globalAlpha = 1;
   }
 

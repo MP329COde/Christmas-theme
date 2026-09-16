@@ -178,6 +178,10 @@ test('background movement hides when the wallpaper is set still', async ({ page 
   await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
   await page.selectOption('[data-testid="background-animation"]', 'none');
   await expect(page.locator('[data-testid="background-motion"]')).toHaveCount(0);
+  await page.waitForTimeout(300);
+  const animation = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].backgroundAnimation);
+  expect(animation).toBe('none');
 });
 
 test('snow density persists across a reload', async ({ page }) => {
