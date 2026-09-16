@@ -49,6 +49,12 @@ function mulberry32(seed) {
   };
 }
 
+const TAU = Math.PI * 2;
+function seededUnit(seed, salt = 0) {
+  const x = Math.sin((seed + salt * 17.17) * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 function toRgb(color) {
   if (color.startsWith('rgb')) {
     const [r, g, b] = color.match(/\d+/g).map(Number);
@@ -474,23 +480,40 @@ function getTree(scale, colors, seed, spec) {
 /// side are genuinely different trees rather than one sprite mirrored.
 export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   const scale = Math.max(0.55, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
-  const tree = getTree(scale, colors, spec.seed ?? 1337, spec);
+  const seed = spec.seed ?? 1337;
+  const tree = getTree(scale, colors, seed, spec);
   const gain = (opts.lightIntensity ?? 1) * (spec.lights?.intensity ?? 1);
   const palette = spec.palette ?? ['#ffdba0'];
   const mode = spec.lights?.mode ?? opts.lightAnimation;
   const speed = spec.lights?.speed ?? 1;
   const bulbScale = spec.lights?.size ?? 1;
+  const sway = Math.max(0, Number(spec.sway ?? 1) || 0);
 
   const originX = Math.round((spec.x ?? 0.5) * width - tree.sprite.width / 2);
   const originY = height - tree.sprite.height;
+  const pivotX = tree.sprite.width / 2;
+  const pivotY = tree.sprite.height;
+
+  const swayPhase = seededUnit(seed, 2) * TAU;
+  const swayRate = 0.45 + seededUnit(seed, 5) * 0.45;
+  const leanAmp = (0.005 + 0.003 * Math.min(1.8, scale)) * sway;
+  const driftAmp = (0.8 + 1.5 * Math.min(2, scale)) * sway;
+  const lean =
+    Math.sin(time * swayRate + swayPhase) * leanAmp
+    + Math.sin(time * (swayRate * 0.43) + swayPhase * 1.7) * leanAmp * 0.45;
+  const drift = Math.sin(time * (0.28 + seededUnit(seed, 8) * 0.3) + swayPhase * 0.61) * driftAmp;
+  const localDrift = spec.flip ? -drift : drift;
+  const localLean = spec.flip ? -lean : lean;
 
   ctx.save();
+  ctx.translate(originX, originY);
   if (spec.flip) {
-    ctx.translate(originX + tree.sprite.width, originY);
+    ctx.translate(tree.sprite.width, 0);
     ctx.scale(-1, 1);
-  } else {
-    ctx.translate(originX, originY);
   }
+  ctx.translate(pivotX + localDrift, pivotY);
+  ctx.rotate(localLean);
+  ctx.translate(-pivotX, -pivotY);
   ctx.drawImage(tree.sprite, 0, 0);
 
   if (spec.lightsOn !== false && tree.lights.length) {
@@ -512,7 +535,11 @@ export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   if (tree.star) {
     ctx.globalCompositeOperation = 'lighter';
     const starGlow = glowSprite(colors.accent, 96);
-    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1) + 0.08 * Math.sin(time * 6.3);
+    const starPhase = seededUnit(seed, 11) * TAU;
+    const twinkle =
+      0.66
+      + 0.28 * Math.sin(time * (1.8 + seededUnit(seed, 12) * 0.55) + starPhase)
+      + 0.12 * Math.sin(time * 5.7 + starPhase * 0.4);
     const ss = 90 * twinkle * scale * 0.8;
     ctx.globalAlpha = Math.min(1, 0.85 * twinkle * gain);
     ctx.drawImage(starGlow, tree.star.x - ss / 2, tree.star.y - ss / 2, ss, ss);
