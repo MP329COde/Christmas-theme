@@ -373,6 +373,21 @@ function renderScene() {
           value: Math.round((cfg.backgroundOpacity ?? 1) * 100), format: (v) => `${v}%`,
           onInput: (v) => editScreen((s) => { s.backgroundOpacity = v / 100; }),
         })),
+      el('div', { class: 'grid-2' },
+        dropdown({
+          id: 'background-animation', label: 'Animation', value: cfg.backgroundAnimation ?? 'drift',
+          options: [['none', 'Still'], ['drift', 'Floating pan'], ['kenburns', 'Cinematic zoom']],
+          onChange: (v) => editScreen((s) => {
+            s.backgroundAnimation = v;
+            if (v === 'none') s.backgroundMotion = 0;
+            else if ((s.backgroundMotion ?? 0) <= 0) s.backgroundMotion = 1;
+          }),
+        }),
+        cfg.background === 'image' && slider({
+          id: 'background-motion', label: 'Movement', min: 0, max: 200, step: 10,
+          value: Math.round((cfg.backgroundMotion ?? 1) * 100), format: (v) => (v === 0 ? 'Still' : `${v}%`),
+          onInput: (v) => editScreen((s) => { s.backgroundMotion = v / 100; }),
+        })),
       el('button', {
         class: 'remove', 'data-testid': 'background-clear', text: 'Remove image',
         onclick: async () => { await saveBackground(`screen-${activeScreen}`, null); setStatus('Background removed'); },
@@ -778,7 +793,20 @@ function renderLights() {
       value: Math.round(look.saturation * 100),
       format: (v) => (v === 0 ? 'Black & white' : `${v}%`),
       onInput: (v) => editLook('saturation')(v / 100),
-    })));
+    }),
+    el('div', { class: 'grid-2' },
+      slider({
+        id: 'look-shadow-strength', label: 'Shadow depth', min: 0, max: 180, step: 5,
+        value: Math.round((look.shadowStrength ?? 1) * 100),
+        format: (v) => (v === 0 ? 'Off' : `${v}%`),
+        onInput: (v) => editLook('shadowStrength')(v / 100),
+      }),
+      slider({
+        id: 'look-shadow-softness', label: 'Shadow spread', min: 40, max: 200, step: 5,
+        value: Math.round((look.shadowSoftness ?? 1) * 100),
+        format: (v) => `${v}%`,
+        onInput: (v) => editLook('shadowSoftness')(v / 100),
+      }))));
 
   panel.append(el('h2', { text: 'Wind' }));
   panel.append(el('div', { class: 'card' },

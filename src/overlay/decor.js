@@ -107,6 +107,9 @@ export function glowSprite(color, size = 64) {
   return cv;
 }
 
+const TREE_SHADOW_SPRITE = glowSprite('#000000', 128);
+const FIREPLACE_SHADOW_SPRITE = glowSprite('#000000', 160);
+
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -504,6 +507,23 @@ export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   const drift = Math.sin(time * (0.28 + seededUnit(seed, 8) * 0.3) + swayPhase * 0.61) * driftAmp;
   const localDrift = spec.flip ? -drift : drift;
   const localLean = spec.flip ? -lean : lean;
+  const shadowStrength = Math.max(0, opts.shadowStrength ?? 1);
+  const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
+
+  if (shadowStrength > 0) {
+    const sw = tree.sprite.width * (0.64 + 0.24 * shadowSoftness);
+    const sh = 46 * scale * (0.72 + 0.45 * shadowSoftness);
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.42, 0.18 + 0.16 * shadowStrength);
+    ctx.drawImage(
+      TREE_SHADOW_SPRITE,
+      originX + pivotX + localDrift - sw / 2,
+      originY + tree.groundY - sh * 0.55,
+      sw,
+      sh
+    );
+    ctx.restore();
+  }
 
   ctx.save();
   ctx.translate(originX, originY);
@@ -1228,8 +1248,18 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   const fireX = x + geom.fireX;
   const fireY = y + geom.fireY;
   const breathe = 0.86 + 0.1 * Math.sin(time * 2.3) + 0.04 * Math.sin(time * 7.1);
+  const shadowStrength = Math.max(0, opts.shadowStrength ?? 1);
+  const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
 
   ctx.save();
+
+  if (shadowStrength > 0) {
+    const sw = geom.w * (0.86 + 0.28 * shadowSoftness);
+    const sh = geom.h * (0.34 + 0.15 * shadowSoftness);
+    ctx.globalAlpha = Math.min(0.34, 0.12 + 0.14 * shadowStrength);
+    ctx.drawImage(FIREPLACE_SHADOW_SPRITE, x + geom.w / 2 - sw / 2, y + geom.h * 0.56 - sh * 0.2, sw, sh);
+    ctx.globalAlpha = 1;
+  }
 
   // Light thrown onto the floor and wall, drawn before the fireplace so it
   // reads as light landing on the room rather than a haze over the stone.
