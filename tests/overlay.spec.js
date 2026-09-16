@@ -9,6 +9,8 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/overlay');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   // Wait for the initial theme/settings fetch (bridge.js, localStorage
   // fallback outside Tauri) to finish before each test acts, otherwise it
   // can resolve after a test's own setDensity() call and silently
