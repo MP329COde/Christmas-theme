@@ -173,11 +173,12 @@ test('background animation controls are saved per screen', async ({ page }) => {
   expect(background).toEqual({ animation: 'kenburns', motion: 1.4 });
 });
 
-test('background movement hides when the wallpaper is set still', async ({ page }) => {
+test('background movement stays available and resets to still mode', async ({ page }) => {
   await page.selectOption('[data-testid="background-mode"]', 'image');
   await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
   await page.selectOption('[data-testid="background-animation"]', 'none');
-  await expect(page.locator('[data-testid="background-motion"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-motion"]')).toHaveValue('0');
   await page.waitForTimeout(300);
   const background = await page.evaluate(() => {
     const screen = JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'];

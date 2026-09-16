@@ -383,7 +383,7 @@ function renderScene() {
             else if ((s.backgroundMotion ?? 0) <= 0) s.backgroundMotion = 1;
           }),
         }),
-        (cfg.background === 'image' && (cfg.backgroundAnimation ?? 'drift') !== 'none') && slider({
+        cfg.background === 'image' && slider({
           id: 'background-motion', label: 'Movement', min: 0, max: 200, step: 10,
           value: Math.round((cfg.backgroundMotion ?? 1) * 100), format: (v) => (v === 0 ? 'Still' : `${v}%`),
           onInput: (v) => editScreen((s) => { s.backgroundMotion = v / 100; }),
