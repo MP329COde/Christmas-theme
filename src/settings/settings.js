@@ -379,7 +379,7 @@ function renderScene() {
           options: [['none', 'Still'], ['drift', 'Floating pan'], ['kenburns', 'Cinematic zoom']],
           onChange: (v) => editScreen((s) => { s.backgroundAnimation = v; }),
         }),
-        slider({
+        (cfg.backgroundAnimation ?? 'drift') !== 'none' && slider({
           id: 'background-motion', label: 'Movement', min: 0, max: 200, step: 10,
           value: Math.round((cfg.backgroundMotion ?? 1) * 100), format: (v) => (v === 0 ? 'Still' : `${v}%`),
           onInput: (v) => editScreen((s) => { s.backgroundMotion = v / 100; }),

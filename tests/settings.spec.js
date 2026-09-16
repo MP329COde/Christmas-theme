@@ -173,6 +173,13 @@ test('background animation controls are saved per screen', async ({ page }) => {
   expect(background).toEqual({ animation: 'kenburns', motion: 1.4 });
 });
 
+test('background movement hides when the wallpaper is set still', async ({ page }) => {
+  await page.selectOption('[data-testid="background-mode"]', 'image');
+  await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+  await page.selectOption('[data-testid="background-animation"]', 'none');
+  await expect(page.locator('[data-testid="background-motion"]')).toHaveCount(0);
+});
+
 test('snow density persists across a reload', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('300');
