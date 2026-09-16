@@ -289,13 +289,21 @@ test.describe('fireplace style variants', () => {
       let litRustic = 0;
       let litModern = 0;
       let diff = 0;
+      let lowerBandDiff = 0;
       for (let i = 0; i < rustic.length; i += 4) {
         if (rustic[i + 3] > 0) litRustic++;
         if (modern[i + 3] > 0) litModern++;
         diff += Math.abs(rustic[i] - modern[i]) + Math.abs(rustic[i + 1] - modern[i + 1])
           + Math.abs(rustic[i + 2] - modern[i + 2]);
       }
-      return { litRustic, litModern, diff };
+      for (let y = Math.floor(H * 0.7); y < H; y++) {
+        for (let x = Math.floor(W * 0.22); x < Math.floor(W * 0.78); x++) {
+          const i = (y * W + x) * 4;
+          lowerBandDiff += Math.abs(rustic[i] - modern[i]) + Math.abs(rustic[i + 1] - modern[i + 1])
+            + Math.abs(rustic[i + 2] - modern[i + 2]);
+        }
+      }
+      return { litRustic, litModern, diff, lowerBandDiff };
     });
 
     // Both styles must actually draw something (never a blank fireplace).
@@ -304,6 +312,9 @@ test.describe('fireplace style variants', () => {
     // And they must be visibly different pictures, not the same bake under
     // a different name.
     expect(result.diff).toBeGreaterThan(10000);
+    // Their lower massing should differ too: rustic has a raised hearth,
+    // modern has a floating plinth beneath the slot.
+    expect(result.lowerBandDiff).toBeGreaterThan(5000);
   });
 
   test('an unrecognised fireplaceStyle falls back to rustic rather than drawing nothing', async ({ page }) => {

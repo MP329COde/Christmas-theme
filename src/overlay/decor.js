@@ -703,6 +703,62 @@ function bakeRusticFireplace(scale, colors, opts) {
   const openH = h * 0.56;
   const ox = (w - openW) / 2;
   const oy = h - openH - 12 * scale;
+  const hearthY = h - 24 * scale;
+
+  // Raised limestone hearth so the firebox feels grounded instead of ending
+  // abruptly at the floor line.
+  c.fillStyle = 'rgba(0,0,0,0.24)';
+  c.beginPath();
+  c.ellipse(w / 2, h - 4 * scale, w * 0.35, 9 * scale, 0, 0, Math.PI * 2);
+  c.fill();
+  const hearthTop = c.createLinearGradient(0, hearthY - 5 * scale, 0, hearthY + 10 * scale);
+  hearthTop.addColorStop(0, '#d8c2a3');
+  hearthTop.addColorStop(0.55, '#b99a75');
+  hearthTop.addColorStop(1, '#8c6a46');
+  c.fillStyle = hearthTop;
+  roundRect(c, 18 * scale, hearthY - 5 * scale, w - 36 * scale, 15 * scale, 5 * scale);
+  c.fill();
+  const hearthFace = c.createLinearGradient(0, hearthY + 1 * scale, 0, h);
+  hearthFace.addColorStop(0, '#97724c');
+  hearthFace.addColorStop(1, '#5d4128');
+  c.fillStyle = hearthFace;
+  roundRect(c, 28 * scale, hearthY + 1 * scale, w - 56 * scale, 19 * scale, 4 * scale);
+  c.fill();
+  c.strokeStyle = 'rgba(255,245,224,0.22)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.moveTo(24 * scale, hearthY - 2 * scale);
+  c.lineTo(w - 24 * scale, hearthY - 2 * scale);
+  c.stroke();
+
+  // Framed stone arch around the opening to give the surround a clearer focal
+  // structure than a flat wall of stone.
+  c.save();
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.lineWidth = 16 * scale;
+  c.strokeStyle = 'rgba(74,49,30,0.34)';
+  c.beginPath();
+  c.moveTo(ox - 6 * scale, oy + openH);
+  c.lineTo(ox - 6 * scale, oy + openH * 0.28);
+  c.quadraticCurveTo(w / 2, oy - 28 * scale, ox + openW + 6 * scale, oy + openH * 0.28);
+  c.lineTo(ox + openW + 6 * scale, oy + openH);
+  c.stroke();
+  c.lineWidth = 7 * scale;
+  c.strokeStyle = 'rgba(255,234,205,0.15)';
+  c.beginPath();
+  c.moveTo(ox - 2 * scale, oy + openH - 2 * scale);
+  c.lineTo(ox - 2 * scale, oy + openH * 0.3);
+  c.quadraticCurveTo(w / 2, oy - 18 * scale, ox + openW + 2 * scale, oy + openH * 0.3);
+  c.lineTo(ox + openW + 2 * scale, oy + openH - 2 * scale);
+  c.stroke();
+  c.restore();
+  c.fillStyle = '#b89267';
+  roundRect(c, w / 2 - 12 * scale, oy - 12 * scale, 24 * scale, 18 * scale, 3 * scale);
+  c.fill();
+  c.fillStyle = 'rgba(255,243,221,0.2)';
+  roundRect(c, w / 2 - 9 * scale, oy - 10 * scale, 18 * scale, 5 * scale, 2 * scale);
+  c.fill();
 
   c.save();
   roundRect(c, ox, oy, openW, openH, 6 * scale);
@@ -879,13 +935,20 @@ function bakeModernFireplace(scale, colors, opts) {
   // minimalist mantel actually has.
   const mantelY = 46 * scale;
   const mantelH = 8 * scale;
+  const plinthY = h - 30 * scale;
 
   // --- flat panel wall, brushed rather than textured -----------------------
   const panel = c.createLinearGradient(0, 0, 0, h);
-  panel.addColorStop(0, '#33363c');
-  panel.addColorStop(0.55, '#26282d');
-  panel.addColorStop(1, '#1a1b1f');
+  panel.addColorStop(0, '#383b42');
+  panel.addColorStop(0.42, '#2a2d33');
+  panel.addColorStop(1, '#181a1e');
   c.fillStyle = panel;
+  c.fillRect(0, 0, w, h);
+  const wash = c.createRadialGradient(w / 2, h * 0.48, 0, w / 2, h * 0.48, w * 0.54);
+  wash.addColorStop(0, 'rgba(255,184,92,0.1)');
+  wash.addColorStop(0.38, 'rgba(255,184,92,0.03)');
+  wash.addColorStop(1, 'rgba(255,184,92,0)');
+  c.fillStyle = wash;
   c.fillRect(0, 0, w, h);
   // Faint brushed-metal streaks: barely-there horizontal lines, not the
   // stone's rough mottling.
@@ -898,12 +961,42 @@ function bakeModernFireplace(scale, colors, opts) {
     c.lineTo(w, y + (rand() - 0.5) * 2);
     c.stroke();
   }
+  // Slim fluted side bands stop the panel reading as a flat rectangle while
+  // keeping the minimalist language of the insert.
+  for (const bandX of [34 * scale, w - 46 * scale]) {
+    const band = c.createLinearGradient(bandX, 0, bandX + 12 * scale, 0);
+    band.addColorStop(0, 'rgba(255,255,255,0.02)');
+    band.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+    band.addColorStop(1, 'rgba(0,0,0,0.18)');
+    c.fillStyle = band;
+    roundRect(c, bandX, 22 * scale, 12 * scale, h - 56 * scale, 5 * scale);
+    c.fill();
+  }
 
   // --- wide, short linear firebox, flush with a slim dark bezel ------------
   const openW = w * 0.82;
   const openH = h * 0.17;
   const ox = (w - openW) / 2;
   const oy = h - openH - 14 * scale;
+
+  // Floating plinth below the slot gives the modern insert some weight.
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.ellipse(w / 2, h - 5 * scale, w * 0.28, 7 * scale, 0, 0, Math.PI * 2);
+  c.fill();
+  const plinth = c.createLinearGradient(0, plinthY, 0, h);
+  plinth.addColorStop(0, '#e4ded2');
+  plinth.addColorStop(0.45, '#c4beb2');
+  plinth.addColorStop(1, '#8f877b');
+  c.fillStyle = plinth;
+  roundRect(c, 42 * scale, plinthY, w - 84 * scale, 20 * scale, 3 * scale);
+  c.fill();
+  c.strokeStyle = 'rgba(255,255,255,0.35)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(46 * scale, plinthY + 1.2 * scale);
+  c.lineTo(w - 46 * scale, plinthY + 1.2 * scale);
+  c.stroke();
 
   c.save();
   roundRect(c, ox - 5 * scale, oy - 5 * scale, openW + 10 * scale, openH + 10 * scale, 3 * scale);
@@ -939,9 +1032,13 @@ function bakeModernFireplace(scale, colors, opts) {
   }
   c.restore();
 
-  // Slim bezel highlight, top edge only — a thin reveal line rather than
-  // the rustic recess shadow all the way round.
-  c.strokeStyle = 'rgba(255,255,255,0.12)';
+  // Slim metal trim around the slot, with the strongest catchlight along the
+  // upper edge like brushed black nickel.
+  c.strokeStyle = 'rgba(255,255,255,0.1)';
+  c.lineWidth = 1.2 * scale;
+  roundRect(c, ox - 1 * scale, oy - 1 * scale, openW + 2 * scale, openH + 2 * scale, 2.5 * scale);
+  c.stroke();
+  c.strokeStyle = 'rgba(255,244,220,0.22)';
   c.lineWidth = 1;
   c.beginPath();
   c.moveTo(ox, oy - 1);
@@ -962,9 +1059,9 @@ function bakeModernFireplace(scale, colors, opts) {
   c.fillRect(shelfX, mantelY + mantelH, shelfW, 14 * scale);
 
   const shelf = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
-  shelf.addColorStop(0, '#e9e5dc');
-  shelf.addColorStop(0.5, '#c9c4b8');
-  shelf.addColorStop(1, '#a8a296');
+  shelf.addColorStop(0, '#f3eee5');
+  shelf.addColorStop(0.5, '#d3cdc2');
+  shelf.addColorStop(1, '#9d968a');
   c.fillStyle = shelf;
   roundRect(c, shelfX, mantelY, shelfW, mantelH, 1.5 * scale);
   c.fill();
