@@ -75,12 +75,12 @@ test('a tree position slider moves the element and persists', async ({ page }) =
 
 test('each tree carries its own light palette and mode', async ({ page }) => {
   await page.selectOption('[data-testid="tree-0-palette"]', 'red-blue');
-  await page.selectOption('[data-testid="tree-0-mode"]', 'chase');
+  await page.selectOption('[data-testid="tree-0-mode"]', 'pulse');
   await page.waitForTimeout(300);
   const lights = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].trees[0].lights);
   expect(lights.palette).toBe('red-blue');
-  expect(lights.mode).toBe('chase');
+  expect(lights.mode).toBe('pulse');
 });
 
 test('custom colours appear when the custom palette is chosen', async ({ page }) => {
@@ -142,10 +142,14 @@ test('lighting-rig controls are saved per screen', async ({ page }) => {
   await page.locator('[data-testid="ambient-warmth"]').fill('150');
   await page.locator('[data-testid="look-bloom"]').fill('60');
   await page.locator('[data-testid="fireplace-contribution"]').fill('40');
+  await page.locator('[data-testid="look-shadow-strength"]').fill('120');
+  await page.locator('[data-testid="look-shadow-softness"]').fill('135');
   await page.waitForTimeout(300);
   const look = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].look);
-  expect(look).toMatchObject({ ambientWarmth: 1.5, bloom: 0.6, fireplaceContribution: 0.4 });
+  expect(look).toMatchObject({
+    ambientWarmth: 1.5, bloom: 0.6, fireplaceContribution: 0.4, shadowStrength: 1.2, shadowSoftness: 1.35,
+  });
 });
 
 test('background image controls appear only in image mode', async ({ page }) => {
@@ -153,6 +157,20 @@ test('background image controls appear only in image mode', async ({ page }) => 
   await page.selectOption('[data-testid="background-mode"]', 'image');
   await expect(page.locator('[data-testid="background-fit"]')).toBeVisible();
   await expect(page.locator('[data-testid="background-opacity"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-animation"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+});
+
+test('background animation controls are saved per screen', async ({ page }) => {
+  await page.selectOption('[data-testid="background-mode"]', 'image');
+  await page.selectOption('[data-testid="background-animation"]', 'kenburns');
+  await page.locator('[data-testid="background-motion"]').fill('140');
+  await page.waitForTimeout(300);
+  const background = await page.evaluate(() => {
+    const screen = JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'];
+    return { animation: screen.backgroundAnimation, motion: screen.backgroundMotion };
+  });
+  expect(background).toEqual({ animation: 'kenburns', motion: 1.4 });
 });
 
 test('snow density persists across a reload', async ({ page }) => {
