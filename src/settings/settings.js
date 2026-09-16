@@ -377,7 +377,11 @@ function renderScene() {
         dropdown({
           id: 'background-animation', label: 'Animation', value: cfg.backgroundAnimation ?? 'drift',
           options: [['none', 'Still'], ['drift', 'Floating pan'], ['kenburns', 'Cinematic zoom']],
-          onChange: (v) => editScreen((s) => { s.backgroundAnimation = v; }),
+          onChange: (v) => editScreen((s) => {
+            s.backgroundAnimation = v;
+            if (v === 'none') s.backgroundMotion = 0;
+            else if ((s.backgroundMotion ?? 0) <= 0) s.backgroundMotion = 1;
+          }),
         }),
         (cfg.background === 'image' && (cfg.backgroundAnimation ?? 'drift') !== 'none') && slider({
           id: 'background-motion', label: 'Movement', min: 0, max: 200, step: 10,
