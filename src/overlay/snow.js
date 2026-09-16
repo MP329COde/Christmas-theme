@@ -97,6 +97,20 @@ function targetFrameMsFor(limit) {
   return (1000 / hz) * 0.4;
 }
 
+function hash01(n) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function smoothNoise1D(t, seed) {
+  const i = Math.floor(t);
+  const f = t - i;
+  const u = f * f * (3 - 2 * f);
+  const a = hash01(i + seed * 17.13);
+  const b = hash01(i + 1 + seed * 17.13);
+  return a + (b - a) * u;
+}
+
 const qualityTierListeners = new Set();
 
 function applyQualityTier(tierCfg) {
@@ -660,9 +674,13 @@ function render(time) {
 
   // Step every flake first, then draw in depth order: distant snow sits
   // behind the trees and fireplace, close snow passes in front of them.
-  // Two slow sines beating against each other: the wind surges and eases
-  // on no fixed period instead of pulsing regularly.
-  const gust = 1 + 0.55 * Math.sin(time * 0.23) + 0.35 * Math.sin(time * 0.61 + 1.7);
+  // Keep the broad "weather front" rhythm but layer in smooth noise so
+  // gusts don't loop on an obvious fixed beat.
+  const rhythmicGust = 1 + 0.42 * Math.sin(time * 0.23) + 0.28 * Math.sin(time * 0.61 + 1.7);
+  const wanderingGust =
+    (smoothNoise1D(time * 0.17, 4.2) - 0.5) * 0.6
+    + (smoothNoise1D(time * 0.49, 9.7) - 0.5) * 0.24;
+  const gust = Math.max(0.18, rhythmicGust + wanderingGust);
   for (const f of flakes) stepFlake(f, gust);
 
   for (const f of flakes) {

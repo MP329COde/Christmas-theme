@@ -95,6 +95,7 @@ uniform vec2 uResolution;
 uniform float uTime;
 uniform vec2 uCamOffset; // camera parallax at depth = 1; scaled by aShape.y below
 uniform float uGain;
+uniform float uDetail;
 out vec3 vColor;
 out float vAlpha;
 out float vVertT;  // 0 at the curtain's bright lower edge, 1 at its dim top
@@ -124,11 +125,13 @@ void main() {
   float own = 0.5 + 0.5 * sin(uTime * aPhase.y + aPhase.x);
   float travel = 0.5 + 0.5 * sin(t * 11.0 - uTime * 0.55 + depth);
   float energy = 0.25 + 0.75 * (own * 0.55 + travel * 0.45);
+  float detail = max(0.08, min(1.0, uDetail));
+  float spread = min(2.0, sqrt(1.0 / detail));
 
   float heightPx = mix(uResolution.y * 0.30, uResolution.y * (0.10 + 0.22 * energy), isRay);
   float halfWidthPx = mix(
     uResolution.x / float(${HAZE_SEGMENTS}), // haze: same overlap as the Canvas 2D segW/2
-    8.0 * aShape.x * (0.8 + 0.4 * energy),   // ray: RAY_W(16)/2 * jitter * energy
+    8.0 * aShape.x * (0.8 + 0.4 * energy) * spread, // ray: widened under lower detail
     isRay
   );
 
@@ -140,7 +143,7 @@ void main() {
   pos += uCamOffset * depth;
 
   vColor = aColorA.rgb;
-  vAlpha = aColorA.a * uGain * mix(0.45, energy, isRay);
+  vAlpha = aColorA.a * uGain * mix(0.45, energy * spread, isRay);
   vVertT = vt;
   vHorizT = aCorner.x;
 
@@ -294,6 +297,7 @@ export class NorthernLights extends Layer {
     gl.uniform2f(u.uResolution, ctx.width, ctx.height);
     gl.uniform1f(u.uTime, ctx.time);
     gl.uniform1f(u.uGain, this.opts.gain ?? 1);
+    gl.uniform1f(u.uDetail, this.detail);
     const off = ctx.camera.offsetFor(this.z);
     gl.uniform2f(u.uCamOffset, off.x * ctx.dpr, off.y * ctx.dpr);
 
