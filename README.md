@@ -80,6 +80,15 @@ snow overlay isn't a security risk).
 All four are captured by the Playwright CLI (`node scripts/dev-server.js`, then the
 capture script in the commit that added them), not mocked up.
 
+### Latest preview captures
+
+These captures are generated from the current Canvas 2D preview so they can be
+opened directly from the repository:
+
+| Settings | Overlay scene | Dock |
+|---|---|---|
+| [Open capture](docs/screenshots/capture-settings.png) | [Open capture](docs/screenshots/capture-overlay.png) | [Open capture](docs/screenshots/capture-dock.png) |
+
 | | |
 |---|---|
 | ![Desktop scene](docs/screenshots/overlay-scene.png) | A composed scene at 1920×1080: four trees of different species and sizes, two fireplaces, a red-and-green chasing garland, aurora curtains, stars, icicles and depth-sorted snow. Everything in it is placed and styled from the settings window. |
