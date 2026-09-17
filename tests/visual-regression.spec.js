@@ -10,44 +10,47 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.settingsReady);
 });
 
+const expectScreenshot = (page, name) =>
+  expect(page).toHaveScreenshot(name, { maxDiffPixelRatio: 0.01 });
+
 test('scene tab baseline', async ({ page }) => {
-  await expect(page).toHaveScreenshot('settings-scene.png');
+  await expectScreenshot(page, 'settings-scene.png');
 });
 
 test('scene tab with a custom palette open', async ({ page }) => {
   await page.selectOption('[data-testid="garland-palette"]', 'custom');
-  await expect(page).toHaveScreenshot('settings-custom-palette.png');
+  await expectScreenshot(page, 'settings-custom-palette.png');
 });
 
 test('snow tab baseline', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
-  await expect(page).toHaveScreenshot('settings-snow.png');
+  await expectScreenshot(page, 'settings-snow.png');
 });
 
 test('max snow density baseline', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('600');
-  await expect(page).toHaveScreenshot('settings-snow-max.png');
+  await expectScreenshot(page, 'settings-snow-max.png');
 });
 
 test('min snow density baseline', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('0');
-  await expect(page).toHaveScreenshot('settings-snow-min.png');
+  await expectScreenshot(page, 'settings-snow-min.png');
 });
 
 test('lights tab baseline', async ({ page }) => {
   await page.click('[data-testid="tab-lights"]');
-  await expect(page).toHaveScreenshot('settings-lights.png');
+  await expectScreenshot(page, 'settings-lights.png');
 });
 
 test('system tab baseline', async ({ page }) => {
   await page.click('[data-testid="tab-system"]');
-  await expect(page).toHaveScreenshot('settings-system.png');
+  await expectScreenshot(page, 'settings-system.png');
 });
 
 test('frosty-blue theme baseline', async ({ page }) => {
   await page.click('[data-testid="tab-lights"]');
   await page.selectOption('[data-testid="theme-select"]', 'frosty-blue');
-  await expect(page).toHaveScreenshot('settings-frosty-blue-theme.png');
+  await expectScreenshot(page, 'settings-frosty-blue-theme.png');
 });

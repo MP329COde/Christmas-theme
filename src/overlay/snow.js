@@ -450,7 +450,9 @@ function resetFlake(f, atTop) {
 /// The one place a flake object is created. Called only when the density
 /// setting grows the field.
 function makeFlake() {
-  return resetFlake({}, false);
+  const flake = resetFlake({}, false);
+  flake.y = Math.random() * viewH;
+  return flake;
 }
 
 /// Resizes the actual particle array to `n`. Separate from `setDensity`
@@ -822,7 +824,7 @@ window.snowOverlay = {
   },
 };
 
-function applyThemeAndSettings(theme, settings) {
+async function applyThemeAndSettings(theme, settings) {
   if (!theme) return;
   const index = screenIndex();
   const previousBackground = `${sceneCfg.background}|${sceneCfg.backgroundFit}`;
@@ -861,7 +863,7 @@ function applyThemeAndSettings(theme, settings) {
 
   if (`${sceneCfg.background}|${sceneCfg.backgroundFit}` !== previousBackground
       || sceneCfg.background === 'image') {
-    refreshBackground();
+    await refreshBackground();
   }
 
   // The GL tree renderer, if it started, rebuilds from the same
@@ -879,7 +881,7 @@ async function initFromBackend() {
   try {
     const [themes, settings] = await Promise.all([listThemes(), getSettings()]);
     const theme = themes.find((t) => t.id === settings.themeId) ?? themes[0];
-    applyThemeAndSettings(theme, settings);
+    await applyThemeAndSettings(theme, settings);
   } catch (err) {
     // The overlay still renders with the built-in defaults above even if
     // the initial fetch fails, rather than showing a blank screen.
@@ -896,7 +898,7 @@ window.snowOverlayReady = initFromBackend();
 // Live updates: react immediately when the settings window saves, instead
 // of requiring an app restart.
 onSettingsChanged(({ theme, settings }) => {
-  applyThemeAndSettings(theme, settings);
+  void applyThemeAndSettings(theme, settings);
 });
 
 // The image itself travels outside the settings payload (it is megabytes),
