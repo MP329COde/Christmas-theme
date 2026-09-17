@@ -28,7 +28,7 @@ import {
 /// Maps one scene tree spec onto the layer's options. The scene is the
 /// only source of truth: the same spec drives the Canvas 2D tree, so
 /// switching renderer changes the fidelity and nothing else.
-function layerOptionsFor(tree, index, themeColors) {
+function layerOptionsFor(tree, index, themeColors, look = {}) {
   const style = TREE_STYLES[tree.style] ?? TREE_STYLES.nordmann;
   const palette = resolvePalette(tree.lights);
   const needles = resolveNeedles(tree);
@@ -66,6 +66,8 @@ function layerOptionsFor(tree, index, themeColors) {
       themeColors.primary, themeColors.accent, '#e9edf2', '#8fb7d8',
       themeColors.primary,
     ],
+    shadowStrength: look.shadowStrength ?? 1,
+    shadowSoftness: look.shadowSoftness ?? 1,
     needleDark: needles.dark,
     needleLight: needles.light,
     wind: 1,
@@ -162,7 +164,7 @@ export class GlTrees {
     try {
       const scene = new Scene('OverlayTrees');
       trees.forEach((tree, i) => {
-        scene.add(new ChristmasTree(layerOptionsFor(tree, i, themeColors)));
+        scene.add(new ChristmasTree(layerOptionsFor(tree, i, themeColors, sceneCfg.look)));
       });
       if (aurora) {
         const lights = new NorthernLights({ gain: auroraGain, palette: auroraPalette });

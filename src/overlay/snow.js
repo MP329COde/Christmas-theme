@@ -97,6 +97,20 @@ function targetFrameMsFor(limit) {
   return (1000 / hz) * 0.4;
 }
 
+function hash01(n) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function smoothNoise1D(t, seed) {
+  const i = Math.floor(t);
+  const f = t - i;
+  const u = f * f * (3 - 2 * f);
+  const a = hash01(i + seed * 17.13);
+  const b = hash01(i + 1 + seed * 17.13);
+  return a + (b - a) * u;
+}
+
 const qualityTierListeners = new Set();
 
 function applyQualityTier(tierCfg) {
@@ -141,6 +155,8 @@ const stats = { fps: 0, frameMs: 0, frames: 0, accum: 0, since: 0 };
 let decorConfig = {
   lightAnimation: 'twinkle',
   lightIntensity: 1,
+  shadowStrength: 1,
+  shadowSoftness: 1,
   decorScale: 1,
 };
 let themeColors = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
@@ -325,27 +341,42 @@ async function refreshBackground() {
 /// fit. `cover` and `contain` keep the photograph's aspect ratio, which a
 /// plain stretch to the canvas does not — and a stretched photo is
 /// immediately obvious on an ultrawide monitor.
-function drawBackground(w, h) {
+function drawBackground(w, h, time) {
   if (!backgroundImage) return;
   const iw = backgroundImage.naturalWidth;
   const ih = backgroundImage.naturalHeight;
   if (!iw || !ih) return;
+  const animation = sceneCfg.backgroundAnimation ?? 'drift';
+  const motion = Math.max(0, Number(sceneCfg.backgroundMotion ?? 1) || 0);
+  const moving = animation !== 'none' && motion > 0;
+  const driftX = moving ? Math.sin(time * 0.11) * w * 0.028 * motion : 0;
+  const driftY = moving ? Math.cos(time * 0.08 + 0.9) * h * 0.022 * motion : 0;
+  const extraScale = !moving ? 1 : animation === 'kenburns'
+    ? 1 + 0.08 * motion + 0.04 * motion * (0.5 + 0.5 * Math.sin(time * 0.15 + 0.5))
+    : 1 + 0.03 * motion;
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, w, h);
+  ctx.clip();
   ctx.globalAlpha = sceneCfg.backgroundOpacity ?? 1;
   const fit = sceneCfg.backgroundFit ?? 'cover';
   if (fit === 'stretch') {
-    ctx.drawImage(backgroundImage, 0, 0, w, h);
+    const dw = w * extraScale;
+    const dh = h * extraScale;
+    ctx.drawImage(backgroundImage, (w - dw) / 2 + driftX, (h - dh) / 2 + driftY, dw, dh);
   } else if (fit === 'tile') {
-    for (let y = 0; y < h; y += ih) {
-      for (let x = 0; x < w; x += iw) ctx.drawImage(backgroundImage, x, y);
+    const offsetX = ((driftX % iw) + iw) % iw;
+    const offsetY = ((driftY % ih) + ih) % ih;
+    for (let y = -ih + offsetY; y < h; y += ih) {
+      for (let x = -iw + offsetX; x < w; x += iw) ctx.drawImage(backgroundImage, x, y);
     }
   } else {
     const scale = fit === 'contain'
       ? Math.min(w / iw, h / ih)
       : Math.max(w / iw, h / ih);
-    const dw = iw * scale;
-    const dh = ih * scale;
-    ctx.drawImage(backgroundImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    const dw = iw * scale * extraScale;
+    const dh = ih * scale * extraScale;
+    ctx.drawImage(backgroundImage, (w - dw) / 2 + driftX, (h - dh) / 2 + driftY, dw, dh);
   }
   ctx.restore();
 }
@@ -621,7 +652,7 @@ function render(time) {
   fctx.clearRect(0, 0, viewW, viewH);
 
   // --- behind the trees --------------------------------------------------
-  drawBackground(viewW, viewH);
+  drawBackground(viewW, viewH, time);
 
   if (sceneCfg.aurora || sceneCfg.stars) {
     drawSky(ctx, viewW, viewH, time, {
@@ -643,9 +674,13 @@ function render(time) {
 
   // Step every flake first, then draw in depth order: distant snow sits
   // behind the trees and fireplace, close snow passes in front of them.
-  // Two slow sines beating against each other: the wind surges and eases
-  // on no fixed period instead of pulsing regularly.
-  const gust = 1 + 0.55 * Math.sin(time * 0.23) + 0.35 * Math.sin(time * 0.61 + 1.7);
+  // Keep the broad "weather front" rhythm but layer in smooth noise so
+  // gusts don't loop on an obvious fixed beat.
+  const rhythmicGust = 1 + 0.42 * Math.sin(time * 0.23) + 0.28 * Math.sin(time * 0.61 + 1.7);
+  const wanderingGust =
+    (smoothNoise1D(time * 0.17, 4.2) - 0.5) * 0.6
+    + (smoothNoise1D(time * 0.49, 9.7) - 0.5) * 0.24;
+  const gust = Math.max(0.18, rhythmicGust + wanderingGust);
   for (const f of flakes) stepFlake(f, gust);
 
   for (const f of flakes) {
@@ -819,6 +854,8 @@ function applyThemeAndSettings(theme, settings) {
     lightAnimation: settings?.lightAnimation ?? 'twinkle',
     lightIntensity: settings?.lightIntensity ?? 1,
     fireplaceContribution: sceneCfg.look?.fireplaceContribution ?? 1,
+    shadowStrength: sceneCfg.look?.shadowStrength ?? 1,
+    shadowSoftness: sceneCfg.look?.shadowSoftness ?? 1,
     decorScale: settings?.decorScale ?? 1,
   };
 

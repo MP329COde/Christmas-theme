@@ -49,6 +49,12 @@ function mulberry32(seed) {
   };
 }
 
+const TAU = Math.PI * 2;
+function seededUnit(seed, salt = 0) {
+  const x = Math.sin((seed + salt * 17.17) * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 function toRgb(color) {
   if (color.startsWith('rgb')) {
     const [r, g, b] = color.match(/\d+/g).map(Number);
@@ -100,6 +106,9 @@ export function glowSprite(color, size = 64) {
   glowCache.set(key, cv);
   return cv;
 }
+
+const TREE_SHADOW_SPRITE = glowSprite('#000000', 128);
+const FIREPLACE_SHADOW_SPRITE = glowSprite('#000000', 160);
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -474,23 +483,57 @@ function getTree(scale, colors, seed, spec) {
 /// side are genuinely different trees rather than one sprite mirrored.
 export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   const scale = Math.max(0.55, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
-  const tree = getTree(scale, colors, spec.seed ?? 1337, spec);
+  const seed = spec.seed ?? 1337;
+  const tree = getTree(scale, colors, seed, spec);
   const gain = (opts.lightIntensity ?? 1) * (spec.lights?.intensity ?? 1);
   const palette = spec.palette ?? ['#ffdba0'];
   const mode = spec.lights?.mode ?? opts.lightAnimation;
   const speed = spec.lights?.speed ?? 1;
   const bulbScale = spec.lights?.size ?? 1;
+  const sway = Math.max(0, Number(spec.sway ?? 1) || 0);
 
   const originX = Math.round((spec.x ?? 0.5) * width - tree.sprite.width / 2);
   const originY = height - tree.sprite.height;
+  const pivotX = tree.sprite.width / 2;
+  const pivotY = tree.sprite.height;
+
+  const swayPhase = seededUnit(seed, 2) * TAU;
+  const swayRate = 0.45 + seededUnit(seed, 5) * 0.45;
+  const leanAmp = (0.005 + 0.003 * Math.min(1.8, scale)) * sway;
+  const driftAmp = (0.8 + 1.5 * Math.min(2, scale)) * sway;
+  const lean =
+    Math.sin(time * swayRate + swayPhase) * leanAmp
+    + Math.sin(time * (swayRate * 0.43) + swayPhase * 1.7) * leanAmp * 0.45;
+  const drift = Math.sin(time * (0.28 + seededUnit(seed, 8) * 0.3) + swayPhase * 0.61) * driftAmp;
+  const localDrift = spec.flip ? -drift : drift;
+  const localLean = spec.flip ? -lean : lean;
+  const shadowStrength = Math.max(0, opts.shadowStrength ?? 1);
+  const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
+
+  if (shadowStrength > 0) {
+    const sw = tree.sprite.width * (0.64 + 0.24 * shadowSoftness);
+    const sh = 46 * scale * (0.72 + 0.45 * shadowSoftness);
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.42, 0.18 + 0.16 * shadowStrength);
+    ctx.drawImage(
+      TREE_SHADOW_SPRITE,
+      originX + pivotX + localDrift - sw / 2,
+      originY + tree.groundY - sh * 0.55,
+      sw,
+      sh
+    );
+    ctx.restore();
+  }
 
   ctx.save();
+  ctx.translate(originX, originY);
   if (spec.flip) {
-    ctx.translate(originX + tree.sprite.width, originY);
+    ctx.translate(tree.sprite.width, 0);
     ctx.scale(-1, 1);
-  } else {
-    ctx.translate(originX, originY);
   }
+  ctx.translate(pivotX + localDrift, pivotY);
+  ctx.rotate(localLean);
+  ctx.translate(-pivotX, -pivotY);
   ctx.drawImage(tree.sprite, 0, 0);
 
   if (spec.lightsOn !== false && tree.lights.length) {
@@ -512,7 +555,11 @@ export function drawTree(ctx, width, height, colors, time, spec, opts = {}) {
   if (tree.star) {
     ctx.globalCompositeOperation = 'lighter';
     const starGlow = glowSprite(colors.accent, 96);
-    const twinkle = 0.7 + 0.3 * Math.sin(time * 2.1) + 0.08 * Math.sin(time * 6.3);
+    const starPhase = seededUnit(seed, 11) * TAU;
+    const twinkle =
+      0.66
+      + 0.28 * Math.sin(time * (1.8 + seededUnit(seed, 12) * 0.55) + starPhase)
+      + 0.12 * Math.sin(time * 5.7 + starPhase * 0.4);
     const ss = 90 * twinkle * scale * 0.8;
     ctx.globalAlpha = Math.min(1, 0.85 * twinkle * gain);
     ctx.drawImage(starGlow, tree.star.x - ss / 2, tree.star.y - ss / 2, ss, ss);
@@ -676,6 +723,62 @@ function bakeRusticFireplace(scale, colors, opts) {
   const openH = h * 0.56;
   const ox = (w - openW) / 2;
   const oy = h - openH - 12 * scale;
+  const hearthY = h - 24 * scale;
+
+  // Raised limestone hearth so the firebox feels grounded instead of ending
+  // abruptly at the floor line.
+  c.fillStyle = 'rgba(0,0,0,0.24)';
+  c.beginPath();
+  c.ellipse(w / 2, h - 4 * scale, w * 0.35, 9 * scale, 0, 0, Math.PI * 2);
+  c.fill();
+  const hearthTop = c.createLinearGradient(0, hearthY - 5 * scale, 0, hearthY + 10 * scale);
+  hearthTop.addColorStop(0, '#d8c2a3');
+  hearthTop.addColorStop(0.55, '#b99a75');
+  hearthTop.addColorStop(1, '#8c6a46');
+  c.fillStyle = hearthTop;
+  roundRect(c, 18 * scale, hearthY - 5 * scale, w - 36 * scale, 15 * scale, 5 * scale);
+  c.fill();
+  const hearthFace = c.createLinearGradient(0, hearthY + 1 * scale, 0, h);
+  hearthFace.addColorStop(0, '#97724c');
+  hearthFace.addColorStop(1, '#5d4128');
+  c.fillStyle = hearthFace;
+  roundRect(c, 28 * scale, hearthY + 1 * scale, w - 56 * scale, 19 * scale, 4 * scale);
+  c.fill();
+  c.strokeStyle = 'rgba(255,245,224,0.22)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.moveTo(24 * scale, hearthY - 2 * scale);
+  c.lineTo(w - 24 * scale, hearthY - 2 * scale);
+  c.stroke();
+
+  // Framed stone arch around the opening to give the surround a clearer focal
+  // structure than a flat wall of stone.
+  c.save();
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.lineWidth = 16 * scale;
+  c.strokeStyle = 'rgba(74,49,30,0.34)';
+  c.beginPath();
+  c.moveTo(ox - 6 * scale, oy + openH);
+  c.lineTo(ox - 6 * scale, oy + openH * 0.28);
+  c.quadraticCurveTo(w / 2, oy - 28 * scale, ox + openW + 6 * scale, oy + openH * 0.28);
+  c.lineTo(ox + openW + 6 * scale, oy + openH);
+  c.stroke();
+  c.lineWidth = 7 * scale;
+  c.strokeStyle = 'rgba(255,234,205,0.15)';
+  c.beginPath();
+  c.moveTo(ox - 2 * scale, oy + openH - 2 * scale);
+  c.lineTo(ox - 2 * scale, oy + openH * 0.3);
+  c.quadraticCurveTo(w / 2, oy - 18 * scale, ox + openW + 2 * scale, oy + openH * 0.3);
+  c.lineTo(ox + openW + 2 * scale, oy + openH - 2 * scale);
+  c.stroke();
+  c.restore();
+  c.fillStyle = '#b89267';
+  roundRect(c, w / 2 - 12 * scale, oy - 12 * scale, 24 * scale, 18 * scale, 3 * scale);
+  c.fill();
+  c.fillStyle = 'rgba(255,243,221,0.2)';
+  roundRect(c, w / 2 - 9 * scale, oy - 10 * scale, 18 * scale, 5 * scale, 2 * scale);
+  c.fill();
 
   c.save();
   roundRect(c, ox, oy, openW, openH, 6 * scale);
@@ -852,13 +955,20 @@ function bakeModernFireplace(scale, colors, opts) {
   // minimalist mantel actually has.
   const mantelY = 46 * scale;
   const mantelH = 8 * scale;
+  const plinthY = h - 30 * scale;
 
   // --- flat panel wall, brushed rather than textured -----------------------
   const panel = c.createLinearGradient(0, 0, 0, h);
-  panel.addColorStop(0, '#33363c');
-  panel.addColorStop(0.55, '#26282d');
-  panel.addColorStop(1, '#1a1b1f');
+  panel.addColorStop(0, '#383b42');
+  panel.addColorStop(0.42, '#2a2d33');
+  panel.addColorStop(1, '#181a1e');
   c.fillStyle = panel;
+  c.fillRect(0, 0, w, h);
+  const wash = c.createRadialGradient(w / 2, h * 0.48, 0, w / 2, h * 0.48, w * 0.54);
+  wash.addColorStop(0, 'rgba(255,184,92,0.1)');
+  wash.addColorStop(0.38, 'rgba(255,184,92,0.03)');
+  wash.addColorStop(1, 'rgba(255,184,92,0)');
+  c.fillStyle = wash;
   c.fillRect(0, 0, w, h);
   // Faint brushed-metal streaks: barely-there horizontal lines, not the
   // stone's rough mottling.
@@ -871,12 +981,42 @@ function bakeModernFireplace(scale, colors, opts) {
     c.lineTo(w, y + (rand() - 0.5) * 2);
     c.stroke();
   }
+  // Slim fluted side bands stop the panel reading as a flat rectangle while
+  // keeping the minimalist language of the insert.
+  for (const bandX of [34 * scale, w - 46 * scale]) {
+    const band = c.createLinearGradient(bandX, 0, bandX + 12 * scale, 0);
+    band.addColorStop(0, 'rgba(255,255,255,0.02)');
+    band.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+    band.addColorStop(1, 'rgba(0,0,0,0.18)');
+    c.fillStyle = band;
+    roundRect(c, bandX, 22 * scale, 12 * scale, h - 56 * scale, 5 * scale);
+    c.fill();
+  }
 
   // --- wide, short linear firebox, flush with a slim dark bezel ------------
   const openW = w * 0.82;
   const openH = h * 0.17;
   const ox = (w - openW) / 2;
   const oy = h - openH - 14 * scale;
+
+  // Floating plinth below the slot gives the modern insert some weight.
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.ellipse(w / 2, h - 5 * scale, w * 0.28, 7 * scale, 0, 0, Math.PI * 2);
+  c.fill();
+  const plinth = c.createLinearGradient(0, plinthY, 0, h);
+  plinth.addColorStop(0, '#e4ded2');
+  plinth.addColorStop(0.45, '#c4beb2');
+  plinth.addColorStop(1, '#8f877b');
+  c.fillStyle = plinth;
+  roundRect(c, 42 * scale, plinthY, w - 84 * scale, 20 * scale, 3 * scale);
+  c.fill();
+  c.strokeStyle = 'rgba(255,255,255,0.35)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(46 * scale, plinthY + 1.2 * scale);
+  c.lineTo(w - 46 * scale, plinthY + 1.2 * scale);
+  c.stroke();
 
   c.save();
   roundRect(c, ox - 5 * scale, oy - 5 * scale, openW + 10 * scale, openH + 10 * scale, 3 * scale);
@@ -912,9 +1052,13 @@ function bakeModernFireplace(scale, colors, opts) {
   }
   c.restore();
 
-  // Slim bezel highlight, top edge only — a thin reveal line rather than
-  // the rustic recess shadow all the way round.
-  c.strokeStyle = 'rgba(255,255,255,0.12)';
+  // Slim metal trim around the slot, with the strongest catchlight along the
+  // upper edge like brushed black nickel.
+  c.strokeStyle = 'rgba(255,255,255,0.1)';
+  c.lineWidth = 1.2 * scale;
+  roundRect(c, ox - 1 * scale, oy - 1 * scale, openW + 2 * scale, openH + 2 * scale, 2.5 * scale);
+  c.stroke();
+  c.strokeStyle = 'rgba(255,244,220,0.22)';
   c.lineWidth = 1;
   c.beginPath();
   c.moveTo(ox, oy - 1);
@@ -935,9 +1079,9 @@ function bakeModernFireplace(scale, colors, opts) {
   c.fillRect(shelfX, mantelY + mantelH, shelfW, 14 * scale);
 
   const shelf = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
-  shelf.addColorStop(0, '#e9e5dc');
-  shelf.addColorStop(0.5, '#c9c4b8');
-  shelf.addColorStop(1, '#a8a296');
+  shelf.addColorStop(0, '#f3eee5');
+  shelf.addColorStop(0.5, '#d3cdc2');
+  shelf.addColorStop(1, '#9d968a');
   c.fillStyle = shelf;
   roundRect(c, shelfX, mantelY, shelfW, mantelH, 1.5 * scale);
   c.fill();
@@ -1104,8 +1248,18 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   const fireX = x + geom.fireX;
   const fireY = y + geom.fireY;
   const breathe = 0.86 + 0.1 * Math.sin(time * 2.3) + 0.04 * Math.sin(time * 7.1);
+  const shadowStrength = Math.max(0, opts.shadowStrength ?? 1);
+  const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
 
   ctx.save();
+
+  if (shadowStrength > 0) {
+    const sw = geom.w * (0.86 + 0.28 * shadowSoftness);
+    const sh = geom.h * (0.34 + 0.15 * shadowSoftness);
+    ctx.globalAlpha = Math.min(0.34, 0.12 + 0.14 * shadowStrength);
+    ctx.drawImage(FIREPLACE_SHADOW_SPRITE, x + geom.w / 2 - sw / 2, y + geom.h * 0.56 - sh * 0.2, sw, sh);
+    ctx.globalAlpha = 1;
+  }
 
   // Light thrown onto the floor and wall, drawn before the fireplace so it
   // reads as light landing on the room rather than a haze over the stone.
