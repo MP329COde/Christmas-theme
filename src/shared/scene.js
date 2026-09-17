@@ -32,18 +32,22 @@ export const AURORA_PALETTES = {
   classic: {
     colors: ['#5cffb0', '#82ebff', '#d678ff'],
     haze: ['#40be8c', '#50aadc', '#965ad2'],
+    fringe: '#ff5cbe',
   },
   emerald: {
     colors: ['#4dff8a', '#5dffc2', '#8fffd2'],
     haze: ['#2ca866', '#36b88a', '#4aa88a'],
+    fringe: '#ff76c8',
   },
   arctic: {
     colors: ['#8ff5ff', '#78b9ff', '#d4c8ff'],
     haze: ['#58c2d2', '#4e7fc4', '#9078c8'],
+    fringe: '#dca0ff',
   },
   twilight: {
     colors: ['#ff7eb6', '#b98cff', '#718cff'],
     haze: ['#bd5d8c', '#8064be', '#4d63b2'],
+    fringe: '#ff5a9d',
   },
 };
 

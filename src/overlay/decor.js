@@ -181,6 +181,68 @@ function bough(c, x, y, len, angle, width, color, rand) {
 // garland (top of screen)
 // ---------------------------------------------------------------------------
 
+const garlandCache = new Map();
+
+function bakeGarland(width, colors, spacing, sag) {
+  const key = `${Math.round(width)}|${colors.join(',')}|${spacing}|${sag}`;
+  const cached = garlandCache.get(key);
+  if (cached) return cached;
+
+  const count = Math.max(2, Math.round(width / spacing));
+  const cv = makeCanvas(width, 88);
+  const c = cv.getContext('2d');
+  const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 * sag + Math.sin(t * Math.PI) * 26 * sag;
+  const rand = mulberry32(Math.round(width * 17 + spacing * 31 + sag * 101));
+
+  // Dense, overlapping fir sprigs make the string read as a real garland
+  // rather than a row of isolated bulbs.
+  c.lineCap = 'round';
+  for (let i = 0; i <= count; i++) {
+    const t = i / count;
+    const x = t * width;
+    const y = wireY(t);
+    for (const side of [-1, 1]) {
+      bough(c, x, y + 4, spacing * (0.72 + rand() * 0.28), side * (0.18 + rand() * 0.22) + Math.PI / 2, 2.2, '#173b27', rand);
+      bough(c, x + side * spacing * 0.16, y + 6, spacing * (0.45 + rand() * 0.2), side * 0.4 + Math.PI / 2, 1.2, '#3d6d3c', rand);
+    }
+  }
+
+  // A few heavier baubles break up the foliage and provide the large,
+  // reflective shapes visible in a real mantel or doorway garland.
+  for (let i = 1; i < count; i += 2) {
+    const t = i / count;
+    const x = t * width;
+    const y = wireY(t) + 18 + (rand() - 0.5) * 5;
+    const radius = 5 + rand() * 2.5;
+    const color = colors[i % colors.length];
+    const bulb = c.createRadialGradient(x - radius * 0.35, y - radius * 0.4, 0, x, y, radius);
+    bulb.addColorStop(0, '#ffffff');
+    bulb.addColorStop(0.16, color);
+    bulb.addColorStop(0.78, shade(color, -18));
+    bulb.addColorStop(1, shade(color, -42));
+    c.fillStyle = bulb;
+    c.beginPath();
+    c.arc(x, y, radius, 0, TAU);
+    c.fill();
+    c.fillStyle = '#b08a42';
+    c.fillRect(x - 1.5, y - radius - 3, 3, 4);
+  }
+
+  c.strokeStyle = 'rgba(13,18,18,0.9)';
+  c.lineWidth = 1.5;
+  c.beginPath();
+  for (let i = 0; i <= count * 3; i++) {
+    const t = i / (count * 3);
+    const x = t * width;
+    const y = wireY(t);
+    if (i === 0) c.moveTo(x, y);
+    else c.lineTo(x, y);
+  }
+  c.stroke();
+  garlandCache.set(key, cv);
+  return cv;
+}
+
 /// A hung cable with bulbs. The wire is one cheap stroked path; each bulb
 /// is a baked glow sprite plus a tiny shaded body, so the whole string
 /// costs a couple of dozen blits instead of a couple of dozen gradients.
@@ -191,18 +253,7 @@ export function drawGarland(ctx, width, time, colors, opts = {}) {
   const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 * sag + Math.sin(t * Math.PI) * 26 * sag;
 
   ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(16,20,26,0.8)';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  for (let i = 0; i <= count * 3; i++) {
-    const t = i / (count * 3);
-    const x = t * width;
-    const y = wireY(t);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
+  ctx.drawImage(bakeGarland(width, colors, spacing, sag), 0, 0);
 
   for (let i = 0; i <= count; i++) {
     const t = i / count;

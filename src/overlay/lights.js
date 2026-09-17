@@ -155,7 +155,7 @@ const cometSprite = (() => {
 const RAY_W = 16;
 const RAY_H = 512;
 
-function bakeRay(color, softness) {
+function bakeRay(color, softness, fringe = null) {
   const cv = makeCanvas(RAY_W, RAY_H);
   const c = cv.getContext('2d');
   // Bright at the bottom (the curtain's lower edge), dissolving upward.
@@ -167,6 +167,17 @@ function bakeRay(color, softness) {
   g.addColorStop(1, `rgba(${color},0)`);
   c.fillStyle = g;
   c.fillRect(0, 0, RAY_W, RAY_H);
+
+  // The saturated nitrogen fringe belongs at the lower edge of a strong
+  // aurora, not as a separate horizontal stripe floating in the sky.
+  if (fringe) {
+    const lower = c.createLinearGradient(0, RAY_H, 0, RAY_H * 0.72);
+    lower.addColorStop(0, `rgba(${fringe},0.55)`);
+    lower.addColorStop(1, `rgba(${fringe},0)`);
+    c.globalCompositeOperation = 'lighter';
+    c.fillStyle = lower;
+    c.fillRect(0, RAY_H * 0.68, RAY_W, RAY_H * 0.32);
+  }
 
   // Soften the sides so neighbouring rays blend into a sheet instead of
   // reading as a picket fence — the single thing that most gave the old
@@ -226,7 +237,8 @@ function getAurora(paletteName) {
     { color: palette.colors[2].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), haze: palette.haze[2].slice(1).match(/../g).map((v) => parseInt(v, 16)).join(','), depth: 1.0, softness: 0.6, rays: 60, drift: 0.026, base: 0.19, amp: 0.04, alpha: 0.12 },
   ];
   for (const s of specs) {
-    s.ray = bakeRay(s.color, s.softness);
+    const fringe = palette.fringe?.slice(1).match(/../g).map((v) => parseInt(v, 16)).join(',');
+    s.ray = bakeRay(s.color, s.softness, fringe);
     s.hazeSprite = bakeHaze(s.haze);
     s.phases = new Float32Array(s.rays);
     s.rates = new Float32Array(s.rays);

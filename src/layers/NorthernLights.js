@@ -82,7 +82,7 @@ function curtainsForPalette(paletteName) {
 // i in 0..HAZE_SEGMENTS inclusive: 13 overlapping segments per curtain,
 // matching the Canvas 2D bake's `segs = 12` loop exactly.
 const HAZE_SEGMENTS = 12;
-const INSTANCE_STRIDE = 16; // 4 vec4 attributes below
+const INSTANCE_STRIDE = 20; // 5 vec4 attributes below
 
 const VS = /* glsl */ `#version 300 es
 precision highp float;
@@ -91,12 +91,14 @@ in vec4 aBase;    // t (curtain-fraction position), baseFrac, ampFrac, drift
 in vec4 aShape;   // widthJitter, depth, isRay (1) / isHaze (0), unused
 in vec4 aPhase;   // shimmer phase, shimmer rate, horizontal off-grid jitter, unused
 in vec4 aColorA;  // r, g, b, base alpha
+in vec4 aColorB;  // nitrogen-fringe r, g, b, unused
 uniform vec2 uResolution;
 uniform float uTime;
 uniform vec2 uCamOffset; // camera parallax at depth = 1; scaled by aShape.y below
 uniform float uGain;
 uniform float uDetail;
 out vec3 vColor;
+out vec3 vFringe;
 out float vAlpha;
 out float vVertT;  // 0 at the curtain's bright lower edge, 1 at its dim top
 out float vHorizT; // -1..1 across the quad's width, for soft side edges
@@ -143,6 +145,7 @@ void main() {
   pos += uCamOffset * depth;
 
   vColor = aColorA.rgb;
+  vFringe = aColorB.rgb;
   vAlpha = aColorA.a * uGain * mix(0.45, energy * spread, isRay);
   vVertT = vt;
   vHorizT = aCorner.x;
@@ -158,6 +161,7 @@ void main() {
 const FS = /* glsl */ `#version 300 es
 precision highp float;
 in vec3 vColor;
+in vec3 vFringe;
 in float vAlpha;
 in float vVertT;
 in float vHorizT;
@@ -167,7 +171,10 @@ void main() {
   float horiz = 1.0 - smoothstep(0.45, 1.0, abs(vHorizT));
   float a = clamp(vAlpha * vertical * horiz, 0.0, 1.0);
   // Premultiplied, to match every other layer's blend convention.
-  outColor = vec4(vColor * a, a);
+  // Saturated nitrogen colour is concentrated at the lower edge of rays.
+  float fringeAlpha = clamp(vAlpha * (1.0 - smoothstep(0.0, 0.32, vVertT)) * horiz * 0.7, 0.0, 1.0);
+  vec3 color = mix(vColor, vFringe, fringeAlpha);
+  outColor = vec4(color * a, a);
 }`;
 
 export class NorthernLights extends Layer {
@@ -190,6 +197,7 @@ export class NorthernLights extends Layer {
       { name: 'aShape', size: 4 },
       { name: 'aPhase', size: 4 },
       { name: 'aColorA', size: 4 },
+      { name: 'aColorB', size: 4 },
     ]);
     this._buildInstances();
     this.ready = true;
@@ -210,13 +218,15 @@ export class NorthernLights extends Layer {
     let hazeCount = 0;
     for (const c of curtains) {
       const [hr, hg, hb] = c.haze.map((v) => v / 255);
+      const [fr, fg, fb] = c.fringe.map((v) => v / 255);
       for (let i = 0; i <= HAZE_SEGMENTS; i++) {
         const t = i / HAZE_SEGMENTS;
         writer.push(
           t, c.base, c.amp, c.drift,
           0, c.depth, 0, 0,
           0, 0, 0, 0,
-          hr, hg, hb, c.alpha
+          hr, hg, hb, c.alpha,
+          0, 0, 0, 0
         );
         hazeCount++;
       }
@@ -232,6 +242,7 @@ export class NorthernLights extends Layer {
     // all three depths represented in their original proportion.
     const perCurtain = curtains.map((c) => {
       const [r, g, b] = c.color.map((v) => v / 255);
+      const [fr, fg, fb] = c.fringe.map((v) => v / 255);
       const phases = new Float32Array(c.rays);
       const rates = new Float32Array(c.rays);
       const widths = new Float32Array(c.rays);
@@ -267,7 +278,8 @@ export class NorthernLights extends Layer {
         t, c.base, c.amp, c.drift,
         pc.widths[rayIdx], c.depth, 1, 0,
         pc.phases[rayIdx], pc.rates[rayIdx], pc.offsets[rayIdx], 0,
-        pc.r, pc.g, pc.b, c.alpha
+        pc.r, pc.g, pc.b, c.alpha,
+        fr, fg, fb, 0
       );
       rayCount++;
     }
