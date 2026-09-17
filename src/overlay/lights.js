@@ -280,6 +280,8 @@ function curtainBase(spec, t, time, h) {
 /// go dim as it goes sparse.
 function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
   const stride = Math.max(1, Math.round(1 / Math.max(0.08, Math.min(1, detail))));
+  const effectiveDetail = 1 / stride;
+  const spread = Math.min(2, Math.sqrt(1 / effectiveDetail));
   for (const spec of getAurora(palette)) {
     // Slow horizontal drift, wrapped, so the whole curtain migrates the
     // way a real one does over minutes.
@@ -309,8 +311,8 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
       const travel = 0.5 + 0.5 * Math.sin(t * 11.0 - time * 0.55 + spec.depth);
       const energy = 0.25 + 0.75 * (own * 0.55 + travel * 0.45);
       const height = h * (0.10 + 0.22 * energy);
-      const width = RAY_W * spec.widths[i] * (0.8 + 0.4 * energy);
-      const alpha = spec.alpha * energy * gain * Math.min(stride, 1 / Math.max(0.08, detail));
+      const width = RAY_W * spec.widths[i] * (0.8 + 0.4 * energy) * spread;
+      const alpha = spec.alpha * energy * gain * spread;
       if (alpha < 0.02) continue;
       ctx.globalAlpha = Math.min(1, alpha);
       ctx.drawImage(spec.ray, x - width / 2, base - height, width, height);

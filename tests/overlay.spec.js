@@ -9,6 +9,8 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/overlay');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   // Wait for the initial theme/settings fetch (bridge.js, localStorage
   // fallback outside Tauri) to finish before each test acts, otherwise it
   // can resolve after a test's own setDensity() call and silently
@@ -96,12 +98,72 @@ test('the selected weather profile coordinates snow rendering', async ({ page })
 test('the selected fireplace contribution reaches the Canvas renderer', async ({ page }) => {
   await page.evaluate(() => {
     localStorage.setItem('christmas-theme-settings', JSON.stringify({
-      themeId: 'classic-red', scene: { screens: { 0: { look: { fireplaceContribution: 0.4 } } } },
+      themeId: 'classic-red', scene: { screens: { 0: { look: { fireplaceContribution: 0.4, shadowStrength: 1.25, shadowSoftness: 1.4 } } } },
     }));
   });
   await page.reload();
   await page.evaluate(() => window.snowOverlayReady);
-  expect(await page.evaluate(() => window.snowOverlay.getDecorConfig().fireplaceContribution)).toBe(0.4);
+  expect(await page.evaluate(() => window.snowOverlay.getDecorConfig())).toMatchObject({
+    fireplaceContribution: 0.4,
+    shadowStrength: 1.25,
+    shadowSoftness: 1.4,
+  });
+});
+
+test('an animated background changes the rendered frame over time', async ({ page }) => {
+  await page.evaluate(() => {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120">
+        <rect width="240" height="120" fill="#08111c"/>
+        <rect x="0" y="0" width="60" height="120" fill="#d7263d"/>
+        <rect x="60" y="0" width="60" height="120" fill="#f4d35e"/>
+        <rect x="120" y="0" width="60" height="120" fill="#1b998b"/>
+        <rect x="180" y="0" width="60" height="120" fill="#2d3047"/>
+      </svg>`;
+    localStorage.setItem('christmas-bg-screen-0', `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    localStorage.setItem('christmas-theme-settings', JSON.stringify({
+      themeId: 'classic-red',
+      snowDensity: 0,
+      snowAccumulate: false,
+      scene: {
+        screens: {
+          0: {
+            background: 'image',
+            backgroundFit: 'cover',
+            backgroundOpacity: 1,
+            backgroundAnimation: 'kenburns',
+            backgroundMotion: 1.8,
+            aurora: false,
+            stars: false,
+            icicles: false,
+            snowGlitter: false,
+            garland: { enabled: false },
+            trees: [],
+            fireplaces: [],
+          },
+        },
+      },
+    }));
+  });
+  await page.reload();
+  await page.evaluate(() => window.snowOverlayReady);
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => {
+    const canvas = document.getElementById('snow');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    const sample = [];
+    for (let i = 0; i < data.length; i += 64) sample.push(data[i]);
+    return sample;
+  });
+  await page.waitForTimeout(1400);
+  const diff = await page.evaluate((prior) => {
+    const canvas = document.getElementById('snow');
+    const now = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let total = 0;
+    for (let i = 0, j = 0; i < now.length; i += 64, j++) total += Math.abs(now[i] - prior[j]);
+    return total;
+  }, before);
+  expect(diff).toBeGreaterThan(5_000);
 });
 
 test('an empty composition still renders the snow', async ({ page }) => {

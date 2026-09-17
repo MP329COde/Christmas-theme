@@ -825,6 +825,8 @@ export class ChristmasTree extends Layer {
       lightMode: 'twinkle',
       lightSpeed: 1,
       bulbSize: 1,
+      shadowStrength: 1,
+      shadowSoftness: 1,
       flip: false,
       ...options,
     };
@@ -1146,7 +1148,15 @@ export class ChristmasTree extends Layer {
 
     // --- contact shadow ---------------------------------------------------
     const sh = new InstanceWriter(5, 1);
-    sh.push(0, radius * 0.02, 0, radius * 1.25, radius * 0.2);
+    const shadowStrength = Math.max(0, this.opts.shadowStrength ?? 1);
+    const shadowSoftness = Math.max(0.4, this.opts.shadowSoftness ?? 1);
+    if (shadowStrength > 0) {
+      sh.push(
+        0, radius * 0.02, 0,
+        radius * (1.05 + 0.32 * shadowSoftness),
+        radius * (0.11 + 0.12 * shadowSoftness)
+      );
+    }
     this.shadowBatch.upload(sh.data, sh.count, gl.STATIC_DRAW);
   }
 
@@ -1266,13 +1276,18 @@ export class ChristmasTree extends Layer {
     };
 
     // --- contact shadow, first and without depth ------------------------
-    gl.useProgram(this.shadowProg.program);
-    setShared(this.shadowProg.uniforms);
-    gl.uniform1f(this.shadowProg.uniforms.uOpacity, 0.42);
-    gl.depthMask(false);
-    Blend.over(gl);
-    this.shadowBatch.draw();
-    gl.depthMask(true);
+    if ((this.opts.shadowStrength ?? 1) > 0) {
+      gl.useProgram(this.shadowProg.program);
+      setShared(this.shadowProg.uniforms);
+      gl.uniform1f(
+        this.shadowProg.uniforms.uOpacity,
+        Math.min(0.6, 0.42 * Math.max(0, this.opts.shadowStrength ?? 1))
+      );
+      gl.depthMask(false);
+      Blend.over(gl);
+      this.shadowBatch.draw();
+      gl.depthMask(true);
+    }
 
     // --- foliage, trunk and snow: alpha-tested, depth-written -----------
     gl.useProgram(this.foliage.program);

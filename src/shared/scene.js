@@ -26,7 +26,7 @@ export const LIGHT_PALETTES = {
   gold: ['#ffd75e', '#ffb02e', '#fff0c2'],
 };
 
-export const LIGHT_MODES = ['twinkle', 'sparkle', 'chase', 'wave', 'steady'];
+export const LIGHT_MODES = ['twinkle', 'sparkle', 'chase', 'wave', 'pulse', 'shimmer', 'steady'];
 
 export const AURORA_PALETTES = {
   classic: {
@@ -189,6 +189,8 @@ export function defaultLook(overrides = {}) {
     saturation: 1,
     ambientWarmth: 1,
     fireplaceContribution: 1,
+    shadowStrength: 1,
+    shadowSoftness: 1,
     windStrength: 1,
     windGustiness: 1,
     windDirection: 0,
@@ -263,6 +265,8 @@ export function defaultScreen(overrides = {}) {
     background: 'none', // 'none' | 'image'
     backgroundFit: 'cover', // cover | contain | stretch | tile
     backgroundOpacity: 1,
+    backgroundAnimation: 'drift', // none | drift | kenburns
+    backgroundMotion: 1,
     garland: defaultGarland(),
     trees: [
       defaultTree({ x: 0.1, seed: 1337 }),
@@ -353,6 +357,15 @@ export function bulbLevel(mode, time, index, phase = 0, count = 1, speed = 1) {
     case 'wave':
       // A phase offset per bulb turns the shared sine into a travelling swell.
       return 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(time * 2.4 - index * 0.55));
+    case 'pulse':
+      // A whole string breathing in and out together, like a dimmer cycle.
+      return 0.22 + 0.78 * (0.5 + 0.5 * Math.sin(time * 2.1 + phase * 0.35));
+    case 'shimmer': {
+      // Fast high-frequency flicker with a floor still high enough that the
+      // string reads as energized rather than randomly switching off.
+      const flicker = 0.5 + 0.5 * Math.sin(time * 8.5 + index * 0.9 + phase * 2.2);
+      return 0.3 + 0.7 * flicker * flicker;
+    }
     case 'sparkle': {
       // Mostly off, with short bright flashes — the "twinkle" setting on a
       // real light string, as opposed to a slow fade.
