@@ -669,9 +669,20 @@ function drawStocking(c, x, y, scale, color, cuffColor) {
   c.save();
   c.translate(x, y);
 
-  c.fillStyle = 'rgba(0,0,0,0.3)';
+  // Soft wall shadow of the stocking body and cuff cast onto the wall behind,
+  // offset to the bottom-right rather than a floating floor shadow in mid-air.
+  c.fillStyle = 'rgba(0,0,0,0.18)';
   c.beginPath();
-  c.ellipse(w * 0.3, h + 2 * scale, w * 0.5, 3 * scale, 0, 0, Math.PI * 2);
+  c.moveTo(2 * scale, 2 * scale);
+  c.lineTo(w + 2 * scale, 2 * scale);
+  c.lineTo(w * 0.92 + 2 * scale, h * 0.62 + 2 * scale);
+  c.quadraticCurveTo(w * 0.92 + 2 * scale, h + 2 * scale, w * 0.45 + 2 * scale, h + 2 * scale);
+  c.quadraticCurveTo(-w * 0.35 + 2 * scale, h + 2 * scale, 2 * scale, h * 0.6 + 2 * scale);
+  c.closePath();
+  c.fill();
+
+  c.fillStyle = 'rgba(0,0,0,0.18)';
+  roundRect(c, -1.5 * scale + 2 * scale, -7 * scale + 2 * scale, w + 3 * scale, 9 * scale, 2 * scale);
   c.fill();
 
   const body = c.createLinearGradient(0, 0, w, h);
@@ -691,7 +702,7 @@ function drawStocking(c, x, y, scale, color, cuffColor) {
   c.fillStyle = cuffColor;
   roundRect(c, -1.5 * scale, -7 * scale, w + 3 * scale, 9 * scale, 2 * scale);
   c.fill();
-  c.strokeStyle = 'rgba(0,0,0,0.15)';
+  c.strokeStyle = shade(cuffColor, -24);
   c.lineWidth = 1;
   for (let i = 0; i < 5; i++) {
     c.beginPath();
@@ -791,12 +802,12 @@ function bakeRusticFireplace(scale, colors, opts) {
   c.fillStyle = back;
   c.fillRect(ox, oy, openW, openH);
 
-  // Firebrick courses.
+  // Firebrick courses: realistic soot/mortar warm joints instead of harsh 1px black outline grid.
   const bh = 11 * scale;
   for (let y = oy; y < oy + openH; y += bh) {
     const off = ((y - oy) / bh) % 2 === 0 ? 0 : 13 * scale;
     for (let x = ox - 13 * scale; x < ox + openW; x += 26 * scale) {
-      c.strokeStyle = 'rgba(0,0,0,0.35)';
+      c.strokeStyle = 'rgba(56, 42, 34, 0.42)';
       c.lineWidth = 1;
       c.strokeRect(x + off, y, 26 * scale, bh);
     }
@@ -849,12 +860,14 @@ function bakeRusticFireplace(scale, colors, opts) {
   }
   c.restore();
 
-  // Recess shadow around the opening.
+  // Recess shadow around the opening: feathered multi-pass shadow to avoid a harsh black outline.
   c.save();
   roundRect(c, ox, oy, openW, openH, 6 * scale);
-  c.strokeStyle = 'rgba(0,0,0,0.8)';
-  c.lineWidth = 7 * scale;
-  c.stroke();
+  for (let i = 1; i <= 8; i++) {
+    c.strokeStyle = 'rgba(0,0,0,0.08)';
+    c.lineWidth = i * 2 * scale;
+    c.stroke();
+  }
   c.restore();
 
   // --- mantel beam ---------------------------------------------------------
@@ -872,7 +885,7 @@ function bakeRusticFireplace(scale, colors, opts) {
   c.lineTo(w + 8 * scale, mantelY + 1.5);
   c.stroke();
   for (let i = 0; i < 7; i++) {
-    c.strokeStyle = `rgba(0,0,0,${0.12 + rand() * 0.16})`;
+    c.strokeStyle = `rgba(45, 22, 10, ${0.22 + rand() * 0.28})`;
     c.lineWidth = 1;
     const gy = mantelY + 3 * scale + rand() * (mantelH - 6 * scale);
     c.beginPath();
