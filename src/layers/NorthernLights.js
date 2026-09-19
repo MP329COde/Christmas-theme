@@ -222,11 +222,20 @@ export class NorthernLights extends Layer {
       const [hr, hg, hb] = c.haze.map((v) => v / 255);
       for (let i = 0; i <= HAZE_SEGMENTS; i++) {
         const t = i / HAZE_SEGMENTS;
+        // Same off-grid jitter the rays get below (see the module header
+        // and Canvas 2D's matching hazeOffsetX/Y/Alpha): identical sprites
+        // sitting on a perfectly even grid sum, under additive blending,
+        // into a periodic ripple across the curtain. aPhase.z reuses the
+        // vertex shader's existing ray-jitter path; the baseFrac nudge and
+        // alpha scale do the same for vertical position and strength.
+        const jitterT = (rand() - 0.5) * 0.7 / HAZE_SEGMENTS;
+        const jitterBase = c.base * (1 + (rand() - 0.5) * 0.16);
+        const jitterAlpha = c.alpha * (0.75 + rand() * 0.5);
         writer.push(
-          t, c.base, c.amp, c.drift,
+          t, jitterBase, c.amp, c.drift,
           0, c.depth, 0, 0,
-          0, 0, 0, 0,
-          hr, hg, hb, c.alpha
+          0, 0, jitterT, 0,
+          hr, hg, hb, jitterAlpha
         );
         hazeCount++;
       }
@@ -245,15 +254,25 @@ export class NorthernLights extends Layer {
       const phases = new Float32Array(c.rays);
       const rates = new Float32Array(c.rays);
       const widths = new Float32Array(c.rays);
-      // Same off-grid jitter as the Canvas 2D fallback (src/overlay/lights.js)
-      // — without it every ray sits on the even i/rays slot and the whole
-      // curtain reads as a comb of parallel bars instead of an organic sheet.
+      // Same off-grid jitter as the Canvas 2D fallback (src/overlay/lights.js),
+      // PLUS a low-frequency warp of the whole 0..1 layout (two unrelated
+      // sine waves) baked straight into the offset: a per-ray jitter alone
+      // still averages out to an even comb, since every ray keeps roughly
+      // its own slot — the warp is what actually bunches stretches of the
+      // curtain into wisps and thins out others, killing the "comb of
+      // parallel bars" look for good.
       const offsets = new Float32Array(c.rays);
+      const warpAmp = [0.05 + rand() * 0.05, 0.025 + rand() * 0.03];
+      const warpFreq = [1 + Math.floor(rand() * 2), 3 + Math.floor(rand() * 3)];
+      const warpPhase = [rand() * Math.PI * 2, rand() * Math.PI * 2];
       for (let i = 0; i < c.rays; i++) {
         phases[i] = rand() * Math.PI * 2;
         rates[i] = 0.35 + rand() * 1.25;
         widths[i] = 0.7 + rand() * 1.5;
-        offsets[i] = (rand() - 0.5) * 0.6 / c.rays;
+        const raw = i / c.rays;
+        const warp = warpAmp[0] * Math.sin(raw * warpFreq[0] * Math.PI * 2 + warpPhase[0])
+                   + warpAmp[1] * Math.sin(raw * warpFreq[1] * Math.PI * 2 + warpPhase[1]);
+        offsets[i] = warp + (rand() - 0.5) * 1.6 / c.rays;
       }
       const order = [...Array(c.rays).keys()].sort(
         (a, b2) => vanDerCorput(a) - vanDerCorput(b2)

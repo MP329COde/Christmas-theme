@@ -231,17 +231,38 @@ function getAurora(paletteName) {
     s.phases = new Float32Array(s.rays);
     s.rates = new Float32Array(s.rays);
     s.widths = new Float32Array(s.rays);
-    // Jitters each ray off its even i/rays slot, by up to ~60% of a
-    // slot's width. Without this the rays sit on a perfectly regular
-    // grid, and a regular grid reads as a comb of parallel bars — the
-    // "radio-wave diagram" look — rather than an organic curtain, no
-    // matter how much the rays themselves shimmer.
+    // Jitters each ray off its even i/rays slot. A per-ray jitter alone
+    // still reads as a comb, though — every ray keeps roughly its own
+    // slot, so the AVERAGE spacing stays perfectly even and the eye still
+    // locks onto that rhythm. A real curtain has whole stretches that
+    // bunch into wisps and others that thin out, so on top of the per-ray
+    // jitter, warpFreq/warpPhase/warpAmp below bend the 0..1 layout with
+    // two unrelated low-frequency waves per curtain, unevenly compressing
+    // and stretching stretches of it — that's what actually kills the
+    // "radio-wave diagram" look, not the fine jitter.
     s.offsets = new Float32Array(s.rays);
+    s.warpAmp = [0.05 + rand() * 0.05, 0.025 + rand() * 0.03];
+    s.warpFreq = [1 + Math.floor(rand() * 2), 3 + Math.floor(rand() * 3)];
+    s.warpPhase = [rand() * Math.PI * 2, rand() * Math.PI * 2];
     for (let i = 0; i < s.rays; i++) {
       s.phases[i] = rand() * Math.PI * 2;
       s.rates[i] = 0.35 + rand() * 1.25;
       s.widths[i] = 0.7 + rand() * 1.5;
-      s.offsets[i] = (rand() - 0.5) * 0.6 / s.rays;
+      s.offsets[i] = (rand() - 0.5) * 1.6 / s.rays;
+    }
+    // Same reasoning as the ray offsets above, applied to the haze
+    // segments: 13 identical sprites sitting on a perfectly even i/segs
+    // grid sum, under additive blending, into a periodic ripple — visible
+    // as vertical bands across the whole curtain. A little per-segment
+    // jitter in position, height and strength breaks that periodicity up.
+    const segs = 12;
+    s.hazeOffsetX = new Float32Array(segs + 1);
+    s.hazeOffsetY = new Float32Array(segs + 1);
+    s.hazeAlphaJ = new Float32Array(segs + 1);
+    for (let i = 0; i <= segs; i++) {
+      s.hazeOffsetX[i] = (rand() - 0.5) * 0.7 / segs;
+      s.hazeOffsetY[i] = (rand() - 0.5) * 0.16;
+      s.hazeAlphaJ[i] = 0.75 + rand() * 0.5;
     }
   }
   auroraCurtains.set(paletteName, specs);
@@ -298,14 +319,19 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
     const segs = 12;
     const segW = (w / segs) * 2;
     for (let i = 0; i <= segs; i++) {
-      const t = i / segs;
-      const y = curtainBase(spec, t + shift, time, h);
+      const t = i / segs + spec.hazeOffsetX[i];
+      const y = curtainBase(spec, t + shift, time, h) + spec.hazeOffsetY[i] * h * 0.05;
       const hh = h * 0.3;
+      ctx.globalAlpha = spec.alpha * 0.45 * gain * spec.hazeAlphaJ[i];
       ctx.drawImage(spec.hazeSprite, t * w - segW / 2, y - hh, segW, hh);
     }
+    ctx.globalAlpha = spec.alpha * 0.45 * gain;
 
     for (let i = 0; i < spec.rays; i += stride) {
-      const t = ((i / spec.rays + spec.offsets[i] + shift) % 1 + 1) % 1;
+      const raw = i / spec.rays;
+      const warp = spec.warpAmp[0] * Math.sin(raw * spec.warpFreq[0] * Math.PI * 2 + spec.warpPhase[0])
+                 + spec.warpAmp[1] * Math.sin(raw * spec.warpFreq[1] * Math.PI * 2 + spec.warpPhase[1]);
+      const t = ((raw + warp + spec.offsets[i] + shift) % 1 + 1) % 1;
       const x = t * w;
       const base = curtainBase(spec, t, time, h);
       // Each ray breathes on its own rate, and a slow travelling wave runs
