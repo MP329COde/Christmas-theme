@@ -168,7 +168,13 @@ in float vHorizT;
 out vec4 outColor;
 void main() {
   float vertical = pow(1.0 - clamp(vVertT, 0.0, 1.0), 1.6);
-  float horiz = 1.0 - smoothstep(0.45, 1.0, abs(vHorizT));
+  // Plateau width matches the Canvas 2D haze sprite's side gradient
+  // (0.4..0.6 of full width, i.e. |x| < 0.2 in this -1..1 space) — a wider
+  // flat core here made neighbouring, 50%-overlapping haze segments stack
+  // their full-opacity regions on top of each other under additive
+  // blending, which read as periodic vertical bands instead of one
+  // continuous sheet.
+  float horiz = 1.0 - smoothstep(0.2, 1.0, abs(vHorizT));
   float a = clamp(vAlpha * vertical * horiz, 0.0, 1.0);
   // Premultiplied, to match every other layer's blend convention.
   outColor = vec4(vColor * a, a);
