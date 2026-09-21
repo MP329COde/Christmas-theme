@@ -157,7 +157,7 @@ export class GlTrees {
     const auroraGain = sceneCfg.auroraIntensity ?? 1;
     const auroraPalette = sceneCfg.auroraPalette ?? 'classic';
     const signature = JSON.stringify(trees) + JSON.stringify(themeColors)
-      + `|aurora:${aurora}:${auroraGain}:${auroraPalette}`;
+      + `|aurora:${aurora}:${auroraGain}:${auroraPalette}:${JSON.stringify(sceneCfg.auroraCustomColors)}`;
     if (signature === this.signature) return true;
     this.signature = signature;
 
@@ -167,7 +167,11 @@ export class GlTrees {
         scene.add(new ChristmasTree(layerOptionsFor(tree, i, themeColors, sceneCfg.look)));
       });
       if (aurora) {
-        const lights = new NorthernLights({ gain: auroraGain, palette: auroraPalette });
+        const lights = new NorthernLights({
+          gain: auroraGain,
+          palette: auroraPalette,
+          customColors: sceneCfg.auroraCustomColors,
+        });
         // Re-apply whatever detail level the governor last decided —
         // otherwise a composition change mid-session (adding a tree,
         // changing a colour) would silently undo a degrade that is still
