@@ -45,7 +45,20 @@ export const AURORA_PALETTES = {
     colors: ['#ff7eb6', '#b98cff', '#718cff'],
     haze: ['#bd5d8c', '#8064be', '#4d63b2'],
   },
+  custom: {
+    colors: ['#5cffb0', '#82ebff', '#d678ff'],
+    haze: ['#40be8c', '#50aadc', '#965ad2'],
+  },
 };
+
+/// Lighten/darken a hex colour by a percentage, returning a hex string.
+function shadeHex(hex, amt) {
+  const value = hex.slice(1);
+  const clamp = (v) => Math.max(0, Math.min(255, v));
+  const rgb = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+  const d = Math.round((amt / 100) * 255);
+  return `#${rgb.map((c) => clamp(c + d).toString(16).padStart(2, '0')).join('')}`;
+}
 
 /// Coordinated per-screen weather recipes. The numeric values are
 /// multipliers applied to the user's global snow controls, preserving a
@@ -74,7 +87,13 @@ export function resolveCameraMotionProfile(profile, reducedMotion = false) {
   return (CAMERA_MOTION_PROFILES[profile] ?? CAMERA_MOTION_PROFILES.system).motion;
 }
 
-export function resolveAuroraPalette(palette) {
+export function resolveAuroraPalette(palette, customColors = null) {
+  if (palette === 'custom' && customColors?.colors?.length === 3) {
+    return {
+      colors: customColors.colors,
+      haze: customColors.haze ?? customColors.colors.map((c) => shadeHex(c, -22)),
+    };
+  }
   return AURORA_PALETTES[palette] ?? AURORA_PALETTES.classic;
 }
 
@@ -257,6 +276,7 @@ export function defaultScreen(overrides = {}) {
     aurora: true,
     auroraIntensity: 1,
     auroraPalette: 'classic',
+    auroraCustomColors: { colors: ['#5cffb0', '#82ebff', '#d678ff'], haze: ['#40be8c', '#50aadc', '#965ad2'] },
     stars: true,
     starDensity: 1,
     shootingStarFrequency: 1,

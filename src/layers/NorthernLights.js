@@ -73,8 +73,8 @@ function hexToRgb(hex) {
   return [parseInt(value.slice(0, 2), 16), parseInt(value.slice(2, 4), 16), parseInt(value.slice(4, 6), 16)];
 }
 
-function curtainsForPalette(paletteName) {
-  const palette = resolveAuroraPalette(paletteName);
+function curtainsForPalette(paletteName, customColors = null) {
+  const palette = resolveAuroraPalette(paletteName, customColors);
   return CURTAIN_SHAPES.map((shape, index) => ({
     ...shape, color: hexToRgb(palette.colors[index]), haze: hexToRgb(palette.haze[index]),
   }));
@@ -139,7 +139,12 @@ void main() {
     isRay
   );
 
-  float centerX = t * uResolution.x;
+  // Render onto a virtual band 24% wider than the screen so the curtain
+  // can extend past the viewport on both sides. This matches the Canvas 2D
+  // overscan and prevents hard vertical cutoffs at the left/right edges.
+  float overscan = uResolution.x * 0.12;
+  float renderW = uResolution.x + overscan * 2.0;
+  float centerX = t * renderW - overscan;
   float baseYFromBottom = uResolution.y - distFromTop;
 
   float vt = aCorner.y * 0.5 + 0.5; // 0 at the bottom (bright), 1 at top (dim)
@@ -183,7 +188,7 @@ void main() {
 export class NorthernLights extends Layer {
   constructor(options = {}) {
     super(options.id ?? 'northern-lights', { z: options.z ?? 0.02, enabled: options.enabled ?? true });
-    this.opts = { gain: 1, seed: 80211, ...options };
+    this.opts = { gain: 1, seed: 80211, palette: 'classic', ...options };
     // The automatic quality governor's lever (0..1): see the module
     // header for why this is a draw COUNT, not a rebuild.
     this.detail = 1;
@@ -212,7 +217,7 @@ export class NorthernLights extends Layer {
   _buildInstances() {
     const rand = mulberry32(this.opts.seed);
     const writer = new InstanceWriter(INSTANCE_STRIDE, 320);
-    const curtains = curtainsForPalette(this.opts.palette);
+    const curtains = curtainsForPalette(this.opts.palette, this.opts.customColors);
 
     // Haze always comes first and is always drawn in full, whatever the
     // quality tier — it is what keeps the sky reading as a sheet of light

@@ -213,10 +213,15 @@ function bakeHaze(color) {
 }
 
 const auroraCurtains = new Map();
-function getAurora(paletteName) {
-  if (auroraCurtains.has(paletteName)) return auroraCurtains.get(paletteName);
+function paletteKey(paletteName, customColors = null) {
+  if (paletteName !== 'custom' || !customColors) return paletteName;
+  return `custom:${customColors.colors.join(',')}:${(customColors.haze ?? []).join(',')}`;
+}
+function getAurora(paletteName, customColors = null) {
+  const key = paletteKey(paletteName, customColors);
+  if (auroraCurtains.has(key)) return auroraCurtains.get(key);
   const rand = mulberry32(80211);
-  const palette = resolveAuroraPalette(paletteName);
+  const palette = resolveAuroraPalette(paletteName, customColors);
   // Three curtains at different depths. The far one is slow, wide and
   // dim; the near one is faster and sharper. That difference alone gives
   // the sky depth the old single band never had.
@@ -265,7 +270,7 @@ function getAurora(paletteName) {
       s.hazeAlphaJ[i] = 0.75 + rand() * 0.5;
     }
   }
-  auroraCurtains.set(paletteName, specs);
+  auroraCurtains.set(key, specs);
   return specs;
 }
 
@@ -303,11 +308,17 @@ function curtainBase(spec, t, time, h) {
 /// lopsided. The dropped rays' contribution is folded back into the ones
 /// that remain (alpha scaled by the stride) so the curtain doesn't also
 /// go dim as it goes sparse.
-function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
+function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic', customColors = null) {
   const stride = Math.max(1, Math.round(1 / Math.max(0.08, Math.min(1, detail))));
   const effectiveDetail = 1 / stride;
   const spread = Math.min(2, Math.sqrt(1 / effectiveDetail));
-  for (const spec of getAurora(palette)) {
+  // A real aurora curtain extends past the viewport on both sides, so we
+  // render onto a slightly wider virtual band and let the soft edges wrap
+  // instead of cutting hard at x=0 and x=w. This removes the black vertical
+  // seam/streak artifacts that appeared when rays were clipped by the canvas.
+  const overscan = Math.max(64, w * 0.12);
+  const renderW = w + overscan * 2;
+  for (const spec of getAurora(palette, customColors)) {
     // Slow horizontal drift, wrapped, so the whole curtain migrates the
     // way a real one does over minutes.
     const shift = ((time * spec.drift) % 1 + 1) % 1;
@@ -317,13 +328,15 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
     // leaving visible rectangular seams.
     ctx.globalAlpha = spec.alpha * 0.45 * gain;
     const segs = 12;
-    const segW = (w / segs) * 2;
+    const segW = (renderW / segs) * 2;
     for (let i = 0; i <= segs; i++) {
       const t = i / segs + spec.hazeOffsetX[i];
+      const x = t * renderW - overscan;
+      if (x + segW < 0 || x - segW > w) continue;
       const y = curtainBase(spec, t + shift, time, h) + spec.hazeOffsetY[i] * h * 0.05;
       const hh = h * 0.3;
       ctx.globalAlpha = spec.alpha * 0.45 * gain * spec.hazeAlphaJ[i];
-      ctx.drawImage(spec.hazeSprite, t * w - segW / 2, y - hh, segW, hh);
+      ctx.drawImage(spec.hazeSprite, x - segW / 2, y - hh, segW, hh);
     }
     ctx.globalAlpha = spec.alpha * 0.45 * gain;
 
@@ -332,7 +345,7 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
       const warp = spec.warpAmp[0] * Math.sin(raw * spec.warpFreq[0] * Math.PI * 2 + spec.warpPhase[0])
                  + spec.warpAmp[1] * Math.sin(raw * spec.warpFreq[1] * Math.PI * 2 + spec.warpPhase[1]);
       const t = ((raw + warp + spec.offsets[i] + shift) % 1 + 1) % 1;
-      const x = t * w;
+      const x = t * renderW - overscan;
       const base = curtainBase(spec, t, time, h);
       // Each ray breathes on its own rate, and a slow travelling wave runs
       // along the curtain so brightness sweeps through it rather than
@@ -344,6 +357,7 @@ function drawAurora(ctx, w, h, time, gain, detail = 1, palette = 'classic') {
       const width = RAY_W * spec.widths[i] * (0.8 + 0.4 * energy) * spread;
       const alpha = spec.alpha * energy * gain * spread;
       if (alpha < 0.02) continue;
+      if (x + width < 0 || x - width > w) continue;
       ctx.globalAlpha = Math.min(1, alpha);
       ctx.drawImage(spec.ray, x - width / 2, base - height, width, height);
     }
@@ -449,7 +463,7 @@ export function drawSky(ctx, w, h, time, opts = {}) {
   ctx.globalCompositeOperation = 'lighter';
 
   if (opts.aurora) {
-    drawAurora(ctx, w, h, time, gain, opts.auroraDetail ?? 1, opts.auroraPalette);
+    drawAurora(ctx, w, h, time, gain, opts.auroraDetail ?? 1, opts.auroraPalette, opts.auroraCustomColors);
   }
 
   if (opts.stars) {
@@ -688,6 +702,11 @@ export function invalidateLights() {
 /// Exposed for tests only: the per-ray off-grid jitter for one curtain of
 /// a palette, so a test can assert on the actual fix (rays not landing on
 /// an even i/rays grid) rather than inferring it from noisy pixel data.
-export function _testAuroraRayOffsets(paletteName = 'classic', curtainIndex = 0) {
-  return Array.from(getAurora(paletteName)[curtainIndex].offsets);
+export function _testAuroraRayOffsets(paletteName = 'classic', curtainIndex = 0, customColors = null) {
+  return Array.from(getAurora(paletteName, customColors)[curtainIndex].offsets);
+}
+
+/// Invalidate the aurora cache. Called when custom aurora colours change.
+export function invalidateAurora() {
+  auroraCurtains.clear();
 }

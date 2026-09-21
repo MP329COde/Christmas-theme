@@ -341,29 +341,32 @@ function renderScene() {
   const bgCard = el('div', { class: 'card' },
     dropdown({
       id: 'background-mode', label: 'Backdrop', value: cfg.background,
-      options: [['none', 'None (see the desktop)'], ['image', 'Image']],
+      options: [['none', 'None (see the desktop)'], ['animated-forest', 'Animated winter forest'], ['image', 'Image']],
       onChange: (v) => editScreen((s) => { s.background = v; }),
     }));
-  if (cfg.background === 'image') {
+  if (cfg.background === 'image' || cfg.background === 'animated-forest') {
+    if (cfg.background === 'image') {
+      bgCard.append(
+        el('label', { class: 'ghost file', style: 'text-align:center' }, 'Choose image…',
+          el('input', {
+            type: 'file', accept: 'image/*', hidden: true, 'data-testid': 'background-file',
+            onchange: async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = async () => {
+                await saveBackground(`screen-${activeScreen}`, String(reader.result));
+                setStatus('Background updated');
+              };
+              // Read as a data URL and hand it to Rust, which stores it in
+              // its own file: the picture never goes through settings.json.
+              reader.readAsDataURL(file);
+            },
+          })));
+    }
     bgCard.append(
-      el('label', { class: 'ghost file', style: 'text-align:center' }, 'Choose image…',
-        el('input', {
-          type: 'file', accept: 'image/*', hidden: true, 'data-testid': 'background-file',
-          onchange: async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async () => {
-              await saveBackground(`screen-${activeScreen}`, String(reader.result));
-              setStatus('Background updated');
-            };
-            // Read as a data URL and hand it to Rust, which stores it in
-            // its own file: the picture never goes through settings.json.
-            reader.readAsDataURL(file);
-          },
-        })),
       el('div', { class: 'grid-2' },
-        dropdown({
+        cfg.background === 'image' && dropdown({
           id: 'background-fit', label: 'Fit', value: cfg.backgroundFit,
           options: [['cover', 'Cover'], ['contain', 'Contain'], ['stretch', 'Stretch'], ['tile', 'Tile']],
           onChange: (v) => editScreen((s) => { s.backgroundFit = v; }),
@@ -383,12 +386,12 @@ function renderScene() {
             else if ((s.backgroundMotion ?? 0) <= 0) s.backgroundMotion = 1;
           }),
         }),
-        cfg.background === 'image' && slider({
+        slider({
           id: 'background-motion', label: 'Movement', min: 0, max: 200, step: 10,
           value: Math.round((cfg.backgroundMotion ?? 1) * 100), format: (v) => (v === 0 ? 'Still' : `${v}%`),
           onInput: (v) => editScreen((s) => { s.backgroundMotion = v / 100; }),
         })),
-      el('button', {
+      cfg.background === 'image' && el('button', {
         class: 'remove', 'data-testid': 'background-clear', text: 'Remove image',
         onclick: async () => { await saveBackground(`screen-${activeScreen}`, null); setStatus('Background removed'); },
       })
@@ -402,12 +405,42 @@ function renderScene() {
     toggle({ id: 'aurora-toggle', label: '🌌 Aurora curtains', checked: cfg.aurora,
       onChange: (v) => editScreen((s) => { s.aurora = v; }) }));
   if (cfg.aurora) {
+    const paletteOptions = [
+      ...Object.keys(AURORA_PALETTES).filter((k) => k !== 'custom').map((name) => [name, name[0].toUpperCase() + name.slice(1)]),
+      ['custom', 'Custom colours'],
+    ];
     sky.append(
       dropdown({
         id: 'aurora-palette', label: 'Aurora palette', value: cfg.auroraPalette ?? 'classic',
-        options: Object.keys(AURORA_PALETTES).map((name) => [name, name[0].toUpperCase() + name.slice(1)]),
+        options: paletteOptions,
         onChange: (v) => editScreen((s) => { s.auroraPalette = v; }),
-      }),
+      }));
+    if (cfg.auroraPalette === 'custom') {
+      const colors = cfg.auroraCustomColors?.colors ?? ['#5cffb0', '#82ebff', '#d678ff'];
+      const hazes = cfg.auroraCustomColors?.haze ?? ['#40be8c', '#50aadc', '#965ad2'];
+      const swatches = colors.map((col, i) => el('div', { class: 'swatch-row' },
+        el('input', {
+          type: 'color', value: col, 'data-testid': `aurora-color-${i}`,
+          oninput: (e) => editScreen((s) => {
+            s.auroraCustomColors = { ...(s.auroraCustomColors ?? { colors, haze: hazes }) };
+            s.auroraCustomColors.colors[i] = e.target.value;
+          }),
+        }),
+        el('input', {
+          type: 'color', value: hazes[i] ?? '#000000', 'data-testid': `aurora-haze-${i}`,
+          oninput: (e) => editScreen((s) => {
+            s.auroraCustomColors = { ...(s.auroraCustomColors ?? { colors, haze: hazes }) };
+            s.auroraCustomColors.haze[i] = e.target.value;
+          }),
+        })
+      ));
+      sky.append(
+        el('div', {},
+          el('label', { class: 'small', text: 'Ray / haze colours' }),
+          el('div', { class: 'swatches' }, ...swatches)
+        ));
+    }
+    sky.append(
       slider({
         id: 'aurora-intensity', label: 'Aurora strength', min: 20, max: 200, step: 10,
         value: Math.round((cfg.auroraIntensity ?? 1) * 100), format: (v) => `${v}%`,
