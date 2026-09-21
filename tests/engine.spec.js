@@ -41,6 +41,10 @@ test('the whole scene costs a handful of draw calls', async ({ page }) => {
 });
 
 test('composited output is opaque on the tree and transparent elsewhere', async ({ page }) => {
+  // This test reads real pixels back through SwiftShader. It can take
+  // several seconds per readback in a software rasteriser, so allow more
+  // time than the default project timeout.
+  test.setTimeout(120_000);
   await page.waitForTimeout(700);
   const size = page.viewportSize();
   // The top-left corner is empty sky. If this is not fully transparent,
@@ -57,6 +61,7 @@ test('composited output is opaque on the tree and transparent elsewhere', async 
 });
 
 test('premultiplied output never exceeds its own alpha', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.waitForTimeout(700);
   const size = page.viewportSize();
   // In premultiplied colour every channel is already scaled by alpha, so
@@ -95,6 +100,7 @@ test('CPU cost per frame stays small', async ({ page }) => {
 });
 
 test.describe('the shared wind field', () => {
+  test.slow();
   test('advances continuously and can be stilled', async ({ page }) => {
     const a = await page.evaluate(() => window.sceneLab.getWind());
     await page.waitForTimeout(600);
@@ -128,6 +134,7 @@ test.describe('the shared wind field', () => {
 });
 
 test('the ribbon is one extra draw call, and switching it off costs nothing', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.waitForTimeout(600);
   const withRibbon = (await page.evaluate(() => window.sceneLab.getStats())).draws;
   await page.evaluate(() => window.sceneLab.setTreeOption('ribbon', false, { rebuild: true }));
