@@ -116,6 +116,18 @@ test('an aurora palette is saved per screen', async ({ page }) => {
   expect(palette).toBe('arctic');
 });
 
+test('custom aurora colours are saved per screen', async ({ page }) => {
+  await page.selectOption('[data-testid="aurora-palette"]', 'custom');
+  await page.waitForTimeout(150);
+  await page.locator('[data-testid="aurora-color-0"]').fill('#ff0000');
+  await page.locator('[data-testid="aurora-haze-0"]').fill('#220000');
+  await page.waitForTimeout(300);
+  const custom = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].auroraCustomColors);
+  expect(custom.colors[0]).toBe('#ff0000');
+  expect(custom.haze[0]).toBe('#220000');
+});
+
 test('sky density and shooting-star frequency are saved per screen', async ({ page }) => {
   await page.locator('[data-testid="star-density"]').fill('150');
   await page.locator('[data-testid="shooting-star-frequency"]').fill('50');
@@ -159,6 +171,18 @@ test('background image controls appear only in image mode', async ({ page }) => 
   await expect(page.locator('[data-testid="background-opacity"]')).toBeVisible();
   await expect(page.locator('[data-testid="background-animation"]')).toBeVisible();
   await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+});
+
+test('animated forest background exposes opacity and motion controls', async ({ page }) => {
+  await page.selectOption('[data-testid="background-mode"]', 'animated-forest');
+  await expect(page.locator('[data-testid="background-opacity"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-animation"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+  await expect(page.locator('[data-testid="background-file"]')).toHaveCount(0);
+  await page.waitForTimeout(300);
+  const background = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].background);
+  expect(background).toBe('animated-forest');
 });
 
 test('background animation controls are saved per screen', async ({ page }) => {

@@ -320,6 +320,63 @@ test('aurora rays are not spaced on a perfectly even grid', async ({ page }) => 
   expect(distinct.size).toBeGreaterThan(offsets.length / 2);
 });
 
+test('custom aurora colours render through the Canvas 2D path', async ({ page }) => {
+  await page.goto('/overlay');
+  const diff = await page.evaluate(async () => {
+    const mod = await import('/overlay/lights.js');
+    const W = 400;
+    const H = 300;
+    const render = (palette, custom) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      mod.drawSky(canvas.getContext('2d'), W, H, 0.4, {
+        aurora: true, stars: false, lightIntensity: 1,
+        auroraPalette: palette, auroraCustomColors: custom,
+      });
+      return canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    };
+    const a = render('custom', { colors: ['#ff0000', '#00ff00', '#0000ff'], haze: ['#220000', '#002200', '#000022'] });
+    const b = render('classic', null);
+    let total = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      total += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+    }
+    return total;
+  });
+  expect(diff).toBeGreaterThan(10_000);
+});
+
+test('animated forest background renders changing pixels', async ({ page }) => {
+  await page.goto('/overlay');
+  await page.evaluate(() => window.snowOverlayScene.setConfig({
+    background: 'animated-forest',
+    backgroundAnimation: 'drift',
+    backgroundMotion: 1,
+    backgroundOpacity: 1,
+    aurora: false, stars: false, icicles: false, snowGlitter: false,
+    garland: { enabled: false }, trees: [], fireplaces: [],
+  }));
+  await page.evaluate(() => window.snowOverlay.setDensity(0));
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => {
+    const canvas = document.getElementById('snow');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    const sample = [];
+    for (let i = 0; i < data.length; i += 4) sample.push(data[i]);
+    return sample;
+  });
+  await page.waitForTimeout(900);
+  const change = await page.evaluate((prior) => {
+    const canvas = document.getElementById('snow');
+    const now = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let total = 0;
+    for (let i = 0, j = 0; i < now.length; i += 4, j++) total += Math.abs(now[i] - prior[j]);
+    return total;
+  }, before);
+  expect(change).toBeGreaterThan(1_000);
+});
+
 // ---------------------------------------------------------------------------
 // modern fireplace variant (src/overlay/decor.js)
 // ---------------------------------------------------------------------------
