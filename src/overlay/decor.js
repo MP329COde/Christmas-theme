@@ -957,159 +957,182 @@ function bakeRusticFireplace(scale, colors, opts) {
 /// embers, sparks, spill light, candles, garland, stockings — needs no
 /// changes at all to support either style.
 function bakeModernFireplace(scale, colors, opts) {
+  // Taller proportions: a real contemporary insert is often portrait-oriented.
   const w = 300 * scale;
-  const h = 250 * scale;
+  const h = 320 * scale;
   const cv = makeCanvas(w, h);
   const c = cv.getContext('2d');
   const rand = mulberry32(2024);
 
-  // A floating shelf sits higher than the rustic beam, leaving more flat
-  // panel visible above the firebox — the proportions a suspended,
-  // minimalist mantel actually has.
-  const mantelY = 46 * scale;
-  const mantelH = 8 * scale;
-  const plinthY = h - 30 * scale;
+  const mantelY = 52 * scale;
+  const mantelH = 10 * scale;
+  const plinthY = h - 42 * scale;
 
-  // --- flat panel wall, brushed rather than textured -----------------------
+  // --- textured stone/concrete panel, not a flat rectangle -----------------
   const panel = c.createLinearGradient(0, 0, 0, h);
-  panel.addColorStop(0, '#383b42');
-  panel.addColorStop(0.42, '#2a2d33');
-  panel.addColorStop(1, '#181a1e');
+  panel.addColorStop(0, '#3a3d45');
+  panel.addColorStop(0.45, '#2c2f36');
+  panel.addColorStop(1, '#1a1c21');
   c.fillStyle = panel;
   c.fillRect(0, 0, w, h);
-  const wash = c.createRadialGradient(w / 2, h * 0.48, 0, w / 2, h * 0.48, w * 0.54);
-  wash.addColorStop(0, 'rgba(255,184,92,0.1)');
-  wash.addColorStop(0.38, 'rgba(255,184,92,0.03)');
-  wash.addColorStop(1, 'rgba(255,184,92,0)');
+
+  // Soft fire-wash on the panel, stronger than before so the flame feels
+  // like it is lighting the room rather than floating in a void.
+  const wash = c.createRadialGradient(w / 2, h * 0.62, 0, w / 2, h * 0.62, w * 0.62);
+  wash.addColorStop(0, 'rgba(255,150,72,0.18)');
+  wash.addColorStop(0.32, 'rgba(255,130,58,0.07)');
+  wash.addColorStop(1, 'rgba(255,110,40,0)');
   c.fillStyle = wash;
   c.fillRect(0, 0, w, h);
-  // Faint brushed-metal streaks: barely-there horizontal lines, not the
-  // stone's rough mottling.
-  for (let i = 0; i < 40; i++) {
-    c.strokeStyle = `rgba(255,255,255,${0.015 + rand() * 0.02})`;
-    c.lineWidth = 1;
-    const y = rand() * h;
+
+  // Subtle stone grain, not just streaks.
+  for (let i = 0; i < 90; i++) {
+    const gx = rand() * w;
+    const gy = rand() * h;
+    const gw = (20 + rand() * 70) * scale;
+    const gh = (2 + rand() * 5) * scale;
+    c.fillStyle = `rgba(255,255,255,${0.012 + rand() * 0.018})`;
     c.beginPath();
-    c.moveTo(0, y);
-    c.lineTo(w, y + (rand() - 0.5) * 2);
-    c.stroke();
-  }
-  // Slim fluted side bands stop the panel reading as a flat rectangle while
-  // keeping the minimalist language of the insert.
-  for (const bandX of [34 * scale, w - 46 * scale]) {
-    const band = c.createLinearGradient(bandX, 0, bandX + 12 * scale, 0);
-    band.addColorStop(0, 'rgba(255,255,255,0.02)');
-    band.addColorStop(0.5, 'rgba(255,255,255,0.08)');
-    band.addColorStop(1, 'rgba(0,0,0,0.18)');
-    c.fillStyle = band;
-    roundRect(c, bandX, 22 * scale, 12 * scale, h - 56 * scale, 5 * scale);
+    c.ellipse(gx, gy, gw, gh, rand() * Math.PI, 0, Math.PI * 2);
     c.fill();
   }
 
-  // --- wide, short linear firebox, flush with a slim dark bezel ------------
-  const openW = w * 0.82;
-  const openH = h * 0.17;
-  const ox = (w - openW) / 2;
-  const oy = h - openH - 14 * scale;
+  // Vertical brushed flutes for architectural rhythm.
+  for (const bandX of [28 * scale, w - 40 * scale]) {
+    const band = c.createLinearGradient(bandX, 0, bandX + 12 * scale, 0);
+    band.addColorStop(0, 'rgba(255,255,255,0.03)');
+    band.addColorStop(0.5, 'rgba(255,255,255,0.10)');
+    band.addColorStop(1, 'rgba(0,0,0,0.22)');
+    c.fillStyle = band;
+    roundRect(c, bandX, 18 * scale, 12 * scale, h - 68 * scale, 5 * scale);
+    c.fill();
+  }
 
-  // Floating plinth below the slot gives the modern insert some weight.
-  c.fillStyle = 'rgba(0,0,0,0.28)';
+  // --- tall portrait firebox with a glass front ----------------------------
+  const openW = w * 0.62;
+  const openH = h * 0.42;
+  const ox = (w - openW) / 2;
+  const oy = h - openH - 22 * scale;
+
+  // Plinth: heavier, with a shadow that grounds the unit.
+  c.fillStyle = 'rgba(0,0,0,0.32)';
   c.beginPath();
-  c.ellipse(w / 2, h - 5 * scale, w * 0.28, 7 * scale, 0, 0, Math.PI * 2);
+  c.ellipse(w / 2, h - 6 * scale, w * 0.30, 9 * scale, 0, 0, Math.PI * 2);
   c.fill();
   const plinth = c.createLinearGradient(0, plinthY, 0, h);
-  plinth.addColorStop(0, '#e4ded2');
-  plinth.addColorStop(0.45, '#c4beb2');
-  plinth.addColorStop(1, '#8f877b');
+  plinth.addColorStop(0, '#e8e2d6');
+  plinth.addColorStop(0.45, '#c9c3b7');
+  plinth.addColorStop(1, '#948d82');
   c.fillStyle = plinth;
-  roundRect(c, 42 * scale, plinthY, w - 84 * scale, 20 * scale, 3 * scale);
+  roundRect(c, 46 * scale, plinthY, w - 92 * scale, 28 * scale, 3 * scale);
   c.fill();
-  c.strokeStyle = 'rgba(255,255,255,0.35)';
+  c.strokeStyle = 'rgba(255,255,255,0.40)';
   c.lineWidth = 1;
   c.beginPath();
-  c.moveTo(46 * scale, plinthY + 1.2 * scale);
-  c.lineTo(w - 46 * scale, plinthY + 1.2 * scale);
+  c.moveTo(50 * scale, plinthY + 1.2 * scale);
+  c.lineTo(w - 50 * scale, plinthY + 1.2 * scale);
   c.stroke();
 
+  // Deep recess behind the glass.
   c.save();
-  roundRect(c, ox - 5 * scale, oy - 5 * scale, openW + 10 * scale, openH + 10 * scale, 3 * scale);
-  c.fillStyle = '#101113';
+  roundRect(c, ox - 8 * scale, oy - 8 * scale, openW + 16 * scale, openH + 16 * scale, 4 * scale);
+  const recess = c.createLinearGradient(ox, oy, ox + openW, oy + openH);
+  recess.addColorStop(0, '#0a0b0d');
+  recess.addColorStop(0.5, '#15171a');
+  recess.addColorStop(1, '#08090a');
+  c.fillStyle = recess;
   c.fill();
   c.restore();
 
   c.save();
   roundRect(c, ox, oy, openW, openH, 2 * scale);
   c.clip();
-  const back = c.createLinearGradient(0, oy, 0, oy + openH);
-  back.addColorStop(0, '#0c0d0f');
-  back.addColorStop(1, '#1c1512');
+  const back = c.createLinearGradient(ox, oy, ox, oy + openH);
+  back.addColorStop(0, '#0d0e10');
+  back.addColorStop(1, '#211712');
   c.fillStyle = back;
   c.fillRect(ox, oy, openW, openH);
 
-  // A bed of glowing glass pebbles instead of logs — the fuel bed a
-  // linear/bio-ethanol insert actually shows, and much cheaper to bake
-  // than the rustic grate + three logs.
-  const grateY = oy + openH - 6 * scale;
-  const pebbleCount = Math.round(openW / (9 * scale));
-  for (let i = 0; i < pebbleCount; i++) {
-    const px = ox + ((i + 0.5) / pebbleCount) * openW + (rand() - 0.5) * 4 * scale;
-    const py = grateY - rand() * 3 * scale;
-    const pr = (2 + rand() * 2.4) * scale;
-    const g = c.createRadialGradient(px, py, 0, px, py, pr);
-    g.addColorStop(0, 'rgba(255,214,168,0.9)');
-    g.addColorStop(1, 'rgba(60,30,18,0.9)');
+  // Glowing ember bed behind the glass.
+  const grateY = oy + openH - 8 * scale;
+  const emberCount = Math.round(openW / (7 * scale));
+  for (let i = 0; i < emberCount; i++) {
+    const px = ox + ((i + 0.5) / emberCount) * openW + (rand() - 0.5) * 5 * scale;
+    const py = grateY - rand() * 5 * scale;
+    const pr = (2.4 + rand() * 3.0) * scale;
+    const heat = 0.55 + rand() * 0.45;
+    const g = c.createRadialGradient(px, py, 0, px, py, pr * 1.8);
+    g.addColorStop(0, `rgba(255,${Math.round(120 + heat * 80)},${Math.round(heat * 60)},${0.85 + rand() * 0.15})`);
+    g.addColorStop(0.55, `rgba(255,${Math.round(80 + heat * 60)},32,${0.35 + rand() * 0.25})`);
+    g.addColorStop(1, 'rgba(60,22,12,0)');
     c.fillStyle = g;
     c.beginPath();
-    c.ellipse(px, py, pr, pr * 0.6, 0, 0, Math.PI * 2);
+    c.ellipse(px, py, pr, pr * 0.55, 0, 0, Math.PI * 2);
     c.fill();
   }
   c.restore();
 
-  // Slim metal trim around the slot, with the strongest catchlight along the
-  // upper edge like brushed black nickel.
-  c.strokeStyle = 'rgba(255,255,255,0.1)';
+  // Glass reflection: a soft diagonal sheen across the firebox.
+  c.save();
+  roundRect(c, ox, oy, openW, openH, 2 * scale);
+  c.clip();
+  const glass = c.createLinearGradient(ox, oy, ox + openW * 0.7, oy + openH * 0.8);
+  glass.addColorStop(0, 'rgba(255,255,255,0.08)');
+  glass.addColorStop(0.35, 'rgba(255,255,255,0.02)');
+  glass.addColorStop(0.55, 'rgba(255,255,255,0)');
+  glass.addColorStop(0.8, 'rgba(255,255,255,0.04)');
+  glass.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = glass;
+  c.fillRect(ox, oy, openW, openH);
+  c.restore();
+
+  // Bevelled black metal frame with catchlights.
+  c.save();
+  roundRect(c, ox - 6 * scale, oy - 6 * scale, openW + 12 * scale, openH + 12 * scale, 4 * scale);
+  const frameGrad = c.createLinearGradient(ox - 6 * scale, oy - 6 * scale, ox - 6 * scale, oy + openH + 12 * scale);
+  frameGrad.addColorStop(0, '#4a4d54');
+  frameGrad.addColorStop(0.15, '#2b2d32');
+  frameGrad.addColorStop(1, '#111214');
+  c.fillStyle = frameGrad;
+  c.fill();
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.12)';
   c.lineWidth = 1.2 * scale;
   roundRect(c, ox - 1 * scale, oy - 1 * scale, openW + 2 * scale, openH + 2 * scale, 2.5 * scale);
   c.stroke();
-  c.strokeStyle = 'rgba(255,244,220,0.22)';
+  c.strokeStyle = 'rgba(255,244,220,0.28)';
   c.lineWidth = 1;
   c.beginPath();
   c.moveTo(ox, oy - 1);
   c.lineTo(ox + openW, oy - 1);
   c.stroke();
 
-  // --- suspended shelf, inset from the panel's own edges -------------------
-  const shelfInset = 22 * scale;
+  // --- floating shelf with stronger shadow and rim light -------------------
+  const shelfInset = 26 * scale;
   const shelfX = shelfInset;
   const shelfW = w - shelfInset * 2;
 
-  // The gap under the shelf reads as "floating" only if something is
-  // visibly different there — a soft shadow cast onto the panel below it.
-  const gapShadow = c.createLinearGradient(0, mantelY + mantelH, 0, mantelY + mantelH + 14 * scale);
-  gapShadow.addColorStop(0, 'rgba(0,0,0,0.35)');
+  const gapShadow = c.createLinearGradient(0, mantelY + mantelH, 0, mantelY + mantelH + 18 * scale);
+  gapShadow.addColorStop(0, 'rgba(0,0,0,0.45)');
   gapShadow.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = gapShadow;
-  c.fillRect(shelfX, mantelY + mantelH, shelfW, 14 * scale);
+  c.fillRect(shelfX, mantelY + mantelH, shelfW, 18 * scale);
 
   const shelf = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
-  shelf.addColorStop(0, '#f3eee5');
-  shelf.addColorStop(0.5, '#d3cdc2');
-  shelf.addColorStop(1, '#9d968a');
+  shelf.addColorStop(0, '#f6f1e8');
+  shelf.addColorStop(0.5, '#d8d2c6');
+  shelf.addColorStop(1, '#a9a294');
   c.fillStyle = shelf;
   roundRect(c, shelfX, mantelY, shelfW, mantelH, 1.5 * scale);
   c.fill();
-  // A crisp highlight along the top front edge sells it as a hard,
-  // machined slab rather than the beam's soft-worn wood.
-  c.strokeStyle = 'rgba(255,255,255,0.55)';
+  c.strokeStyle = 'rgba(255,255,255,0.60)';
   c.lineWidth = 1;
   c.beginPath();
   c.moveTo(shelfX + 2 * scale, mantelY + 1);
   c.lineTo(shelfX + shelfW - 2 * scale, mantelY + 1);
   c.stroke();
 
-  // --- stockings hung from the shelf ---------------------------------------
-  // A modern room is less likely to want the traditional four in a row by
-  // default; the option itself is unchanged, only the default flips.
+  // --- stockings -----------------------------------------------------------
   if (opts.stockings === true) {
     const sockColors = [colors.primary, '#e8e3d8', colors.primary, '#e8e3d8'];
     const cuffs = ['#f3efe6', '#c0182a', '#f3efe6', '#c0182a'];
@@ -1119,18 +1142,18 @@ function bakeModernFireplace(scale, colors, opts) {
     }
   }
 
-  // --- candles on the shelf -------------------------------------------------
+  // --- candles -------------------------------------------------------------
   const candles = [];
   if (opts.candles !== false) {
-    for (const [px, ch] of [[0.24, 22], [0.5, 15], [0.76, 26]]) {
+    for (const [px, ch] of [[0.24, 24], [0.5, 18], [0.76, 28]]) {
       const cxp = w * px;
       const hgt = ch * scale;
-      const cw = 7 * scale;
+      const cw = 7.5 * scale;
       const base = mantelY + 1;
       const wax = c.createLinearGradient(cxp - cw / 2, 0, cxp + cw / 2, 0);
-      wax.addColorStop(0, '#d8d4cc');
-      wax.addColorStop(0.5, '#f5f2ec');
-      wax.addColorStop(1, '#c9c4ba');
+      wax.addColorStop(0, '#e2ddd2');
+      wax.addColorStop(0.5, '#faf6ed');
+      wax.addColorStop(1, '#cdc7bc');
       c.fillStyle = wax;
       c.fillRect(cxp - cw / 2, base - hgt, cw, hgt);
       c.strokeStyle = '#2b2118';
@@ -1143,9 +1166,7 @@ function bakeModernFireplace(scale, colors, opts) {
     }
   }
 
-  // --- garland, understated: a single thin strand rather than the full
-  // pine swag, if requested at all (default off — a bare shelf is the
-  // point of the style) -----------------------------------------------------
+  // --- garland -------------------------------------------------------------
   let garlandLights = [];
   if (opts.mantelGarland === true) {
     garlandLights = drawMantelGarland(
