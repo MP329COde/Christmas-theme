@@ -584,42 +584,114 @@ const fireCache = new Map();
 /// Irregular stone courses, like the dry-stone surrounds in the reference
 /// photos, rather than a uniform brick grid.
 function drawStonework(c, w, h, scale, rand) {
-  const rowH = 26 * scale;
+  // Rich deep mortar base with gritty texture
+  const mortarGrad = c.createLinearGradient(0, 0, 0, h);
+  mortarGrad.addColorStop(0, '#1c1712');
+  mortarGrad.addColorStop(0.5, '#16120e');
+  mortarGrad.addColorStop(1, '#110d0a');
+  c.fillStyle = mortarGrad;
+  c.fillRect(0, 0, w, h);
+
+  const rowH = 23 * scale;
   for (let y = 0; y < h; y += rowH) {
-    let x = -10 * scale + rand() * 14 * scale;
+    let x = -10 * scale + rand() * 12 * scale;
     while (x < w + 10 * scale) {
-      const sw = (30 + rand() * 58) * scale;
-      const sh = rowH - 3 * scale;
-      const tone = 0.6 + rand() * 0.72;
-      // Warm limestone with a per-stone hue wobble, so no two courses read
-      // as the same tile repeated.
-      const warm = rand() * 16;
-      const base = `rgb(${clamp255((146 + warm) * tone)},${clamp255((124 + warm * 0.6) * tone)},${clamp255((96 + warm * 0.2) * tone)})`;
-      const g = c.createLinearGradient(x, y, x, y + sh);
-      g.addColorStop(0, shade(base, 14));
-      g.addColorStop(0.5, base);
-      g.addColorStop(1, shade(base, -18));
+      const sw = (26 + rand() * 52) * scale;
+      const sh = rowH - 2.8 * scale;
+      const tone = 0.70 + rand() * 0.55;
+      // Warm limestone, fieldstone and river rock earthy color variations
+      const stoneType = rand();
+      let rVal, gVal, bVal;
+      if (stoneType < 0.45) {
+        // Warm sandstone / limestone
+        const warm = rand() * 18;
+        rVal = clamp255((145 + warm) * tone);
+        gVal = clamp255((120 + warm * 0.5) * tone);
+        bVal = clamp255((96 + warm * 0.2) * tone);
+      } else if (stoneType < 0.75) {
+        // Cool river stone / slate accent
+        const cool = rand() * 12;
+        rVal = clamp255((120 + cool * 0.4) * tone);
+        gVal = clamp255((115 + cool * 0.4) * tone);
+        bVal = clamp255((108 + cool * 0.5) * tone);
+      } else {
+        // Deep iron-rich brown stone
+        const iron = rand() * 20;
+        rVal = clamp255((155 + iron) * tone);
+        gVal = clamp255((105 + iron * 0.4) * tone);
+        bVal = clamp255((78 + iron * 0.2) * tone);
+      }
+      const base = `rgb(${rVal},${gVal},${bVal})`;
+
+      // Directional 3D lighting gradient: top-left ambient light + bottom-right shadow
+      const g = c.createLinearGradient(x, y, x + sw * 0.15, y + sh);
+      g.addColorStop(0, shade(base, 22));
+      g.addColorStop(0.25, shade(base, 10));
+      g.addColorStop(0.65, base);
+      g.addColorStop(0.9, shade(base, -18));
+      g.addColorStop(1, shade(base, -28));
       c.fillStyle = g;
-      roundRect(c, x, y, sw, sh, 4 * scale);
+      roundRect(c, x, y, sw, sh, 3.8 * scale);
       c.fill();
 
-      // Mottling so each stone has some surface texture.
-      for (let k = 0; k < 3; k++) {
-        c.fillStyle = `rgba(0,0,0,${0.04 + rand() * 0.07})`;
+      // Realistic mineral grain and porous chiseled stone texture
+      for (let k = 0; k < 6; k++) {
+        c.fillStyle = `rgba(18,12,8,${0.05 + rand() * 0.08})`;
         c.beginPath();
         c.ellipse(x + rand() * sw, y + rand() * sh, (2 + rand() * 6) * scale,
-          (1.5 + rand() * 4) * scale, rand() * 3, 0, Math.PI * 2);
+          (1.2 + rand() * 3.5) * scale, rand() * 3, 0, Math.PI * 2);
         c.fill();
+        if (rand() > 0.35) {
+          c.fillStyle = `rgba(255,250,240,${0.04 + rand() * 0.06})`;
+          c.beginPath();
+          c.ellipse(x + rand() * sw, y + rand() * sh, (1.8 + rand() * 4) * scale,
+            (0.9 + rand() * 2.5) * scale, rand() * 3, 0, Math.PI * 2);
+          c.fill();
+        }
       }
 
-      c.strokeStyle = 'rgba(255,255,255,0.10)';
+      // Natural weathered chisel facets across the stone face
+      c.strokeStyle = `rgba(255,248,230,${0.12 + rand() * 0.12})`;
       c.lineWidth = 1;
       c.beginPath();
-      c.moveTo(x + 3, y + 1);
-      c.lineTo(x + sw - 3, y + 1);
+      const facetY = y + (0.2 + rand() * 0.5) * sh;
+      c.moveTo(x + 4 * scale, facetY);
+      c.lineTo(x + sw * (0.4 + rand() * 0.4), facetY + (rand() - 0.5) * 3 * scale);
       c.stroke();
 
-      x += sw + 3 * scale;
+      // Crisp top edge chiseled highlight
+      c.strokeStyle = 'rgba(255,248,232,0.26)';
+      c.lineWidth = 1.2 * scale;
+      c.beginPath();
+      c.moveTo(x + 2.5 * scale, y + 1 * scale);
+      c.lineTo(x + sw - 2.5 * scale, y + 1 * scale);
+      c.stroke();
+
+      // Left edge slight light catch
+      c.strokeStyle = 'rgba(255,248,232,0.15)';
+      c.lineWidth = 0.8 * scale;
+      c.beginPath();
+      c.moveTo(x + 1 * scale, y + 3 * scale);
+      c.lineTo(x + 1 * scale, y + sh - 2 * scale);
+      c.stroke();
+
+      // Deep bottom joint recessed cast shadow
+      c.strokeStyle = 'rgba(12,8,5,0.45)';
+      c.lineWidth = 1.2 * scale;
+      c.beginPath();
+      c.moveTo(x + 1 * scale, y + sh);
+      c.lineTo(x + sw - 1 * scale, y + sh);
+      c.stroke();
+
+      // Right edge drop shadow
+      c.strokeStyle = 'rgba(12,8,5,0.30)';
+      c.lineWidth = 0.8 * scale;
+      c.beginPath();
+      c.moveTo(x + sw, y + 2 * scale);
+      c.lineTo(x + sw, y + sh);
+      c.stroke();
+
+      x += sw + 3.2 * scale;
     }
   }
 }
@@ -738,124 +810,381 @@ function bakeRusticFireplace(scale, colors, opts) {
 
   // Raised limestone hearth so the firebox feels grounded instead of ending
   // abruptly at the floor line.
-  c.fillStyle = 'rgba(0,0,0,0.24)';
+  c.fillStyle = 'rgba(0,0,0,0.30)';
   c.beginPath();
-  c.ellipse(w / 2, h - 4 * scale, w * 0.35, 9 * scale, 0, 0, Math.PI * 2);
+  c.ellipse(w / 2, h - 3 * scale, w * 0.42, 10 * scale, 0, 0, Math.PI * 2);
   c.fill();
-  const hearthTop = c.createLinearGradient(0, hearthY - 5 * scale, 0, hearthY + 10 * scale);
-  hearthTop.addColorStop(0, '#d8c2a3');
-  hearthTop.addColorStop(0.55, '#b99a75');
-  hearthTop.addColorStop(1, '#8c6a46');
+
+  // Multi-tier stone slab hearth with beveled edges and chiseled highlights
+  const hearthTop = c.createLinearGradient(0, hearthY - 7 * scale, 0, hearthY + 10 * scale);
+  hearthTop.addColorStop(0, '#e5d3ba');
+  hearthTop.addColorStop(0.35, '#c8ab86');
+  hearthTop.addColorStop(0.7, '#a5855e');
+  hearthTop.addColorStop(1, '#7a5b3a');
   c.fillStyle = hearthTop;
-  roundRect(c, 18 * scale, hearthY - 5 * scale, w - 36 * scale, 15 * scale, 5 * scale);
+  roundRect(c, 14 * scale, hearthY - 7 * scale, w - 28 * scale, 17 * scale, 5 * scale);
   c.fill();
-  const hearthFace = c.createLinearGradient(0, hearthY + 1 * scale, 0, h);
-  hearthFace.addColorStop(0, '#97724c');
-  hearthFace.addColorStop(1, '#5d4128');
+
+  // Hearth top stone grain & texture
+  for (let k = 0; k < 12; k++) {
+    c.fillStyle = `rgba(0,0,0,${0.03 + rand() * 0.05})`;
+    c.beginPath();
+    c.ellipse(20 * scale + rand() * (w - 40 * scale), hearthY - 3 * scale + rand() * 10 * scale,
+      (4 + rand() * 10) * scale, (1 + rand() * 2) * scale, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  const hearthFace = c.createLinearGradient(0, hearthY + 3 * scale, 0, h);
+  hearthFace.addColorStop(0, '#8e6840');
+  hearthFace.addColorStop(0.5, '#6a4a2b');
+  hearthFace.addColorStop(1, '#442e18');
   c.fillStyle = hearthFace;
-  roundRect(c, 28 * scale, hearthY + 1 * scale, w - 56 * scale, 19 * scale, 4 * scale);
+  roundRect(c, 22 * scale, hearthY + 3 * scale, w - 44 * scale, 19 * scale, 4 * scale);
   c.fill();
-  c.strokeStyle = 'rgba(255,245,224,0.22)';
-  c.lineWidth = 1.2 * scale;
+
+  // Bevel highlight line
+  c.strokeStyle = 'rgba(255,250,235,0.35)';
+  c.lineWidth = 1.4 * scale;
   c.beginPath();
-  c.moveTo(24 * scale, hearthY - 2 * scale);
-  c.lineTo(w - 24 * scale, hearthY - 2 * scale);
+  c.moveTo(18 * scale, hearthY - 4 * scale);
+  c.lineTo(w - 18 * scale, hearthY - 4 * scale);
   c.stroke();
 
-  // Framed stone arch around the opening to give the surround a clearer focal
-  // structure than a flat wall of stone.
+  // Chamfer transition shadow
+  c.strokeStyle = 'rgba(25,15,8,0.45)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.moveTo(24 * scale, hearthY + 2 * scale);
+  c.lineTo(w - 24 * scale, hearthY + 2 * scale);
+  c.stroke();
+
+  // Framed chiseled stone voussoir arch around the opening
   c.save();
   c.lineCap = 'round';
   c.lineJoin = 'round';
-  c.lineWidth = 16 * scale;
-  c.strokeStyle = 'rgba(74,49,30,0.34)';
+  c.lineWidth = 20 * scale;
+  c.strokeStyle = 'rgba(38, 24, 14, 0.55)';
   c.beginPath();
-  c.moveTo(ox - 6 * scale, oy + openH);
-  c.lineTo(ox - 6 * scale, oy + openH * 0.28);
-  c.quadraticCurveTo(w / 2, oy - 28 * scale, ox + openW + 6 * scale, oy + openH * 0.28);
-  c.lineTo(ox + openW + 6 * scale, oy + openH);
+  c.moveTo(ox - 8 * scale, oy + openH);
+  c.lineTo(ox - 8 * scale, oy + openH * 0.28);
+  c.quadraticCurveTo(w / 2, oy - 32 * scale, ox + openW + 8 * scale, oy + openH * 0.28);
+  c.lineTo(ox + openW + 8 * scale, oy + openH);
   c.stroke();
-  c.lineWidth = 7 * scale;
-  c.strokeStyle = 'rgba(255,234,205,0.15)';
+
+  // Arch stones (voussoirs) with chiseled facets
+  const archStoneGrad = c.createLinearGradient(0, oy - 30 * scale, 0, oy + openH);
+  archStoneGrad.addColorStop(0, '#caa77d');
+  archStoneGrad.addColorStop(0.5, '#a48158');
+  archStoneGrad.addColorStop(1, '#785736');
+  c.lineWidth = 13 * scale;
+  c.strokeStyle = archStoneGrad;
   c.beginPath();
-  c.moveTo(ox - 2 * scale, oy + openH - 2 * scale);
-  c.lineTo(ox - 2 * scale, oy + openH * 0.3);
-  c.quadraticCurveTo(w / 2, oy - 18 * scale, ox + openW + 2 * scale, oy + openH * 0.3);
-  c.lineTo(ox + openW + 2 * scale, oy + openH - 2 * scale);
+  c.moveTo(ox - 5 * scale, oy + openH);
+  c.lineTo(ox - 5 * scale, oy + openH * 0.28);
+  c.quadraticCurveTo(w / 2, oy - 26 * scale, ox + openW + 5 * scale, oy + openH * 0.28);
+  c.lineTo(ox + openW + 5 * scale, oy + openH);
+  c.stroke();
+
+  // Voussoir joint cuts across the arch
+  const numJoints = 14;
+  for (let j = 0; j <= numJoints; j++) {
+    const t = j / numJoints;
+    // Parametric point along arch
+    let jx, jy;
+    if (t < 0.35) {
+      const seg = t / 0.35;
+      jx = ox - 5 * scale;
+      jy = oy + openH * (1 - seg * 0.72);
+    } else if (t > 0.65) {
+      const seg = (t - 0.65) / 0.35;
+      jx = ox + openW + 5 * scale;
+      jy = oy + openH * (0.28 + seg * 0.72);
+    } else {
+      const seg = (t - 0.35) / 0.3;
+      const angle = Math.PI * (1 - seg);
+      jx = w / 2 - Math.cos(angle) * (openW * 0.5 + 5 * scale);
+      jy = oy + openH * 0.28 - Math.sin(angle) * (openH * 0.45);
+    }
+    c.strokeStyle = 'rgba(25, 15, 8, 0.55)';
+    c.lineWidth = 1.2 * scale;
+    c.beginPath();
+    c.arc(jx, jy, 4 * scale, 0, Math.PI * 2);
+    c.stroke();
+  }
+
+  // Inner rim light along the inside of the arch
+  c.lineWidth = 2.2 * scale;
+  c.strokeStyle = 'rgba(255,240,215,0.30)';
+  c.beginPath();
+  c.moveTo(ox - 1 * scale, oy + openH - 2 * scale);
+  c.lineTo(ox - 1 * scale, oy + openH * 0.3);
+  c.quadraticCurveTo(w / 2, oy - 16 * scale, ox + openW + 1 * scale, oy + openH * 0.3);
+  c.lineTo(ox + openW + 1 * scale, oy + openH - 2 * scale);
   c.stroke();
   c.restore();
-  c.fillStyle = '#b89267';
-  roundRect(c, w / 2 - 12 * scale, oy - 12 * scale, 24 * scale, 18 * scale, 3 * scale);
+
+  // Prominent carved decorative keystone at top of arch
+  const keyW = 28 * scale;
+  const keyH = 24 * scale;
+  const keyX = w / 2 - keyW / 2;
+  const keyY = oy - 16 * scale;
+  const keyGrad = c.createLinearGradient(0, keyY, 0, keyY + keyH);
+  keyGrad.addColorStop(0, '#deb88c');
+  keyGrad.addColorStop(0.5, '#b99266');
+  keyGrad.addColorStop(1, '#86613c');
+  c.fillStyle = keyGrad;
+  c.beginPath();
+  c.moveTo(keyX - 2 * scale, keyY);
+  c.lineTo(keyX + keyW + 2 * scale, keyY);
+  c.lineTo(keyX + keyW - 3 * scale, keyY + keyH);
+  c.lineTo(keyX + 3 * scale, keyY + keyH);
+  c.closePath();
   c.fill();
-  c.fillStyle = 'rgba(255,243,221,0.2)';
-  roundRect(c, w / 2 - 9 * scale, oy - 10 * scale, 18 * scale, 5 * scale, 2 * scale);
-  c.fill();
+  c.strokeStyle = 'rgba(255,248,230,0.35)';
+  c.lineWidth = 1.2 * scale;
+  c.stroke();
+  c.strokeStyle = 'rgba(20,10,5,0.45)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.moveTo(keyX + 3 * scale, keyY + keyH);
+  c.lineTo(keyX + keyW - 3 * scale, keyY + keyH);
+  c.stroke();
 
   c.save();
   roundRect(c, ox, oy, openW, openH, 6 * scale);
   c.clip();
-  // Red firebrick back wall, warmer at the bottom where the fire sits.
+  // Deep refractory firebrick back wall with realistic depth and soot
   const back = c.createLinearGradient(0, oy, 0, oy + openH);
-  back.addColorStop(0, '#160c08');
-  back.addColorStop(0.5, '#3a1d12');
-  back.addColorStop(1, '#5c2c18');
+  back.addColorStop(0, '#100806');
+  back.addColorStop(0.35, '#26120b');
+  back.addColorStop(0.7, '#3d1d12');
+  back.addColorStop(1, '#5a2a16');
   c.fillStyle = back;
   c.fillRect(ox, oy, openW, openH);
 
-  // Firebrick courses: realistic soot/mortar warm joints instead of harsh 1px black outline grid.
-  const bh = 11 * scale;
+  // Herringbone / running-bond refractory bricks with mortar relief
+  const bh = 10 * scale;
+  const bw = 24 * scale;
   for (let y = oy; y < oy + openH; y += bh) {
-    const off = ((y - oy) / bh) % 2 === 0 ? 0 : 13 * scale;
-    for (let x = ox - 13 * scale; x < ox + openW; x += 26 * scale) {
-      c.strokeStyle = 'rgba(56, 42, 34, 0.42)';
-      c.lineWidth = 1;
-      c.strokeRect(x + off, y, 26 * scale, bh);
+    const rowIdx = Math.floor((y - oy) / bh);
+    const off = (rowIdx % 2 === 0) ? 0 : bw * 0.5;
+    for (let x = ox - bw; x < ox + openW + bw; x += bw) {
+      // Individual brick subtle tone variation
+      const brickTone = 0.85 + (((rowIdx * 7 + Math.floor(x / bw) * 13) % 17) / 17) * 0.3;
+      c.fillStyle = `rgba(${Math.round(110 * brickTone)},${Math.round(52 * brickTone)},${Math.round(32 * brickTone)},0.12)`;
+      c.fillRect(x + off + 1, y + 1, bw - 2, bh - 2);
+
+      // Mortar joint groove
+      c.strokeStyle = 'rgba(38, 26, 20, 0.48)';
+      c.lineWidth = 1.2 * scale;
+      c.strokeRect(x + off, y, bw, bh);
+
+      // Upper bevel catchlight on brick edge
+      c.strokeStyle = 'rgba(255, 175, 110, 0.08)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(x + off + 1, y + 1);
+      c.lineTo(x + off + bw - 1, y + 1);
+      c.stroke();
     }
   }
-  // Soot gradient up the back.
-  const soot = c.createLinearGradient(0, oy, 0, oy + openH * 0.7);
-  soot.addColorStop(0, 'rgba(0,0,0,0.85)');
+
+  // Heavy soot accumulation at top and sides of chamber
+  const soot = c.createLinearGradient(0, oy, 0, oy + openH * 0.75);
+  soot.addColorStop(0, 'rgba(8,5,4,0.92)');
+  soot.addColorStop(0.5, 'rgba(14,9,7,0.6)');
   soot.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = soot;
   c.fillRect(ox, oy, openW, openH);
 
+  // Side corner shadows inside the box
+  const sideShadowL = c.createLinearGradient(ox, 0, ox + 22 * scale, 0);
+  sideShadowL.addColorStop(0, 'rgba(0,0,0,0.75)');
+  sideShadowL.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = sideShadowL;
+  c.fillRect(ox, oy, 22 * scale, openH);
+
+  const sideShadowR = c.createLinearGradient(ox + openW - 22 * scale, 0, ox + openW, 0);
+  sideShadowR.addColorStop(0, 'rgba(0,0,0,0)');
+  sideShadowR.addColorStop(1, 'rgba(0,0,0,0.75)');
+  c.fillStyle = sideShadowR;
+  c.fillRect(ox + openW - 22 * scale, oy, 22 * scale, openH);
+
   // Grate + logs.
   const grateY = oy + openH - 16 * scale;
-  c.strokeStyle = '#1b1b1d';
-  c.lineWidth = 2.4 * scale;
+
+  // Glowing ember bed under and behind the logs
+  const emberW = openW * 0.78;
+  const emberH = 20 * scale;
+  const emberGrad = c.createRadialGradient(
+    ox + openW / 2, grateY + 5 * scale, 3 * scale,
+    ox + openW / 2, grateY + 5 * scale, emberW * 0.55
+  );
+  emberGrad.addColorStop(0, 'rgba(255, 140, 25, 0.95)');
+  emberGrad.addColorStop(0.25, 'rgba(255, 80, 10, 0.85)');
+  emberGrad.addColorStop(0.65, 'rgba(160, 25, 5, 0.55)');
+  emberGrad.addColorStop(1, 'rgba(40, 10, 5, 0)');
+  c.fillStyle = emberGrad;
+  c.fillRect(ox + (openW - emberW) / 2, grateY - 6 * scale, emberW, emberH);
+
+  // Ash and glowing charcoal chunks in the hearth
+  for (let i = 0; i < 38; i++) {
+    const coalX = ox + openW * 0.14 + rand() * openW * 0.72;
+    const coalY = grateY + 1 * scale + rand() * 14 * scale;
+    const coalR = (2.2 + rand() * 5.2) * scale;
+    const isGlowing = rand() > 0.38;
+    if (isGlowing) {
+      const gHeat = rand();
+      const r = 255;
+      const g = clamp255(90 + gHeat * 140);
+      const b = clamp255(15 + gHeat * 50);
+      c.fillStyle = `rgba(${r},${g},${b},${0.85 + rand() * 0.15})`;
+    } else {
+      c.fillStyle = `rgba(${clamp255(24 + rand() * 28)},${clamp255(18 + rand() * 14)},${clamp255(16 + rand() * 12)},0.92)`;
+    }
+    c.beginPath();
+    c.ellipse(coalX, coalY, coalR, coalR * (0.4 + rand() * 0.35), rand() * Math.PI, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // Cast-iron grate with realistic 3D tapered bars and andirons
+  c.strokeStyle = '#2d2f34';
+  c.lineWidth = 3.6 * scale;
   for (let i = 0; i <= 6; i++) {
     const gx = ox + 10 * scale + (i * (openW - 20 * scale)) / 6;
     c.beginPath();
-    c.moveTo(gx, grateY);
-    c.lineTo(gx, grateY + 13 * scale);
+    c.moveTo(gx, grateY - 3 * scale);
+    c.lineTo(gx, grateY + 14 * scale);
     c.stroke();
+
+    // Bar metallic highlight
+    c.strokeStyle = 'rgba(255,255,255,0.18)';
+    c.lineWidth = 1 * scale;
+    c.beginPath();
+    c.moveTo(gx - 0.8 * scale, grateY - 2 * scale);
+    c.lineTo(gx - 0.8 * scale, grateY + 12 * scale);
+    c.stroke();
+    c.strokeStyle = '#2d2f34';
+    c.lineWidth = 3.6 * scale;
   }
+  // Front andiron crossbar with metallic highlight
+  c.strokeStyle = '#1e2023';
+  c.lineWidth = 4 * scale;
   c.beginPath();
-  c.moveTo(ox + 8 * scale, grateY + 13 * scale);
-  c.lineTo(ox + openW - 8 * scale, grateY + 13 * scale);
+  c.moveTo(ox + 6 * scale, grateY + 13 * scale);
+  c.lineTo(ox + openW - 6 * scale, grateY + 13 * scale);
+  c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.22)';
+  c.lineWidth = 1 * scale;
+  c.beginPath();
+  c.moveTo(ox + 8 * scale, grateY + 12 * scale);
+  c.lineTo(ox + openW - 8 * scale, grateY + 12 * scale);
   c.stroke();
 
+  // Wrought iron finials and andiron legs
+  for (const fx of [ox + 10 * scale, ox + openW - 10 * scale]) {
+    c.fillStyle = '#18191c';
+    c.beginPath();
+    c.arc(fx, grateY - 5 * scale, 3.8 * scale, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.28)';
+    c.beginPath();
+    c.arc(fx - 1 * scale, grateY - 6 * scale, 1.2 * scale, 0, Math.PI * 2);
+    c.fill();
+
+    // Andiron foot
+    c.fillStyle = '#141517';
+    roundRect(c, fx - 3.5 * scale, grateY + 13 * scale, 7 * scale, 4 * scale, 1.5 * scale);
+    c.fill();
+  }
+
   const logs = [
-    { x: ox + openW * 0.36, y: grateY - 3 * scale, rx: openW * 0.28, ry: 8 * scale, rot: -0.1 },
-    { x: ox + openW * 0.64, y: grateY - 1 * scale, rx: openW * 0.26, ry: 7.5 * scale, rot: 0.09 },
-    { x: ox + openW * 0.5, y: grateY - 14 * scale, rx: openW * 0.24, ry: 7 * scale, rot: 0.03 },
+    { x: ox + openW * 0.35, y: grateY - 3 * scale, rx: openW * 0.29, ry: 9 * scale, rot: -0.11 },
+    { x: ox + openW * 0.65, y: grateY - 1 * scale, rx: openW * 0.27, ry: 8.5 * scale, rot: 0.10 },
+    { x: ox + openW * 0.5, y: grateY - 14 * scale, rx: openW * 0.25, ry: 8 * scale, rot: 0.02 },
   ];
   for (const log of logs) {
     c.save();
     c.translate(log.x, log.y);
     c.rotate(log.rot);
+
+    // Deep rough bark texture with natural wood curvature
     const lg = c.createLinearGradient(0, -log.ry, 0, log.ry);
-    lg.addColorStop(0, '#4a2d1a');
-    lg.addColorStop(0.45, '#2b180d');
-    lg.addColorStop(1, '#120a05');
+    lg.addColorStop(0, '#583620');
+    lg.addColorStop(0.25, '#402414');
+    lg.addColorStop(0.65, '#26140b');
+    lg.addColorStop(1, '#0e0704');
     c.fillStyle = lg;
     c.beginPath();
     c.ellipse(0, 0, log.rx, log.ry, 0, 0, Math.PI * 2);
     c.fill();
-    c.fillStyle = '#54331d'; // cut end grain, lighter than the charred bark
+
+    // Natural wood bark ridges, fissures & peeling bark texture
+    for (let r = 0; r < 7; r++) {
+      const ridgeY = -log.ry * 0.7 + r * log.ry * 0.23;
+      c.strokeStyle = r % 2 === 0 ? 'rgba(15,8,4,0.75)' : 'rgba(125,75,45,0.45)';
+      c.lineWidth = (1.0 + (r % 3) * 0.4) * scale;
+      c.beginPath();
+      c.moveTo(-log.rx * 0.8, ridgeY);
+      c.quadraticCurveTo(0, ridgeY + (r % 2 ? 2.2 : -2.2) * scale, log.rx * 0.8, ridgeY);
+      c.stroke();
+    }
+
+    // Glowing fissures and incandescent charcoal embers running through the log center
+    const fissGrad = c.createLinearGradient(0, -log.ry * 0.2, 0, log.ry * 0.6);
+    fissGrad.addColorStop(0, 'rgba(255, 140, 25, 0.7)');
+    fissGrad.addColorStop(0.5, 'rgba(255, 55, 10, 0.5)');
+    fissGrad.addColorStop(1, 'rgba(180, 20, 5, 0)');
+    c.fillStyle = fissGrad;
     c.beginPath();
-    c.ellipse(-log.rx * 0.86, 0, log.ry * 0.5, log.ry * 0.88, 0, 0, Math.PI * 2);
+    c.ellipse(0, log.ry * 0.35, log.rx * 0.65, log.ry * 0.45, 0, 0, Math.PI * 2);
     c.fill();
+
+    // Micro incandescent hot cracks along the charred core
+    for (let ck = 0; ck < 3; ck++) {
+      c.strokeStyle = 'rgba(255, 200, 80, 0.65)';
+      c.lineWidth = 1 * scale;
+      c.beginPath();
+      const ckX = (ck - 1) * log.rx * 0.35;
+      c.moveTo(ckX - 8 * scale, log.ry * 0.3);
+      c.lineTo(ckX + 8 * scale, log.ry * 0.35 + (ck % 2 ? 2 : -2) * scale);
+      c.stroke();
+    }
+
+    // End grain cut with realistic tree growth rings and heartwood
+    const endX = -log.rx * 0.86;
+    const endRx = log.ry * 0.55;
+    const endRy = log.ry * 0.92;
+    const endGrad = c.createRadialGradient(endX, 0, 1 * scale, endX, 0, endRy);
+    endGrad.addColorStop(0, '#8c5934');
+    endGrad.addColorStop(0.6, '#6e4528');
+    endGrad.addColorStop(1, '#3b2112');
+    c.fillStyle = endGrad;
+    c.beginPath();
+    c.ellipse(endX, 0, endRx, endRy, 0, 0, Math.PI * 2);
+    c.fill();
+
+    // Concentric growth rings
+    for (let ring = 1; ring <= 4; ring++) {
+      c.strokeStyle = 'rgba(38, 20, 10, 0.55)';
+      c.lineWidth = 0.8 * scale;
+      c.beginPath();
+      c.ellipse(endX, 0, endRx * (ring / 4.5), endRy * (ring / 4.5), 0, 0, Math.PI * 2);
+      c.stroke();
+    }
+
+    // Radial drying cracks in the end grain
+    c.strokeStyle = 'rgba(20, 10, 5, 0.75)';
+    c.lineWidth = 1.1 * scale;
+    c.beginPath();
+    c.moveTo(endX, 0);
+    c.lineTo(endX + endRx * 0.75, -endRy * 0.55);
+    c.moveTo(endX, 0);
+    c.lineTo(endX - endRx * 0.65, endRy * 0.45);
+    c.moveTo(endX, 0);
+    c.lineTo(endX + endRx * 0.4, endRy * 0.7);
+    c.stroke();
+
     c.restore();
   }
   c.restore();
@@ -871,28 +1200,63 @@ function bakeRusticFireplace(scale, colors, opts) {
   c.restore();
 
   // --- mantel beam ---------------------------------------------------------
+  // Solid hand-hewn oak beam with rich warm undertones and end-grain overhang
   const beam = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
-  beam.addColorStop(0, '#8a5c33');
-  beam.addColorStop(0.35, '#6b4325');
-  beam.addColorStop(1, '#3d2414');
+  beam.addColorStop(0, '#a56f3e');
+  beam.addColorStop(0.2, '#82522a');
+  beam.addColorStop(0.6, '#5a361b');
+  beam.addColorStop(0.85, '#3b200f');
+  beam.addColorStop(1, '#221208');
   c.fillStyle = beam;
-  roundRect(c, -10 * scale, mantelY, w + 20 * scale, mantelH, 3 * scale);
+  roundRect(c, -12 * scale, mantelY, w + 24 * scale, mantelH, 3.5 * scale);
   c.fill();
-  c.strokeStyle = 'rgba(255,214,160,0.22)';
-  c.lineWidth = 1.5;
+
+  // Top chamfer edge highlight with warm wood sheen
+  c.strokeStyle = 'rgba(255,230,190,0.38)';
+  c.lineWidth = 1.8 * scale;
   c.beginPath();
-  c.moveTo(-8 * scale, mantelY + 1.5);
-  c.lineTo(w + 8 * scale, mantelY + 1.5);
+  c.moveTo(-11 * scale, mantelY + 1.2 * scale);
+  c.lineTo(w + 11 * scale, mantelY + 1.2 * scale);
   c.stroke();
-  for (let i = 0; i < 7; i++) {
-    c.strokeStyle = `rgba(45, 22, 10, ${0.22 + rand() * 0.28})`;
-    c.lineWidth = 1;
+
+  // Beam lower bevel highlight
+  c.strokeStyle = 'rgba(255,210,160,0.18)';
+  c.lineWidth = 1 * scale;
+  c.beginPath();
+  c.moveTo(-10 * scale, mantelY + mantelH - 2 * scale);
+  c.lineTo(w + 10 * scale, mantelY + mantelH - 2 * scale);
+  c.stroke();
+
+  // Deep bottom edge cast shadow on stone underneath
+  const mantelShadow = c.createLinearGradient(0, mantelY + mantelH, 0, mantelY + mantelH + 8 * scale);
+  mantelShadow.addColorStop(0, 'rgba(10,5,2,0.65)');
+  mantelShadow.addColorStop(1, 'rgba(10,5,2,0)');
+  c.fillStyle = mantelShadow;
+  c.fillRect(-12 * scale, mantelY + mantelH, w + 24 * scale, 8 * scale);
+
+  // Wood grain, knot, and ax-hewn grooves
+  for (let i = 0; i < 11; i++) {
+    c.strokeStyle = `rgba(32, 15, 6, ${0.28 + rand() * 0.35})`;
+    c.lineWidth = (0.7 + rand() * 0.9) * scale;
     const gy = mantelY + 3 * scale + rand() * (mantelH - 6 * scale);
     c.beginPath();
-    c.moveTo(-8 * scale, gy);
-    c.bezierCurveTo(w * 0.3, gy + (rand() - 0.5) * 4, w * 0.7, gy - (rand() - 0.5) * 4, w + 8 * scale, gy);
+    c.moveTo(-11 * scale, gy);
+    c.bezierCurveTo(w * 0.30, gy + (rand() - 0.5) * 6 * scale, w * 0.70, gy - (rand() - 0.5) * 6 * scale, w + 11 * scale, gy);
     c.stroke();
   }
+
+  // A natural wood knot on the mantel beam
+  const knotX = w * 0.72;
+  const knotY = mantelY + mantelH * 0.52;
+  c.fillStyle = 'rgba(35, 15, 5, 0.65)';
+  c.beginPath();
+  c.ellipse(knotX, knotY, 6.5 * scale, 4.2 * scale, 0.1, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = 'rgba(20, 8, 2, 0.8)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.ellipse(knotX, knotY, 9.5 * scale, 6.5 * scale, 0.1, 0, Math.PI * 2);
+  c.stroke();
 
   // --- stockings hung from the beam ---------------------------------------
   if (opts.stockings !== false) {
@@ -1014,32 +1378,43 @@ function bakeModernFireplace(scale, colors, opts) {
   const ox = (w - openW) / 2;
   const oy = h - openH - 22 * scale;
 
-  // Plinth: heavier, with a shadow that grounds the unit.
-  c.fillStyle = 'rgba(0,0,0,0.32)';
+  // Plinth: heavier, with realistic marble/quartz veins and floor shadow.
+  c.fillStyle = 'rgba(0,0,0,0.38)';
   c.beginPath();
-  c.ellipse(w / 2, h - 6 * scale, w * 0.30, 9 * scale, 0, 0, Math.PI * 2);
+  c.ellipse(w / 2, h - 5 * scale, w * 0.36, 11 * scale, 0, 0, Math.PI * 2);
   c.fill();
+
   const plinth = c.createLinearGradient(0, plinthY, 0, h);
-  plinth.addColorStop(0, '#e8e2d6');
-  plinth.addColorStop(0.45, '#c9c3b7');
-  plinth.addColorStop(1, '#948d82');
+  plinth.addColorStop(0, '#f2ece4');
+  plinth.addColorStop(0.25, '#dfd8cc');
+  plinth.addColorStop(0.65, '#b8b1a3');
+  plinth.addColorStop(1, '#868074');
   c.fillStyle = plinth;
-  roundRect(c, 46 * scale, plinthY, w - 92 * scale, 28 * scale, 3 * scale);
+  roundRect(c, 42 * scale, plinthY, w - 84 * scale, 30 * scale, 3 * scale);
   c.fill();
-  c.strokeStyle = 'rgba(255,255,255,0.40)';
-  c.lineWidth = 1;
+
+  // Subtle marble vein across plinth
+  c.strokeStyle = 'rgba(140,130,120,0.25)';
+  c.lineWidth = 1 * scale;
   c.beginPath();
-  c.moveTo(50 * scale, plinthY + 1.2 * scale);
-  c.lineTo(w - 50 * scale, plinthY + 1.2 * scale);
+  c.moveTo(55 * scale, plinthY + 8 * scale);
+  c.bezierCurveTo(w * 0.4, plinthY + 12 * scale, w * 0.6, plinthY + 5 * scale, w - 60 * scale, plinthY + 15 * scale);
   c.stroke();
 
-  // Deep recess behind the glass.
+  c.strokeStyle = 'rgba(255,255,255,0.65)';
+  c.lineWidth = 1.2 * scale;
+  c.beginPath();
+  c.moveTo(44 * scale, plinthY + 1.2 * scale);
+  c.lineTo(w - 44 * scale, plinthY + 1.2 * scale);
+  c.stroke();
+
+  // Deep recess behind the glass with subtle chamfer
   c.save();
-  roundRect(c, ox - 8 * scale, oy - 8 * scale, openW + 16 * scale, openH + 16 * scale, 4 * scale);
+  roundRect(c, ox - 9 * scale, oy - 9 * scale, openW + 18 * scale, openH + 18 * scale, 4 * scale);
   const recess = c.createLinearGradient(ox, oy, ox + openW, oy + openH);
-  recess.addColorStop(0, '#0a0b0d');
-  recess.addColorStop(0.5, '#15171a');
-  recess.addColorStop(1, '#08090a');
+  recess.addColorStop(0, '#07080a');
+  recess.addColorStop(0.5, '#121417');
+  recess.addColorStop(1, '#050607');
   c.fillStyle = recess;
   c.fill();
   c.restore();
@@ -1048,42 +1423,128 @@ function bakeModernFireplace(scale, colors, opts) {
   roundRect(c, ox, oy, openW, openH, 2 * scale);
   c.clip();
   const back = c.createLinearGradient(ox, oy, ox, oy + openH);
-  back.addColorStop(0, '#0d0e10');
-  back.addColorStop(1, '#211712');
+  back.addColorStop(0, '#0b0c0e');
+  back.addColorStop(0.6, '#181412');
+  back.addColorStop(1, '#2c1a10');
   c.fillStyle = back;
   c.fillRect(ox, oy, openW, openH);
 
-  // Glowing ember bed behind the glass.
+  // Modern rear fluted glass or ribbed black ceramic refractory back panel
+  const fluteW = 8 * scale;
+  for (let fx = ox; fx < ox + openW; fx += fluteW) {
+    const fg = c.createLinearGradient(fx, 0, fx + fluteW, 0);
+    fg.addColorStop(0, 'rgba(255,255,255,0.03)');
+    fg.addColorStop(0.5, 'rgba(0,0,0,0)');
+    fg.addColorStop(1, 'rgba(0,0,0,0.3)');
+    c.fillStyle = fg;
+    c.fillRect(fx, oy, fluteW, openH);
+  }
+
+  // Linear stainless steel burner trough along bottom of firebox
+  const burnerY = oy + openH - 10 * scale;
+  const burnerGrad = c.createLinearGradient(ox, burnerY, ox, burnerY + 4 * scale);
+  burnerGrad.addColorStop(0, '#383b42');
+  burnerGrad.addColorStop(0.4, '#5a5e69');
+  burnerGrad.addColorStop(1, '#1e2024');
+  c.fillStyle = burnerGrad;
+  c.fillRect(ox + 8 * scale, burnerY, openW - 16 * scale, 3 * scale);
+  c.strokeStyle = 'rgba(255,255,255,0.25)';
+  c.lineWidth = 0.8 * scale;
+  c.beginPath();
+  c.moveTo(ox + 8 * scale, burnerY);
+  c.lineTo(ox + openW - 8 * scale, burnerY);
+  c.stroke();
+
+  // Glowing ember bed behind the glass with ceramic log accents and river stones / glass crystals
   const grateY = oy + openH - 8 * scale;
-  const emberCount = Math.round(openW / (7 * scale));
+  const emberCount = Math.round(openW / (4.8 * scale));
   for (let i = 0; i < emberCount; i++) {
     const px = ox + ((i + 0.5) / emberCount) * openW + (rand() - 0.5) * 5 * scale;
     const py = grateY - rand() * 5 * scale;
-    const pr = (2.4 + rand() * 3.0) * scale;
+    const pr = (2.4 + rand() * 3.2) * scale;
     const heat = 0.55 + rand() * 0.45;
     const g = c.createRadialGradient(px, py, 0, px, py, pr * 1.8);
-    g.addColorStop(0, `rgba(255,${Math.round(120 + heat * 80)},${Math.round(heat * 60)},${0.85 + rand() * 0.15})`);
-    g.addColorStop(0.55, `rgba(255,${Math.round(80 + heat * 60)},32,${0.35 + rand() * 0.25})`);
+    g.addColorStop(0, `rgba(255,${Math.round(140 + heat * 90)},${Math.round(heat * 80)},${0.9 + rand() * 0.1})`);
+    g.addColorStop(0.45, `rgba(255,${Math.round(85 + heat * 65)},25,${0.5 + rand() * 0.3})`);
     g.addColorStop(1, 'rgba(60,22,12,0)');
     c.fillStyle = g;
     c.beginPath();
     c.ellipse(px, py, pr, pr * 0.55, 0, 0, Math.PI * 2);
     c.fill();
   }
+
+  // Modern fire glass / basalt crystals on the bed
+  for (let i = 0; i < 22; i++) {
+    const cx = ox + 14 * scale + rand() * (openW - 28 * scale);
+    const cy = grateY - 1 * scale + (rand() - 0.5) * 6 * scale;
+    const cw = (3 + rand() * 4) * scale;
+    const ch = (2 + rand() * 2.5) * scale;
+    c.fillStyle = rand() > 0.4
+      ? `rgba(255,${Math.round(180 + rand() * 70)},${Math.round(100 + rand() * 50)},0.75)`
+      : `rgba(${Math.round(40 + rand() * 30)},${Math.round(42 + rand() * 25)},${Math.round(48 + rand() * 25)},0.85)`;
+    c.beginPath();
+    c.moveTo(cx - cw / 2, cy);
+    c.lineTo(cx, cy - ch / 2);
+    c.lineTo(cx + cw / 2, cy);
+    c.lineTo(cx, cy + ch / 2);
+    c.closePath();
+    c.fill();
+    // Crystal specular sparkle
+    c.fillStyle = 'rgba(255,255,255,0.45)';
+    c.fillRect(cx - 0.5 * scale, cy - 0.5 * scale, 1 * scale, 1 * scale);
+  }
+
+  // Linear ceramic driftwood pieces across the modern ribbon burner
+  const ceramicLogs = [
+    { x: ox + openW * 0.26, y: grateY - 4 * scale, w: openW * 0.28, h: 5 * scale, rot: -0.06 },
+    { x: ox + openW * 0.72, y: grateY - 3.5 * scale, w: openW * 0.30, h: 4.5 * scale, rot: 0.05 },
+    { x: ox + openW * 0.48, y: grateY - 6.5 * scale, w: openW * 0.34, h: 4 * scale, rot: -0.02 },
+  ];
+  for (const cl of ceramicLogs) {
+    c.save();
+    c.translate(cl.x, cl.y);
+    c.rotate(cl.rot);
+    const clogGrad = c.createLinearGradient(0, -cl.h, 0, cl.h);
+    clogGrad.addColorStop(0, '#66615b');
+    clogGrad.addColorStop(0.35, '#423d38');
+    clogGrad.addColorStop(0.75, '#252320');
+    clogGrad.addColorStop(1, '#131210');
+    c.fillStyle = clogGrad;
+    roundRect(c, -cl.w / 2, -cl.h / 2, cl.w, cl.h, 2.2 * scale);
+    c.fill();
+
+    // Subtle bleached driftwood grain lines
+    c.strokeStyle = 'rgba(255,255,255,0.12)';
+    c.lineWidth = 0.8 * scale;
+    c.beginPath();
+    c.moveTo(-cl.w * 0.42, -cl.h * 0.2);
+    c.lineTo(cl.w * 0.42, -cl.h * 0.2);
+    c.stroke();
+
+    // Glowing underside reflection
+    c.fillStyle = 'rgba(255, 120, 25, 0.55)';
+    c.fillRect(-cl.w * 0.4, 0, cl.w * 0.8, cl.h / 2);
+    c.restore();
+  }
   c.restore();
 
-  // Glass reflection: a soft diagonal sheen across the firebox.
+  // Glass reflection: realistic multi-layer subtle reflections across the glass panel
   c.save();
   roundRect(c, ox, oy, openW, openH, 2 * scale);
   c.clip();
   const glass = c.createLinearGradient(ox, oy, ox + openW * 0.7, oy + openH * 0.8);
-  glass.addColorStop(0, 'rgba(255,255,255,0.08)');
-  glass.addColorStop(0.35, 'rgba(255,255,255,0.02)');
-  glass.addColorStop(0.55, 'rgba(255,255,255,0)');
-  glass.addColorStop(0.8, 'rgba(255,255,255,0.04)');
+  glass.addColorStop(0, 'rgba(255,255,255,0.09)');
+  glass.addColorStop(0.25, 'rgba(255,255,255,0.02)');
+  glass.addColorStop(0.5, 'rgba(255,255,255,0)');
+  glass.addColorStop(0.75, 'rgba(255,255,255,0.05)');
   glass.addColorStop(1, 'rgba(255,255,255,0)');
   c.fillStyle = glass;
   c.fillRect(ox, oy, openW, openH);
+
+  // Soft specular edge reflection on the glass bevel
+  c.strokeStyle = 'rgba(255,255,255,0.15)';
+  c.lineWidth = 1 * scale;
+  c.strokeRect(ox + 1, oy + 1, openW - 2, openH - 2);
   c.restore();
 
   // Bevelled black metal frame with catchlights.
@@ -1195,58 +1656,206 @@ function bakeFireplace(scale, colors, opts) {
 
 let flameSheet = null;
 
-/// Bakes a looping flame animation once. Per frame the fire then costs a
-/// single drawImage instead of rebuilding seven bezier tongues and their
-/// gradients — the difference between comfortably hitting a 120Hz budget
-/// and not.
+/// Bakes a realistic multi-layered, multi-frequency looping flame animation once.
+/// Real wood flames have distinct combustion physics:
+///   1. A blue/violet-white high-energy root envelope at the base of the fuel
+///   2. A broad turbulent golden/deep-orange mantle that licks upward
+///   3. Dancing luminous yellow tongues that whip and curl
+///   4. Intense incandescence (white-hot core) at the heart of the fuel bed
+///   5. Smoked dark amber flame tips that fade naturally
+/// Bakes seamlessly so frame cost remains a single drawImage.
 function bakeFlameSheet(fw, fh, scale) {
-  const FRAMES = 36;
+  const FRAMES = 40;
   const cv = makeCanvas(fw * FRAMES, fh);
   const c = cv.getContext('2d');
   c.globalCompositeOperation = 'lighter';
 
-  const tongues = [
-    { dx: -26, w: 20, hgt: 40, hue: [255, 78, 18], f: 2, ph: 0.0 },
-    { dx: 25, w: 19, hgt: 36, hue: [255, 84, 20], f: 3, ph: 1.1 },
-    { dx: -14, w: 22, hgt: 62, hue: [255, 102, 28], f: 2, ph: 2.4 },
-    { dx: 14, w: 21, hgt: 58, hue: [255, 118, 34], f: 3, ph: 1.7 },
-    { dx: -4, w: 24, hgt: 84, hue: [255, 152, 48], f: 2, ph: 3.4 },
-    { dx: 5, w: 17, hgt: 96, hue: [255, 192, 84], f: 4, ph: 5.1 },
-    { dx: -1, w: 10, hgt: 70, hue: [255, 238, 190], f: 5, ph: 2.2 },
+  // Base flame envelope (deep ambient fire volume)
+  const baseFlames = [
+    { dx: -28, w: 26, hgt: 48, hue: [230, 50, 8], alpha: 0.50, f: 2, ph: 0.3 },
+    { dx: 26, w: 25, hgt: 46, hue: [230, 55, 10], alpha: 0.50, f: 3, ph: 1.5 },
+    { dx: -12, w: 36, hgt: 72, hue: [240, 75, 15], alpha: 0.55, f: 2, ph: 2.8 },
+    { dx: 14, w: 34, hgt: 68, hue: [240, 80, 16], alpha: 0.55, f: 3, ph: 3.9 },
+    { dx: 0, w: 42, hgt: 92, hue: [248, 95, 20], alpha: 0.60, f: 2, ph: 0.9 },
+  ];
+
+  // Primary dancing tongues: natural curling flame geometry
+  const mainTongues = [
+    { dx: -24, w: 18, hgt: 58, hue: [255, 115, 24], f1: 2, f2: 4, ph1: 0.5, ph2: 1.2, curl: -0.32 },
+    { dx: 22, w: 17, hgt: 56, hue: [255, 120, 26], f1: 3, f2: 5, ph1: 1.8, ph2: 2.4, curl: 0.32 },
+    { dx: -13, w: 22, hgt: 84, hue: [255, 150, 36], f1: 2, f2: 4, ph1: 2.9, ph2: 0.8, curl: -0.28 },
+    { dx: 14, w: 21, hgt: 82, hue: [255, 155, 38], f1: 3, f2: 6, ph1: 4.1, ph2: 3.1, curl: 0.28 },
+    { dx: -4, w: 24, hgt: 110, hue: [255, 180, 55], f1: 2, f2: 5, ph1: 1.1, ph2: 4.2, curl: -0.18 },
+    { dx: 6, w: 20, hgt: 104, hue: [255, 190, 62], f1: 4, f2: 7, ph1: 5.3, ph2: 1.7, curl: 0.22 },
+    { dx: -1, w: 18, hgt: 118, hue: [255, 210, 88], f1: 3, f2: 6, ph1: 3.4, ph2: 5.0, curl: 0.06 },
+  ];
+
+  // High-temperature white-hot inner cores
+  const coreTongues = [
+    { dx: -7, w: 14, hgt: 54, hue: [255, 240, 170], f: 3, ph: 0.7 },
+    { dx: 6, w: 13, hgt: 50, hue: [255, 242, 175], f: 4, ph: 2.2 },
+    { dx: 0, w: 15, hgt: 66, hue: [255, 252, 210], f: 2, ph: 4.0 },
+    { dx: -2, w: 8, hgt: 38, hue: [255, 255, 245], f: 5, ph: 1.4 },
+  ];
+
+  // Realistic blue/violet flame base (combustion zone directly on wood fuel)
+  const blueBase = [
+    { dx: -18, w: 16, hgt: 16, hue: [60, 95, 255], ph: 0.0 },
+    { dx: -6, w: 20, hgt: 20, hue: [80, 130, 255], ph: 1.2 },
+    { dx: 8, w: 20, hgt: 19, hue: [80, 125, 255], ph: 2.4 },
+    { dx: 18, w: 16, hgt: 15, hue: [60, 90, 250], ph: 3.6 },
+  ];
+
+  // Fine flicking wisps and licking tendrils detaching from the flame tops
+  const flameWisps = [
+    { dx: -10, w: 9, hgt: 26, hue: [255, 160, 40], f: 4, ph: 0.8, yOff: 80 },
+    { dx: 8, w: 8, hgt: 24, hue: [255, 150, 35], f: 5, ph: 2.1, yOff: 75 },
+    { dx: -1, w: 10, hgt: 30, hue: [255, 175, 50], f: 3, ph: 4.3, yOff: 94 },
+    { dx: 4, w: 7, hgt: 22, hue: [255, 140, 30], f: 6, ph: 1.5, yOff: 86 },
   ];
 
   for (let frame = 0; frame < FRAMES; frame++) {
-    // Frequencies are whole numbers so every tongue closes its cycle at the
-    // end of the sheet and the loop is seamless.
+    // Seamless cyclical time parameter
     const t = (frame / FRAMES) * Math.PI * 2;
     const ox = frame * fw;
     const baseX = ox + fw / 2;
-    const baseY = fh - 6 * scale;
+    const baseY = fh - 4 * scale;
 
-    for (const tg of tongues) {
-      const flick = 0.8 + 0.2 * Math.sin(t * tg.f + tg.ph);
-      const sway = Math.sin(t * tg.f * 0.5 + tg.ph) * 5 * scale;
-      const rootX = baseX + tg.dx * scale * 0.55;
-      const tipX = baseX + tg.dx * scale + sway;
-      const tipY = baseY - tg.hgt * scale * flick;
-      const halfW = tg.w * scale * flick;
-      const [r, g, b] = tg.hue;
+    // 1. Blue combustion base layer at the bottom of the fuel bed
+    for (const b of blueBase) {
+      const flick = 0.85 + 0.15 * Math.sin(t * 3 + b.ph);
+      const rootX = baseX + b.dx * scale;
+      const rootY = baseY + 2 * scale;
+      const tipY = baseY - b.hgt * scale * flick;
+      const hw = b.w * scale * flick * 0.5;
+      const [r, g, bl] = b.hue;
+
+      const grad = c.createLinearGradient(rootX, rootY, rootX, tipY);
+      grad.addColorStop(0, `rgba(${r},${g},${bl},0.65)`);
+      grad.addColorStop(0.45, `rgba(${r},${g},${bl},0.3)`);
+      grad.addColorStop(1, `rgba(${r},${g},${bl},0)`);
+      c.fillStyle = grad;
+      c.beginPath();
+      c.moveTo(rootX - hw, rootY);
+      c.quadraticCurveTo(rootX - hw * 0.35, (rootY + tipY) * 0.5, rootX, tipY);
+      c.quadraticCurveTo(rootX + hw * 0.35, (rootY + tipY) * 0.5, rootX + hw, rootY);
+      c.closePath();
+      c.fill();
+    }
+
+    // 2. Wide base orange/red thermal mantle
+    for (const bg of baseFlames) {
+      const flick = 0.82 + 0.18 * Math.sin(t * bg.f + bg.ph);
+      const sway = Math.sin(t * bg.f * 0.5 + bg.ph) * 5 * scale;
+      const rootX = baseX + bg.dx * scale * 0.6;
+      const tipX = baseX + bg.dx * scale + sway;
+      const tipY = baseY - bg.hgt * scale * flick;
+      const halfW = bg.w * scale * flick;
+      const [r, g, b] = bg.hue;
 
       const grad = c.createLinearGradient(rootX, baseY, tipX, tipY);
-      grad.addColorStop(0, `rgba(${r},${Math.round(g * 0.5)},8,0.5)`);
-      grad.addColorStop(0.45, `rgba(${r},${g},${b},0.42)`);
-      grad.addColorStop(1, `rgba(${r},${Math.min(255, g + 60)},${Math.min(255, b + 80)},0)`);
+      grad.addColorStop(0, `rgba(${r},${Math.round(g * 0.4)},4,${bg.alpha * 0.95})`);
+      grad.addColorStop(0.35, `rgba(${r},${g},${b},${bg.alpha})`);
+      grad.addColorStop(0.75, `rgba(${r},${Math.min(255, g + 45)},${Math.min(255, b + 35)},${bg.alpha * 0.35})`);
+      grad.addColorStop(1, `rgba(${r},${g},0,0)`);
       c.fillStyle = grad;
       c.beginPath();
       c.moveTo(rootX - halfW, baseY);
       c.bezierCurveTo(
-        rootX - halfW * 1.15, baseY - (baseY - tipY) * 0.45,
-        tipX - halfW * 0.5, baseY - (baseY - tipY) * 0.78,
+        rootX - halfW * 1.15, baseY - (baseY - tipY) * 0.4,
+        tipX - halfW * 0.45, baseY - (baseY - tipY) * 0.75,
         tipX, tipY
       );
       c.bezierCurveTo(
-        tipX + halfW * 0.5, baseY - (baseY - tipY) * 0.78,
-        rootX + halfW * 1.15, baseY - (baseY - tipY) * 0.45,
+        tipX + halfW * 0.45, baseY - (baseY - tipY) * 0.75,
+        rootX + halfW * 1.15, baseY - (baseY - tipY) * 0.4,
+        rootX + halfW, baseY
+      );
+      c.closePath();
+      c.fill();
+    }
+
+    // 3. Primary energetic dancing flame tongues with natural turbulence & curling
+    for (const tg of mainTongues) {
+      const flick = 0.78 + 0.16 * Math.sin(t * tg.f1 + tg.ph1) + 0.06 * Math.sin(t * tg.f2 + tg.ph2);
+      const sway = (Math.sin(t * tg.f1 * 0.5 + tg.ph1) * 6 + Math.sin(t * tg.f2 + tg.ph2) * 3.5) * scale;
+      const rootX = baseX + tg.dx * scale * 0.5;
+      const tipX = baseX + tg.dx * scale + sway + tg.curl * 12 * scale * flick;
+      const tipY = baseY - tg.hgt * scale * flick;
+      const halfW = tg.w * scale * flick;
+      const [r, g, b] = tg.hue;
+
+      // Realistic flame gradient: warm ember red at base -> rich golden yellow -> incandescent tip -> soft fade
+      const grad = c.createLinearGradient(rootX, baseY, tipX, tipY);
+      grad.addColorStop(0, `rgba(${r},${Math.round(g * 0.45)},6,0.78)`);
+      grad.addColorStop(0.32, `rgba(${r},${g},${b},0.68)`);
+      grad.addColorStop(0.72, `rgba(${r},${Math.min(255, g + 45)},${Math.min(255, b + 60)},0.48)`);
+      grad.addColorStop(1, `rgba(255,${Math.min(255, g + 75)},${Math.min(255, b + 90)},0)`);
+      c.fillStyle = grad;
+
+      // Asymmetric flame tongues with dynamic waist constriction and organic flame flick
+      const waistShift = Math.sin(t * tg.f2 + tg.ph1) * 3.8 * scale;
+      c.beginPath();
+      c.moveTo(rootX - halfW, baseY);
+      c.bezierCurveTo(
+        rootX - halfW * 1.08 + waistShift, baseY - (baseY - tipY) * 0.38,
+        tipX - halfW * 0.32 + waistShift * 0.6, baseY - (baseY - tipY) * 0.74,
+        tipX, tipY
+      );
+      c.bezierCurveTo(
+        tipX + halfW * 0.32 + waistShift * 0.6, baseY - (baseY - tipY) * 0.74,
+        rootX + halfW * 1.08 + waistShift, baseY - (baseY - tipY) * 0.38,
+        rootX + halfW, baseY
+      );
+      c.closePath();
+      c.fill();
+    }
+
+    // 4. Detaching flame wisps / licking tongues near top
+    for (const w of flameWisps) {
+      const wFlick = 0.7 + 0.3 * Math.sin(t * w.f + w.ph);
+      const wLift = (1 - ((t * w.f * 0.2 + w.ph) % 1)) * 14 * scale;
+      const wY = baseY - w.yOff * scale - wLift;
+      const wX = baseX + w.dx * scale + Math.sin(t * w.f * 0.5 + w.ph) * 8 * scale;
+      const [r, g, b] = w.hue;
+
+      const wGrad = c.createRadialGradient(wX, wY, 0, wX, wY, w.w * scale * wFlick);
+      wGrad.addColorStop(0, `rgba(${r},${g},${b},${0.5 * wFlick})`);
+      wGrad.addColorStop(0.6, `rgba(${r},${Math.round(g * 0.6)},${b},${0.25 * wFlick})`);
+      wGrad.addColorStop(1, `rgba(${r},${g},0,0)`);
+      c.fillStyle = wGrad;
+      c.beginPath();
+      c.ellipse(wX, wY, w.w * scale * wFlick * 0.6, (w.hgt * scale * wFlick) * 0.5, 0.1, 0, Math.PI * 2);
+      c.fill();
+    }
+
+    // 5. White-hot incandescent core (maximum luminance at flame center)
+    for (const core of coreTongues) {
+      const flick = 0.82 + 0.18 * Math.sin(t * core.f + core.ph);
+      const sway = Math.sin(t * core.f * 0.5 + core.ph) * 3.5 * scale;
+      const rootX = baseX + core.dx * scale * 0.4;
+      const tipX = baseX + core.dx * scale + sway;
+      const tipY = baseY - core.hgt * scale * flick;
+      const halfW = core.w * scale * flick;
+      const [r, g, b] = core.hue;
+
+      const grad = c.createLinearGradient(rootX, baseY, tipX, tipY);
+      grad.addColorStop(0, `rgba(${r},${g},${b},0.92)`);
+      grad.addColorStop(0.45, `rgba(${r},${g},${b},0.72)`);
+      grad.addColorStop(0.85, `rgba(${r},${Math.round(g * 0.85)},${Math.round(b * 0.5)},0.35)`);
+      grad.addColorStop(1, `rgba(255,180,40,0)`);
+      c.fillStyle = grad;
+
+      c.beginPath();
+      c.moveTo(rootX - halfW, baseY);
+      c.bezierCurveTo(
+        rootX - halfW * 0.8, baseY - (baseY - tipY) * 0.42,
+        tipX - halfW * 0.3, baseY - (baseY - tipY) * 0.75,
+        tipX, tipY
+      );
+      c.bezierCurveTo(
+        tipX + halfW * 0.3, baseY - (baseY - tipY) * 0.75,
+        rootX + halfW * 0.8, baseY - (baseY - tipY) * 0.42,
         rootX + halfW, baseY
       );
       c.closePath();
@@ -1364,10 +1973,22 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
 
-  const emberGlow = glowSprite('#ff6a14', 96);
-  const es = 190 * scale * breathe;
-  ctx.globalAlpha = 0.55 * breathe;
-  ctx.drawImage(emberGlow, fireX - es / 2, fireY - es * 0.42, es, es * 0.5);
+  // Multi-tier ember bed illumination: deep red-orange base + golden hot center + hot combustion core
+  const emberGlow = glowSprite('#ff5410', 128);
+  const coreGlow = glowSprite('#ffb530', 80);
+  const whiteCoreGlow = glowSprite('#fff0a0', 48);
+
+  const es = 230 * scale * breathe;
+  ctx.globalAlpha = 0.62 * breathe;
+  ctx.drawImage(emberGlow, fireX - es / 2, fireY - es * 0.44, es, es * 0.52);
+
+  const cs = 130 * scale * breathe;
+  ctx.globalAlpha = 0.52 * breathe;
+  ctx.drawImage(coreGlow, fireX - cs / 2, fireY - cs * 0.38, cs, cs * 0.45);
+
+  const ws = 70 * scale * breathe;
+  ctx.globalAlpha = 0.40 * breathe;
+  ctx.drawImage(whiteCoreGlow, fireX - ws / 2, fireY - ws * 0.35, ws, ws * 0.40);
 
   const frame = Math.floor((time * 26) % flame.frames);
   ctx.globalAlpha = breathe;
@@ -1376,15 +1997,30 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
     fireX - flame.fw / 2, fireY - flame.fh + 8 * scale, flame.fw, flame.fh
   );
 
+  // Dynamic rising embers with natural swirling trajectories and cooling color gradient
   ctx.globalAlpha = 1;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 28; i++) {
     const seed = i * 1.618;
-    const life = (time * (0.32 + (i % 5) * 0.05) + seed) % 1;
-    const sx = fireX + Math.sin(seed * 9.7 + life * 6.2) * (14 + (i % 4) * 8) * scale;
-    const sy = fireY - life * geom.openH * 0.85;
-    ctx.fillStyle = `rgba(255,${clamp255(150 + 80 * (1 - life))},${clamp255(60 * (1 - life))},${(1 - life) * 0.8 * breathe})`;
+    const speedRate = 0.25 + (i % 8) * 0.04;
+    const life = (time * speedRate + seed) % 1;
+    // Upward draft with thermal convective vortex curls
+    const swirlFreq = 5.4 + (i % 3) * 2.2;
+    const swirlPhase = seed * 8.3;
+    const draftSpread = (18 + (i % 6) * 8) * scale;
+    const sx = fireX + Math.sin(swirlPhase + life * swirlFreq) * draftSpread * (0.35 + life * 0.85)
+      + Math.cos(life * 9.1 + seed) * (4 * scale);
+    const sy = fireY - life * geom.openH * 0.94;
+    const sz = (0.6 + (i % 4) * 0.42) * scale * (1 - life * 0.35);
+
+    // Glowing ember cools from golden white -> hot yellow -> deep vermillion orange
+    const rCol = 255;
+    const gCol = clamp255(210 * (1 - life * 0.8));
+    const bCol = clamp255(75 * Math.max(0, 1 - life * 2.2));
+    const alpha = (1 - life) * (0.85 + 0.15 * Math.sin(time * 12 + seed)) * breathe;
+
+    ctx.fillStyle = `rgba(${rCol},${gCol},${bCol},${alpha})`;
     ctx.beginPath();
-    ctx.arc(sx, sy, (0.8 + (i % 3) * 0.5) * scale * (1 - life * 0.5), 0, Math.PI * 2);
+    ctx.arc(sx, sy, sz, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
