@@ -132,6 +132,13 @@ fn spawn_dock_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
                 .title("Dock Decoration")
                 .transparent(true)
                 .decorations(false)
+                // Without this, macOS draws its native drop shadow behind
+                // whatever the window's content alpha shape is — since this
+                // window is a large transparent rect around a thin strip of
+                // garland/icicles, that shadow renders as an ugly black
+                // halo hugging the decoration's outline instead of a clean
+                // transparent edge.
+                .shadow(false)
                 // Unlike the snow overlay (a live wallpaper, deliberately
                 // at the bottom), this one has to sit above the desktop
                 // to decorate the shell bar at all. It's a thin strip in
@@ -358,6 +365,15 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
             .title("Snow Overlay")
             .transparent(true)
             .decorations(false)
+            // Same reasoning as the dock windows: this window covers the
+            // whole monitor but its own content (trees, fireplace, snow) is
+            // mostly transparent, so macOS's native drop shadow traces
+            // that content's silhouette instead of the window's edge —
+            // a black outline around every tree and a black box around
+            // the fireplace. Disabling it is what makes the overlay read
+            // as painted directly on the desktop rather than floating in
+            // its own shadowed pane.
+            .shadow(false)
             .always_on_bottom(true)
             .skip_taskbar(true)
             .focused(false)
