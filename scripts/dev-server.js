@@ -19,6 +19,15 @@ const MIME = {
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4173;
 
+async function isExistingDevServerReady() {
+  try {
+    const response = await fetch(`http://localhost:${port}/settings/index.html`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const queryIndex = req.url.indexOf('?');
   // Kept and re-attached to every redirect below: dropping it silently
@@ -73,6 +82,16 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
+});
+
+server.on('error', async error => {
+  if (error.code === 'EADDRINUSE' && await isExistingDevServerReady()) {
+    console.log(`Dev server already listening on http://localhost:${port}`);
+    process.exit(0);
+  }
+
+  console.error(error);
+  process.exit(1);
 });
 
 server.listen(port, () => {
