@@ -51,6 +51,12 @@ export const AURORA_PALETTES = {
   },
 };
 
+export const BACKGROUND_PALETTES = {
+  midnight: { label: 'Moonlit blue', sky: '#06101f', horizon: '#48677d', snow: '#b5cee0' },
+  glacier: { label: 'Glacier teal', sky: '#071c26', horizon: '#518b96', snow: '#c6e5e6' },
+  twilight: { label: 'Winter dusk', sky: '#20162e', horizon: '#9c748c', snow: '#e0d0e1' },
+};
+
 /// Lighten/darken a hex colour by a percentage, returning a hex string.
 function shadeHex(hex, amt) {
   const value = hex.slice(1);
@@ -282,11 +288,20 @@ export function defaultScreen(overrides = {}) {
     shootingStarFrequency: 1,
     icicles: true,
     snowGlitter: true,
-    background: 'none', // 'none' | 'image'
+    background: 'none', // none | image | animated-forest | alpine-lake
+    backgroundImageKey: null,
     backgroundFit: 'cover', // cover | contain | stretch | tile
     backgroundOpacity: 1,
     backgroundAnimation: 'drift', // none | drift | kenburns
     backgroundMotion: 1,
+    backgroundPalette: 'midnight',
+    backgroundSky: '#06101f',
+    backgroundHorizon: '#48677d',
+    backgroundSnow: '#b5cee0',
+    backgroundFog: 0.45,
+    backgroundMoon: 1,
+    backgroundMoonX: 0.78,
+    backgroundMoonY: 0.18,
     garland: defaultGarland(),
     trees: [
       defaultTree({ x: 0.1, seed: 1337 }),
@@ -323,6 +338,12 @@ export function screenConfig(scene, index) {
   // by an older version is missing the newest keys, and must pick up
   // their defaults rather than rendering as undefined.
   const merged = { ...base, ...(fallback ?? {}), ...(own ?? {}) };
+  // Materialised per-screen edits retain the inherited image reference;
+  // selecting a new file later gives that screen its own storage key.
+  merged.backgroundImageKey = own?.backgroundImageKey
+    ?? (own?.background === 'image' ? `screen-${index}` : null)
+    ?? fallback?.backgroundImageKey
+    ?? (fallback?.background === 'image' ? 'screen-default' : `screen-${index}`);
   merged.look = { ...defaultLook(), ...(merged.look ?? {}) };
   merged.garland = { ...defaultGarland(), ...(merged.garland ?? {}) };
   merged.garland.lights = defaultLightStyle(merged.garland.lights ?? {});

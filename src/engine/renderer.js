@@ -191,8 +191,8 @@ export class Renderer {
     if (bloomStrength !== undefined) {
       this.bloomStrength = Math.max(0, Math.min(2.5, Number(bloomStrength) || 0));
     }
-    if (saturation !== undefined) {
-      this.saturation = Math.max(0, Math.min(2, Number(saturation) || 1));
+    if (saturation !== undefined && Number.isFinite(Number(saturation))) {
+      this.saturation = Math.max(0, Math.min(2, Number(saturation)));
     }
   }
 
@@ -348,13 +348,18 @@ export class Renderer {
     };
 
     this.scene?.update(dt, this.time, ctx);
-    this.scene?.contributeLights(this.rig, this.time);
+    // Reserve fireplace spill before allocating the remaining slots to
+    // tree bulbs, otherwise a third tree silently extinguishes the fire.
     for (const fireplace of this.fireplaces) {
+      const scale = Math.max(0.6, Math.min(2.6, (this.height / this.dpr / 900) * (fireplace.scale ?? 1)));
+      const breathe = 0.86 + 0.1 * Math.sin(this.time * 2.3) + 0.04 * Math.sin(this.time * 7.1);
       this.rig.add(
-        (fireplace.x ?? 0.5) * this.width, this.height * 0.16, 0.5,
-        [1, 0.28, 0.07], 2.4 * this.fireplaceContribution, Math.min(this.width, this.height) * 0.42
+        (fireplace.x ?? 0.5) * this.width, 100 * scale * this.dpr, 0.5,
+        [1, 0.28, 0.07], 2.4 * this.fireplaceContribution * (fireplace.lights?.intensity ?? 1) * breathe,
+        380 * scale * this.dpr
       );
     }
+    this.scene?.contributeLights(this.rig, this.time);
 
     // --- scene pass ---------------------------------------------------
     this.sceneTarget.bind();

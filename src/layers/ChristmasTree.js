@@ -1147,6 +1147,19 @@ export class ChristmasTree extends Layer {
     this.starData = new Float32Array(22);
 
     // --- contact shadow ---------------------------------------------------
+    this.updateShadow();
+  }
+
+  setShadow(strength = 1, softness = 1) {
+    if (strength === this.opts.shadowStrength && softness === this.opts.shadowSoftness) return;
+    this.opts.shadowStrength = strength;
+    this.opts.shadowSoftness = softness;
+    if (this.shadowBatch) this.updateShadow();
+  }
+
+  updateShadow() {
+    const gl = this.gl;
+    const radius = this.radius;
     const sh = new InstanceWriter(5, 1);
     const shadowStrength = Math.max(0, this.opts.shadowStrength ?? 1);
     const shadowSoftness = Math.max(0.4, this.opts.shadowSoftness ?? 1);
@@ -1183,7 +1196,12 @@ export class ChristmasTree extends Layer {
     return Math.max(0.06, (b.base + 0.35 * wobble) * (1 - 0.55 * dip)) * this.opts.lightIntensity;
   }
 
-  update(dt, time) {
+  update(dt, time, ctx) {
+    if (ctx) {
+      const off = ctx.camera.offsetFor(this.z);
+      this.originX = this.opts.anchor[0] * ctx.width + off.x * ctx.dpr;
+      this.originY = this.opts.anchor[1] * ctx.height + off.y * ctx.dpr;
+    }
     if (!this.bulbData) return;
     const d = this.bulbData;
     for (let i = 0; i < this.bulbs.length; i++) {
@@ -1223,21 +1241,21 @@ export class ChristmasTree extends Layer {
   /// chosen light uses the SAME brightness number the sprite does, so a
   /// bulb dimming visibly dims the needles around it.
   contributeLights(rig, time) {
-    if (!this.bulbs.length) return;
     const ox = this.originX ?? 0;
     const oy = this.originY ?? 0;
+    const flip = this.opts.flip ? -1 : 1;
     const picks = 9;
     for (let k = 0; k < picks; k++) {
       const b = this.bulbs[Math.floor((k + 0.5) * (this.bulbs.length / picks))];
       if (!b) continue;
       rig.add(
-        ox + b.x, oy + b.y, b.z,
+        ox + b.x * flip, oy + b.y, b.z,
         b.color, (b.level ?? 0.7) * 1.5, this.radius * 1.05
       );
     }
     if (this.star) {
       rig.add(
-        ox + this.star.x, oy + this.star.y, this.star.z,
+        ox + this.star.x * flip, oy + this.star.y, this.star.z,
         hexToRgb(this.opts.starColor), (this.starLevel ?? 0.8) * 2.4, this.radius * 1.5
       );
     }

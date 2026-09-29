@@ -15,7 +15,7 @@ import {
   listScreens, saveBackground, loadBackground,
 } from '../shared/bridge.js';
 import {
-  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, WEATHER_PROFILES, CAMERA_MOTION_PROFILES, defaultScene, defaultScreen,
+  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, BACKGROUND_PALETTES, WEATHER_PROFILES, CAMERA_MOTION_PROFILES, defaultScene, defaultScreen,
   defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
   resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
@@ -341,10 +341,10 @@ function renderScene() {
   const bgCard = el('div', { class: 'card' },
     dropdown({
       id: 'background-mode', label: 'Backdrop', value: cfg.background,
-      options: [['none', 'None (see the desktop)'], ['animated-forest', 'Animated winter forest'], ['image', 'Image']],
+      options: [['none', 'None (see the desktop)'], ['animated-forest', 'Moonlit winter forest'], ['alpine-lake', 'Alpine frozen lake'], ['image', 'Image']],
       onChange: (v) => editScreen((s) => { s.background = v; }),
     }));
-  if (cfg.background === 'image' || cfg.background === 'animated-forest') {
+  if (['image', 'animated-forest', 'alpine-lake'].includes(cfg.background)) {
     if (cfg.background === 'image') {
       bgCard.append(
         el('label', { class: 'ghost file', style: 'text-align:center' }, 'Choose image…',
@@ -353,11 +353,22 @@ function renderScene() {
             onchange: async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+              const screen = activeScreen;
               const reader = new FileReader();
               reader.onload = async () => {
-                await saveBackground(`screen-${activeScreen}`, String(reader.result));
-                setStatus('Background updated');
+                try {
+                  const key = `screen-${screen}`;
+                  await saveBackground(key, String(reader.result));
+                  const next = screenConfig(scene(), screen);
+                  next.backgroundImageKey = key;
+                  scene().screens[String(screen)] = next;
+                  await persist({ immediate: true });
+                  setStatus('Background updated');
+                } catch {
+                  setStatus('Could not save image');
+                }
               };
+              reader.onerror = () => setStatus('Could not read image');
               // Read as a data URL and hand it to Rust, which stores it in
               // its own file: the picture never goes through settings.json.
               reader.readAsDataURL(file);
@@ -393,9 +404,70 @@ function renderScene() {
         })),
       cfg.background === 'image' && el('button', {
         class: 'remove', 'data-testid': 'background-clear', text: 'Remove image',
-        onclick: async () => { await saveBackground(`screen-${activeScreen}`, null); setStatus('Background removed'); },
+        onclick: async () => {
+          const screen = activeScreen;
+          try {
+            const key = `screen-${screen}`;
+            await saveBackground(key, null);
+            const next = screenConfig(scene(), screen);
+            next.backgroundImageKey = key;
+            scene().screens[String(screen)] = next;
+            await persist({ immediate: true });
+            setStatus('Background removed');
+          } catch {
+            setStatus('Could not remove image');
+          }
+        },
       })
     );
+    if (cfg.background !== 'image') {
+      bgCard.append(
+        dropdown({
+          id: 'background-palette', label: 'Landscape palette', value: cfg.backgroundPalette,
+          options: [...Object.entries(BACKGROUND_PALETTES).map(([key, p]) => [key, p.label]), ['custom', 'Custom colours']],
+          onChange: (v) => editScreen((s) => {
+            if (v === 'custom') {
+              const palette = BACKGROUND_PALETTES[s.backgroundPalette];
+              if (palette) {
+                s.backgroundSky = palette.sky;
+                s.backgroundHorizon = palette.horizon;
+                s.backgroundSnow = palette.snow;
+              }
+            }
+            s.backgroundPalette = v;
+          }),
+        }));
+      if (cfg.backgroundPalette === 'custom') {
+        bgCard.append(el('div', { class: 'grid-2' },
+          ...[['Sky', 'backgroundSky'], ['Horizon', 'backgroundHorizon'], ['Snow', 'backgroundSnow']].map(([label, key]) =>
+            colorField({
+              id: `background-${label.toLowerCase()}`, label, value: cfg[key],
+              onInput: (v) => editScreen((s) => { s[key] = v; }),
+            }))));
+      }
+      bgCard.append(el('div', { class: 'grid-2' },
+        slider({
+          id: 'background-fog', label: 'Valley mist', min: 0, max: 100, step: 5,
+          value: Math.round(cfg.backgroundFog * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.backgroundFog = v / 100; }),
+        }),
+        slider({
+          id: 'background-moon', label: 'Moonlight', min: 0, max: 200, step: 10,
+          value: Math.round(cfg.backgroundMoon * 100), format: (v) => v === 0 ? 'No moon' : `${v}%`,
+          onInput: (v) => editScreen((s) => { s.backgroundMoon = v / 100; }),
+        }),
+        slider({
+          id: 'background-moon-x', label: 'Moon horizontal position', min: 0, max: 100, step: 1,
+          value: Math.round(cfg.backgroundMoonX * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.backgroundMoonX = v / 100; }),
+        }),
+        slider({
+          id: 'background-moon-y', label: 'Moon vertical position', min: 0, max: 65, step: 1,
+          value: Math.round(cfg.backgroundMoonY * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.backgroundMoonY = v / 100; }),
+        })));
+    }
+    bgCard.append(el('p', { class: 'hint', text: 'Background movement pauses when your system requests reduced motion. Still also freezes the distant snowfall.' }));
   }
   panel.append(bgCard);
 
