@@ -262,6 +262,51 @@ test('removing an inherited image only clears this screen, not the default image
   expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-default'))).toBe('shared-image');
 });
 
+for (const action of ['remove', 'replace']) {
+  test(`${action} an image preserves copied screens and saved presets`, async ({ page }) => {
+    await page.evaluate(() => {
+      const image = { background: 'image', backgroundImageKey: 'screen-0' };
+      localStorage.setItem('christmas-bg-screen-0', 'shared-image');
+      localStorage.setItem('christmas-bg-screen-0-1', 'preset-image');
+      localStorage.setItem('christmas-theme-settings', JSON.stringify({
+        scene: { screens: { 0: image, 1: image, default: image } },
+        presets: [{ id: 'saved', name: 'Saved', settings: {
+          scene: { screens: { 0: { ...image, backgroundImageKey: 'screen-0-1' } } },
+        } }],
+      }));
+    });
+    await page.reload();
+    await page.evaluate(() => window.settingsReady);
+    if (action === 'remove') {
+      await page.click('[data-testid="background-clear"]');
+    } else {
+      await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
+        name: 'background.svg', mimeType: 'image/svg+xml',
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>'),
+      });
+    }
+    await expect.poll(() => page.evaluate(() =>
+      JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].backgroundImageKey,
+    )).toBe('screen-0-2');
+    const result = await page.evaluate(() => ({
+      shared: localStorage.getItem('christmas-bg-screen-0'),
+      preset: localStorage.getItem('christmas-bg-screen-0-1'),
+      own: localStorage.getItem('christmas-bg-screen-0-2'),
+      screens: JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens,
+    }));
+    expect(result.shared).toBe('shared-image');
+    expect(result.preset).toBe('preset-image');
+    expect(result.screens['1'].backgroundImageKey).toBe('screen-0');
+    expect(result.screens.default.backgroundImageKey).toBe('screen-0');
+    if (action === 'remove') expect(result.own).toBeNull();
+    else expect(result.own).toMatch(/^data:image\/svg\+xml;base64,/);
+    await page.click('[data-testid="background-clear"]');
+    await expect(page.locator('[data-testid="status"]')).toHaveText('Background removed');
+    expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0-2'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0'))).toBe('shared-image');
+  });
+}
+
 test('snow density persists across a reload', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('300');

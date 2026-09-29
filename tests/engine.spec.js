@@ -248,6 +248,84 @@ test('tree lights use the current anchor and mirror with the tree', async ({ pag
   expect(positions).toEqual([586, 98, 0]);
 });
 
+test('all lit tree materials follow mirrored lights and normals', async ({ page }) => {
+  const results = await page.evaluate(async () => {
+    const { LightRig } = await import('/engine/lighting.js');
+    const { renderer, tree } = window.sceneLab;
+    renderer.stop();
+    const gl = renderer.gl;
+    Object.assign(tree.opts, {
+      anchor: [0.5, 0], wind: 0, frost: 0, shadowStrength: 0,
+      needleDark: '#ffffff', needleLight: '#ffffff', trunkColor: '#ffffff',
+      snowTint: '#ffffff', ribbonColor: '#ffffff', ribbonGlitter: 0, ornamentGloss: 0,
+    });
+    tree.radius = 100;
+    tree.star = null;
+    tree.bulbs = [{ x: 110, y: 100, z: 30, color: [1, 1, 1], level: 0.06 }];
+
+    // A white atlas isolates lighting from the procedural texture's shading.
+    gl.bindTexture(gl.TEXTURE_2D, tree.atlasTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    const rig = new LightRig();
+    rig.ambientSky = rig.ambientGround = [0, 0, 0];
+    const ctx = {
+      renderer, width: renderer.width, height: renderer.height, dpr: renderer.dpr,
+      camera: { offsetFor: () => ({ x: 0, y: 0 }) },
+      wind: { uniforms: () => ({ gust: 0, phase: 0, direction: 0 }) },
+      time: 0, rig, draws: 0,
+    };
+    tree.bulbData = null;
+    tree.update(0, 0, ctx);
+    tree.bulbData = new Float32Array(11); // no visible bulb sprite
+    const foliage = (material) => [80, 100, 0, 0.8, 0, 0.6, 16, 0, 0, 0, 0, 0, material];
+    const materials = [
+      ['needleBatch', foliage(0)], ['snowBatch', foliage(1)],
+      ['trunkBatch', foliage(2)], ['driftBatch', foliage(1)],
+      ['ornamentBatch', [80, 100, 0, 1, 1, 1, 16, 0, 0, 0]],
+      ['ribbonBatch', [80, 100, 0, 16, 16, 0, 0, 1, 0, 0, 0]],
+    ];
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, ctx.width, ctx.height);
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 0);
+    const out = [];
+    for (const [name, data] of materials) {
+      for (const [batch] of materials) tree[batch].count = 0;
+      tree[name].upload(new Float32Array(data), 1);
+      tree.ribbonCount = name === 'ribbonBatch' ? 1 : 0;
+      tree.driftCount = name === 'driftBatch' ? 1 : 0;
+      const samples = [];
+      for (const [flip, lit] of [[false, false], [false, true], [true, true]]) {
+        tree.opts.flip = flip;
+        rig.clear();
+        if (lit) tree.contributeLights(rig, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        tree.render(ctx);
+        // Tree-space foliage/cloth normals mirror at the same local point.
+        // Sphere normals are screen-space: sample the opposite side instead.
+        const dx = name === 'ornamentBatch' ? (flip ? -5 : 4) : 0;
+        const pixel = new Uint8Array(4);
+        gl.readPixels(ctx.width / 2 + (flip ? -80 : 80) + dx, 104, 1, 1,
+          gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        samples.push(Array.from(pixel));
+      }
+      out.push({ name, dark: samples[0], normal: samples[1], mirrored: samples[2] });
+    }
+    return { materials: out, error: gl.getError() };
+  });
+  expect(results.error).toBe(0);
+  for (const { name, dark, normal, mirrored } of results.materials) {
+    expect(normal[0] - dark[0], `${name} receives the probe light`).toBeGreaterThan(10);
+    expect(normal[3], `${name} is visible`).toBeGreaterThan(100);
+    for (let channel = 0; channel < 4; channel++) {
+      expect(Math.abs(normal[channel] - mirrored[channel]), `${name} channel ${channel}`).toBeLessThanOrEqual(1);
+    }
+  }
+  expect(page.errorsSeen).toEqual([]);
+});
+
 test.describe('production overlay adoption', () => {
   // Small viewport on purpose: this project rasterises in software, where
   // a full-size frame takes long enough to starve the page. What is being

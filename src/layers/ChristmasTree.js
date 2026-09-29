@@ -381,8 +381,8 @@ void main() {
 
   vUV = (aCell + (aCorner * 0.5 + 0.5)) / uAtlasCells;
   vLocal = aCorner * 0.5 + 0.5;
-  vNrm = aNrm;
-  vWorld = vec3(uOrigin + p.xy, p.z);
+  vNrm = vec3(aNrm.x * uFlip, aNrm.yz);
+  vWorld = vec3(uOrigin + vec2(p.x * uFlip, p.y), p.z);
   vZ = p.z;
   vSeed = float(gl_InstanceID);
   vMat = aMat;
@@ -526,7 +526,7 @@ void main() {
   clip.z -= 0.03;
   vQ = aCorner;
   vColor = aColor;
-  vWorld = vec3(uOrigin + p.xy, p.z);
+  vWorld = vec3(uOrigin + vec2(p.x * uFlip, p.y), p.z);
   vKind = aParam.y;
   vSwing = theta;
   gl_Position = clip;
@@ -550,6 +550,7 @@ void main() {
   // instead of a painted-on white dot.
   float r2 = dot(vQ, vQ);
   if (r2 > 1.0) discard;
+  // vQ follows the screen-space billboard, so this normal is already in world axes.
   vec3 n = vec3(vQ, sqrt(max(1.0 - r2, 0.0)));
   vec3 viewDir = vec3(0.0, 0.0, 1.0);
   vec3 albedo = toLinear(vColor);
@@ -728,7 +729,7 @@ void main() {
   clip.z -= 0.035 * aShape.x;
 
   vLocal = aCorner;
-  vWorld = vec3(uOrigin + p.xy, p.z);
+  vWorld = vec3(uOrigin + vec2(p.x * uFlip, p.y), p.z);
   vFacing = aShape.x;
   vU = aShape.z;
   vTwist = twist;
@@ -747,6 +748,7 @@ in float vTwist;
 uniform vec3 uColor;
 uniform float uTime;
 uniform float uGlitter;
+uniform float uFlip;
 out vec4 outColor;
 void main() {
   // Soft on every side, so consecutive segments cross-fade into one
@@ -758,7 +760,7 @@ void main() {
 
   // The band's normal turns with the twist, so the cloth catches the
   // light rig at a different angle on the near side and the far side.
-  vec3 n = normalize(vec3(vLocal.y * 0.2, vTwist * 0.3, max(vTwist, 0.25)));
+  vec3 n = normalize(vec3(vLocal.y * 0.2 * uFlip, vTwist * 0.3, max(vTwist, 0.25)));
   vec3 viewDir = vec3(0.0, 0.0, 1.0);
   vec3 albedo = toLinear(uColor);
 

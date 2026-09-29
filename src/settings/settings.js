@@ -161,6 +161,25 @@ function scene() {
   return settings.scene;
 }
 
+/// Copied screens and saved presets can share an image. Only overwrite a
+/// storage slot when no other composition still refers to it.
+function writableBackgroundKey(screen) {
+  const used = new Set();
+  const collect = (composition, exclude) => {
+    for (const index of Object.keys(composition?.screens ?? {})) {
+      if (index !== exclude) used.add(screenConfig(composition, index).backgroundImageKey);
+    }
+  };
+  collect(scene(), String(screen));
+  for (const preset of presetList()) collect(preset.settings?.scene);
+  const current = screenConfig(scene(), screen).backgroundImageKey;
+  if (current && !used.has(current)) return current;
+  const base = `screen-${screen}`;
+  let key = base;
+  for (let suffix = 1; used.has(key); suffix++) key = `${base}-${suffix}`;
+  return key;
+}
+
 /// The stored config for the active screen. Reading goes through
 /// screenConfig so defaults are filled in; writing materialises an entry
 /// for this screen, which is what makes a per-screen edit stop inheriting.
@@ -357,7 +376,7 @@ function renderScene() {
               const reader = new FileReader();
               reader.onload = async () => {
                 try {
-                  const key = `screen-${screen}`;
+                  const key = writableBackgroundKey(screen);
                   await saveBackground(key, String(reader.result));
                   const next = screenConfig(scene(), screen);
                   next.backgroundImageKey = key;
@@ -407,7 +426,7 @@ function renderScene() {
         onclick: async () => {
           const screen = activeScreen;
           try {
-            const key = `screen-${screen}`;
+            const key = writableBackgroundKey(screen);
             await saveBackground(key, null);
             const next = screenConfig(scene(), screen);
             next.backgroundImageKey = key;
