@@ -2027,3 +2027,98 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
 
   ctx.restore();
 }
+
+const holidayDecorationCache = new Map();
+
+function bakeHolidayDecoration(type, colors) {
+  const cv = makeCanvas(160, 160);
+  const c = cv.getContext('2d');
+
+  if (type === 'presents') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 143, 58, 8, 0, 0, TAU); c.fill();
+    for (const box of [
+      { x: 20, y: 86, w: 62, h: 54, color: colors.primary },
+      { x: 83, y: 69, w: 56, h: 71, color: colors.secondary },
+      { x: 52, y: 45, w: 45, h: 48, color: colors.accent },
+    ]) {
+      c.fillStyle = shade(box.color, -15); c.fillRect(box.x, box.y + 5, box.w, box.h - 5);
+      c.fillStyle = box.color; c.fillRect(box.x, box.y, box.w, box.h - 5);
+      c.fillStyle = '#f8e9c4';
+      c.fillRect(box.x + box.w * 0.43, box.y, box.w * 0.14, box.h);
+      c.fillRect(box.x, box.y + box.h * 0.39, box.w, box.h * 0.13);
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 2;
+      c.strokeRect(box.x + 1, box.y + 1, box.w - 2, box.h - 2);
+    }
+    c.strokeStyle = '#f8e9c4'; c.lineWidth = 4;
+    c.beginPath(); c.ellipse(74, 42, 12, 7, -0.5, 0, TAU); c.ellipse(88, 42, 12, 7, 0.5, 0, TAU); c.stroke();
+  } else if (type === 'snowman') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 145, 39, 8, 0, 0, TAU); c.fill();
+    for (const ball of [{ x: 80, y: 111, r: 33 }, { x: 80, y: 70, r: 25 }, { x: 80, y: 39, r: 18 }]) {
+      c.fillStyle = '#f4f8fb'; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, TAU); c.fill();
+      c.strokeStyle = '#bbd0dc'; c.lineWidth = 2; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.75)';
+      c.beginPath(); c.arc(ball.x - ball.r * 0.38, ball.y - ball.r * 0.4, ball.r * 0.2, 0, TAU); c.fill();
+    }
+    c.fillStyle = colors.primary; c.fillRect(60, 54, 40, 9);
+    c.fillStyle = shade(colors.primary, -15); c.fillRect(92, 59, 8, 17);
+    c.fillStyle = '#272c34';
+    c.fillRect(65, 16, 30, 7); c.fillRect(70, 0, 20, 18);
+    c.beginPath(); c.arc(74, 36, 2, 0, TAU); c.arc(86, 36, 2, 0, TAU); c.fill();
+    c.fillStyle = '#f28a36'; c.beginPath(); c.moveTo(80, 40); c.lineTo(98, 45); c.lineTo(80, 48); c.closePath(); c.fill();
+    c.fillStyle = '#313840';
+    for (const y of [83, 102, 119]) { c.beginPath(); c.arc(80, y, 2.6, 0, TAU); c.fill(); }
+    c.strokeStyle = '#76513a'; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(52, 83); c.lineTo(32, 70); c.moveTo(108, 83); c.lineTo(128, 70); c.stroke();
+  } else if (type === 'wreath') {
+    for (let i = 0; i < 28; i++) {
+      const a = i * TAU / 28;
+      const x = 80 + Math.cos(a) * 48, y = 78 + Math.sin(a) * 48;
+      c.save(); c.translate(x, y); c.rotate(a);
+      c.fillStyle = i % 2 ? '#174b2d' : '#286b3c';
+      c.beginPath(); c.ellipse(0, 0, 15, 6, 0, 0, TAU); c.fill();
+      c.restore();
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = i * TAU / 9 + 0.2;
+      c.fillStyle = i % 2 ? '#c52534' : '#e64343';
+      c.beginPath(); c.arc(80 + Math.cos(a) * 47, 78 + Math.sin(a) * 47, 4.5, 0, TAU); c.fill();
+    }
+    c.strokeStyle = colors.primary; c.lineWidth = 6;
+    c.beginPath(); c.ellipse(70, 27, 11, 7, -0.45, 0, TAU); c.ellipse(90, 27, 11, 7, 0.45, 0, TAU); c.stroke();
+    c.fillStyle = colors.accent; c.beginPath(); c.arc(80, 27, 5, 0, TAU); c.fill();
+  } else if (type === 'candy-cane') {
+    c.fillStyle = 'rgba(0,0,0,0.18)';
+    c.beginPath(); c.ellipse(81, 145, 21, 6, 0, 0, TAU); c.fill();
+    c.strokeStyle = '#fffaf0'; c.lineWidth = 25; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(82, 140); c.lineTo(82, 53); c.bezierCurveTo(82, 15, 132, 15, 132, 52); c.lineTo(132, 66); c.stroke();
+    c.strokeStyle = colors.primary; c.lineWidth = 10; c.setLineDash([13, 12]);
+    c.beginPath(); c.moveTo(82, 140); c.lineTo(82, 53); c.bezierCurveTo(82, 15, 132, 15, 132, 52); c.lineTo(132, 66); c.stroke();
+    c.setLineDash([]);
+    c.strokeStyle = 'rgba(210,225,232,0.9)'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(94, 139); c.lineTo(94, 62); c.stroke();
+  }
+  return cv;
+}
+
+export function drawHolidayDecoration(ctx, width, height, spec = {}, colors = {}) {
+  const type = spec.type;
+  if (!['snowman', 'presents', 'wreath', 'candy-cane'].includes(type)) return;
+  const palette = {
+    primary: colors.primary ?? '#c0392b',
+    secondary: colors.secondary ?? '#1e7d32',
+    accent: colors.accent ?? '#f1c40f',
+  };
+  const key = `${type}|${palette.primary}|${palette.secondary}|${palette.accent}`;
+  let sprite = holidayDecorationCache.get(key);
+  if (!sprite) {
+    sprite = bakeHolidayDecoration(type, palette);
+    if (holidayDecorationCache.size >= 16) holidayDecorationCache.clear();
+    holidayDecorationCache.set(key, sprite);
+  }
+  const size = Math.min(width, height) * 0.2 * Math.max(0.3, Math.min(2.5, Number(spec.scale) || 1));
+  const x = Math.max(0, Math.min(1, Number(spec.x) || 0)) * width;
+  const y = Math.max(0, Math.min(1, Number(spec.y) || 0)) * height;
+  ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+}

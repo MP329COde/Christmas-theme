@@ -135,6 +135,13 @@ export const TREE_STYLES = {
   },
 };
 
+export const HOLIDAY_DECORATION_TYPES = {
+  snowman: { label: 'Snowman', glyph: '⛄', y: 0.84 },
+  presents: { label: 'Presents', glyph: '🎁', y: 0.88 },
+  wreath: { label: 'Wreath', glyph: '🎀', y: 0.24 },
+  'candy-cane': { label: 'Candy cane', glyph: '🍬', y: 0.86 },
+};
+
 /// A light string's appearance. Used by garlands, tree strings and the
 /// mantel swag alike, so "red and blue, chasing" means the same thing
 /// wherever it is set.
@@ -198,6 +205,19 @@ export function defaultTree(overrides = {}) {
     starSize: 1,
     starColor: '#fff0c2',
     ...overrides,
+  };
+}
+
+export function defaultHolidayDecoration(overrides = {}) {
+  const type = HOLIDAY_DECORATION_TYPES[overrides.type] ? overrides.type : 'presents';
+  return {
+    id: `holiday-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    x: 0.5,
+    y: HOLIDAY_DECORATION_TYPES[type].y,
+    scale: 1,
+    ...overrides,
+    type,
   };
 }
 
@@ -307,6 +327,7 @@ export function defaultScreen(overrides = {}) {
       defaultTree({ x: 0.1, seed: 1337 }),
       defaultTree({ x: 0.9, seed: 90210, flip: true }),
     ],
+    decorations: [],
     fireplaces: [defaultFireplace()],
     ...overrides,
   };
@@ -352,6 +373,7 @@ export function screenConfig(scene, index) {
     tree.lights = defaultLightStyle(tree.lights ?? {});
     return tree;
   });
+  merged.decorations = (merged.decorations ?? []).map((d) => defaultHolidayDecoration(d));
   merged.fireplaces = (merged.fireplaces ?? []).map((f) => {
     const fire = { ...defaultFireplace(), ...f };
     fire.lights = defaultLightStyle(fire.lights ?? {});

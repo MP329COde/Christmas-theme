@@ -454,3 +454,25 @@ test.describe('fireplace style variants', () => {
     expect(painted).toBe(true);
   });
 });
+
+test('the configurable snowman, presents, wreath, and candy cane render distinct sprites', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { drawHolidayDecoration } = await import('/overlay/decor.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 480;
+    canvas.height = 320;
+    const ctx = canvas.getContext('2d');
+    return ['snowman', 'presents', 'wreath', 'candy-cane'].map((type) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawHolidayDecoration(ctx, canvas.width, canvas.height, {
+        type, x: 0.5, y: type === 'wreath' ? 0.3 : 0.82, scale: 1,
+      }, { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' });
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let painted = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) painted++;
+      return { type, painted, image: canvas.toDataURL() };
+    });
+  });
+  expect(result.every(({ painted }) => painted > 100)).toBe(true);
+  expect(new Set(result.map(({ image }) => image)).size).toBe(4);
+});
