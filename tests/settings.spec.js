@@ -99,6 +99,29 @@ test('tree species can be changed', async ({ page }) => {
   expect(style).toBe('spruce');
 });
 
+test('tree snow can be adjusted independently and persists', async ({ page }) => {
+  await page.locator('[data-testid="tree-0-snow"]').fill('170');
+  await page.waitForTimeout(300);
+  const snow = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].trees[0].snow);
+  expect(snow).toBe(1.7);
+});
+
+test('holiday decorations can be added, configured, and removed', async ({ page }) => {
+  await expect(page.locator('[data-testid="decoration-card-0"]')).toHaveCount(0);
+  await page.click('[data-testid="decoration-add"]');
+  await expect(page.locator('[data-testid="decoration-card-0"]')).toBeVisible();
+  await page.selectOption('[data-testid="decoration-0-type"]', 'snowman');
+  await page.locator('[data-testid="decoration-0-x"]').fill('35');
+  await page.locator('[data-testid="decoration-0-scale"]').fill('150');
+  await page.waitForTimeout(300);
+  const decoration = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].decorations[0]);
+  expect(decoration).toMatchObject({ type: 'snowman', x: 0.35, scale: 1.5, y: 0.84 });
+  await page.click('[data-testid="decoration-remove-0"]');
+  await expect(page.locator('[data-testid="decoration-card-0"]')).toHaveCount(0);
+});
+
 test('sky toggles default on and respond', async ({ page }) => {
   for (const id of ['aurora-toggle', 'stars-toggle', 'icicles-toggle', 'glitter-toggle']) {
     const toggle = page.locator(`[data-testid="${id}"]`);
@@ -171,6 +194,14 @@ test('background image controls appear only in image mode', async ({ page }) => 
   await expect(page.locator('[data-testid="background-opacity"]')).toBeVisible();
   await expect(page.locator('[data-testid="background-animation"]')).toBeVisible();
   await expect(page.locator('[data-testid="background-motion"]')).toBeVisible();
+});
+
+test('background panel identifies its renderer separately from WebGL scene layers', async ({ page }) => {
+  await page.selectOption('[data-testid="background-mode"]', 'animated-forest');
+  await expect(page.locator('[data-testid="background-renderer-info"]'))
+    .toContainText('Backgrounds use the Canvas 2D renderer');
+  await expect(page.locator('[data-testid="background-renderer-info"]'))
+    .toContainText('WebGL');
 });
 
 test('animated forest background exposes opacity and motion controls', async ({ page }) => {

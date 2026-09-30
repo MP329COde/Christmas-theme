@@ -23,17 +23,18 @@ snow overlay isn't a security risk).
   Changing the theme, density, or decoration toggles in the settings window updates all
   overlay windows live, with no restart needed.
 - **Desktop decorations**, drawn on the overlay (one full scene per launch, not repeated
-  on every monitor in a multi-monitor setup): a pine tree with ornaments and a star
-  topper in each bottom corner, a twinkling light garland strung across the top of the
-  screen, and an animated fireplace with a flickering flame at bottom-center. Each is an
-  independent toggle in settings.
+  on every monitor in a multi-monitor setup): independently configurable trees with
+  adjustable snow on their branches, a twinkling light garland, an animated fireplace,
+  and addable snowmen, presents, wreaths and candy canes. Scene elements can be
+  positioned and resized in settings.
 - **Hybrid renderer**: the Christmas trees are rendered by a WebGL2 engine
   (real 3D branch geometry, per-needle lighting from a shared light rig,
-  wind in the vertex shader), stacked between two Canvas 2D layers that
-  draw the sky, snow, garlands and fireplaces. The engine is adopted only
-  once it has provably produced a frame, and only on a real GPU — a
-  software rasteriser is slower and no prettier than the Canvas 2D tree, so
-  it is refused. Settings → Performance → Tree renderer forces either.
+  wind in the vertex shader), with Canvas 2D layers drawing the backgrounds,
+  snow, garlands and fireplaces. WebGL also renders the aurora when adopted.
+  The engine is adopted only once it has provably produced a frame, and only
+  on a real GPU — a software rasteriser is slower and no prettier than the
+  Canvas 2D tree, so it is refused. Settings → Performance → Tree renderer
+  forces either; the Background panel identifies its Canvas 2D renderer.
 - **Animated light layers**, all toggleable and all driven by one "light animation"
   setting (twinkle / sparkle / chase / wave / steady) so the top garland, the tree
   strings, the mantel swag and the Dock all run the same show: drifting **aurora**

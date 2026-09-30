@@ -14,7 +14,7 @@ import {
   getSettings, listThemes, onSettingsChanged, publishStats, loadBackground, onBackgroundChanged,
   listScreens,
 } from '../shared/bridge.js';
-import { drawGarland, drawTree, drawFireplace } from './decor.js';
+import { drawGarland, drawTree, drawFireplace, drawHolidayDecoration } from './decor.js';
 import { screenConfig, resolvePalette, resolveWeatherProfile, TREE_STYLES, defaultScene } from '../shared/scene.js';
 import {
   drawSky, drawGlitter, drawIcicles, invalidateLights, invalidateAurora,
@@ -698,6 +698,10 @@ function render(time) {
       ...fire,
       palette: resolvePalette(fire.lights),
     }, decorConfig);
+  }
+
+  for (const decoration of sceneCfg.decorations ?? []) {
+    drawHolidayDecoration(fctx, viewW, viewH, decoration, themeColors);
   }
 
   for (const f of flakes) {

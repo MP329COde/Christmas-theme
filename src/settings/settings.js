@@ -15,8 +15,8 @@ import {
   listScreens, saveBackground, loadBackground,
 } from '../shared/bridge.js';
 import {
-  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, BACKGROUND_PALETTES, WEATHER_PROFILES, CAMERA_MOTION_PROFILES, defaultScene, defaultScreen,
-  defaultTree, defaultFireplace, screenConfig, makePreset, defaultLook,
+  LIGHT_PALETTES, LIGHT_MODES, TREE_STYLES, AURORA_PALETTES, BACKGROUND_PALETTES, WEATHER_PROFILES, CAMERA_MOTION_PROFILES, HOLIDAY_DECORATION_TYPES, defaultScene, defaultScreen,
+  defaultTree, defaultFireplace, defaultHolidayDecoration, screenConfig, makePreset, defaultLook,
   resolveNeedles, resolveFrost,
 } from '../shared/scene.js';
 
@@ -301,7 +301,8 @@ function layoutMap(cfg) {
         marker.removeEventListener('pointermove', move);
         marker.removeEventListener('pointerup', up);
         editScreen((s) => {
-          const list = kind === 'tree' ? s.trees : s.fireplaces;
+          const list = kind === 'tree' ? s.trees
+            : kind === 'fireplace' ? s.fireplaces : s.decorations;
           const target = list.find((e) => e.id === item.id);
           if (target) target.x = item.x;
         });
@@ -314,6 +315,9 @@ function layoutMap(cfg) {
 
   (cfg.fireplaces ?? []).forEach((f, i) => place('fireplace', f, '🔥', i));
   (cfg.trees ?? []).forEach((t, i) => place('tree', t, '🎄', i));
+  (cfg.decorations ?? []).forEach((d, i) => place(
+    'decoration', d, HOLIDAY_DECORATION_TYPES[d.type]?.glyph ?? '🎁', i,
+  ));
   return el('div', {}, map,
     el('p', { class: 'layout-hint', text: 'Drag an element to place it. Positions are a fraction of the screen width, so they survive a resolution change.' }));
 }
@@ -487,6 +491,11 @@ function renderScene() {
         })));
     }
     bgCard.append(el('p', { class: 'hint', text: 'Background movement pauses when your system requests reduced motion. Still also freezes the distant snowfall.' }));
+    bgCard.append(el('p', {
+      class: 'hint',
+      'data-testid': 'background-renderer-info',
+      text: 'Backgrounds use the Canvas 2D renderer. WebGL, when available, renders trees and aurora; it falls back to Canvas 2D if it cannot start.',
+    }));
   }
   panel.append(bgCard);
 
@@ -729,6 +738,54 @@ function renderScene() {
         if (!used.some((u) => Math.abs(u - candidate) < 0.06)) { x = candidate; break; }
       }
       s.trees.push(defaultTree({ x, flip: x > 0.5 }));
+    }),
+  }));
+
+  panel.append(el('h2', { text: `Christmas decorations (${cfg.decorations.length})` }));
+  cfg.decorations.forEach((decoration, i) => {
+    const type = HOLIDAY_DECORATION_TYPES[decoration.type] ? decoration.type : 'presents';
+    panel.append(el('div', { class: 'card', 'data-testid': `decoration-card-${i}` },
+      el('div', { class: 'card-head' },
+        el('div', { class: 'card-title' },
+          `${HOLIDAY_DECORATION_TYPES[type].glyph} ${HOLIDAY_DECORATION_TYPES[type].label}`),
+        el('button', {
+          class: 'remove', 'data-testid': `decoration-remove-${i}`, text: 'Remove',
+          onclick: () => editScreen((s) => { s.decorations.splice(i, 1); }),
+        })),
+      dropdown({
+        id: `decoration-${i}-type`, label: 'Decoration',
+        value: type,
+        options: Object.entries(HOLIDAY_DECORATION_TYPES).map(([id, item]) => [id, item.label]),
+        onChange: (v) => editScreen((s) => {
+          s.decorations[i].type = v;
+          s.decorations[i].y = HOLIDAY_DECORATION_TYPES[v].y;
+        }),
+      }),
+      el('div', { class: 'grid-2' },
+        slider({
+          id: `decoration-${i}-x`, label: 'Horizontal position', min: 0, max: 100, step: 1,
+          value: Math.round(decoration.x * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.decorations[i].x = v / 100; }),
+        }),
+        slider({
+          id: `decoration-${i}-y`, label: 'Vertical position', min: 0, max: 100, step: 1,
+          value: Math.round(decoration.y * 100), format: (v) => `${v}%`,
+          onInput: (v) => editScreen((s) => { s.decorations[i].y = v / 100; }),
+        })),
+      slider({
+        id: `decoration-${i}-scale`, label: 'Size', min: 50, max: 200, step: 10,
+        value: Math.round(decoration.scale * 100), format: (v) => `${v}%`,
+        onInput: (v) => editScreen((s) => { s.decorations[i].scale = v / 100; }),
+      })
+    ));
+  });
+  panel.append(el('button', {
+    class: 'add', 'data-testid': 'decoration-add', text: '+ Add a Christmas decoration',
+    onclick: () => editScreen((s) => {
+      const used = s.decorations.map((d) => d.x);
+      const x = [0.2, 0.8, 0.35, 0.65, 0.5].find((candidate) =>
+        !used.some((u) => Math.abs(u - candidate) < 0.08)) ?? 0.5;
+      s.decorations.push(defaultHolidayDecoration({ x }));
     }),
   }));
 
