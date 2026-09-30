@@ -175,6 +175,157 @@ test('lighting-rig controls warm ambient light and add fireplace spill', async (
   expect(page.errorsSeen).toEqual([]);
 });
 
+test('zero saturation produces a monochrome grade', async ({ page }) => {
+  const saturation = await page.evaluate(() => {
+    window.sceneLab.renderer.setGrade({ saturation: 0 });
+    return window.sceneLab.renderer.saturation;
+  });
+  expect(saturation).toBe(0);
+});
+
+test('the light budget is shared across trees without losing fireplace spill', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { Scene } = await import('/engine/scene.js');
+    const { LightRig, MAX_LIGHTS } = await import('/engine/lighting.js');
+    const scene = new Scene('budget');
+    for (let tree = 0; tree < 4; tree++) {
+      scene.add({
+        z: tree, enabled: true, ready: true,
+        contributeLights(rig) {
+          for (let bulb = 0; bulb < 10; bulb++) rig.add(tree * 100 + bulb, 0, 0, [0.5, 0.5, 0.5], 1, 100);
+        },
+      });
+    }
+    const rig = new LightRig();
+    rig.add(-1, 0, 0, [1, 0.2, 0.1], 2, 100);
+    scene.contributeLights(rig, 0);
+    const positions = Array.from({ length: rig.count }, (_, i) => rig.positions[i * 3]);
+    const initial = { count: rig.count, positions, color: rig.colors[3], max: MAX_LIGHTS };
+    scene.layers[0].enabled = false;
+    rig.clear();
+    scene.contributeLights(rig, 1);
+    return { ...initial, disabledPositions: Array.from({ length: rig.count }, (_, i) => rig.positions[i * 3]) };
+  });
+  expect(result.count).toBe(result.max);
+  expect(result.positions[0]).toBe(-1);
+  const counts = [0, 1, 2, 3].map((tree) =>
+    result.positions.filter((x) => x >= tree * 100 && x < tree * 100 + 10).length);
+  expect(Math.min(...counts)).toBeGreaterThanOrEqual(5);
+  expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+  expect(result.color).toBeCloseTo(0.214041, 5);
+  expect(result.disabledPositions.every((x) => x >= 100)).toBe(true);
+});
+
+test('dark or invalid lights do not waste the fixed light budget', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { LightRig } = await import('/engine/lighting.js');
+    const rig = new LightRig();
+    const accepted = [
+      rig.add(0, 0, 0, [1, 1, 1], 0, 10),
+      rig.add(0, 0, 0, [1, 1, 1], -1, 10),
+      rig.add(0, 0, 0, [1, 1, 1], 1, 0),
+      rig.add(0, 0, 0, [1, 1, 1], NaN, 10),
+      rig.add(0, 0, 0, [1, 1, 1], 1, Infinity),
+      rig.add(0, 0, 0, [1, 1, 1], 1, 10),
+    ];
+    return { accepted, count: rig.count };
+  });
+  expect(result).toEqual({ accepted: [false, false, false, false, false, true], count: 1 });
+});
+
+test('tree lights use the current anchor and mirror with the tree', async ({ page }) => {
+  const positions = await page.evaluate(async () => {
+    const { ChristmasTree } = await import('/layers/ChristmasTree.js');
+    const { LightRig } = await import('/engine/lighting.js');
+    const tree = new ChristmasTree({ anchor: [0.75, 0.1], flip: true });
+    tree.radius = 100;
+    tree.bulbs = [{ x: 20, y: 30, z: 0, color: [1, 1, 1], level: 1 }];
+    tree.update(0, 0, { width: 800, height: 600, dpr: 2, camera: { offsetFor: () => ({ x: 3, y: 4 }) } });
+    const rig = new LightRig();
+    tree.contributeLights(rig, 0);
+    return Array.from(rig.positions.slice(0, 3));
+  });
+  expect(positions).toEqual([586, 98, 0]);
+});
+
+test('all lit tree materials follow mirrored lights and normals', async ({ page }) => {
+  const results = await page.evaluate(async () => {
+    const { LightRig } = await import('/engine/lighting.js');
+    const { renderer, tree } = window.sceneLab;
+    renderer.stop();
+    const gl = renderer.gl;
+    Object.assign(tree.opts, {
+      anchor: [0.5, 0], wind: 0, frost: 0, shadowStrength: 0,
+      needleDark: '#ffffff', needleLight: '#ffffff', trunkColor: '#ffffff',
+      snowTint: '#ffffff', ribbonColor: '#ffffff', ribbonGlitter: 0, ornamentGloss: 0,
+    });
+    tree.radius = 100;
+    tree.star = null;
+    tree.bulbs = [{ x: 110, y: 100, z: 30, color: [1, 1, 1], level: 0.06 }];
+
+    // A white atlas isolates lighting from the procedural texture's shading.
+    gl.bindTexture(gl.TEXTURE_2D, tree.atlasTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    const rig = new LightRig();
+    rig.ambientSky = rig.ambientGround = [0, 0, 0];
+    const ctx = {
+      renderer, width: renderer.width, height: renderer.height, dpr: renderer.dpr,
+      camera: { offsetFor: () => ({ x: 0, y: 0 }) },
+      wind: { uniforms: () => ({ gust: 0, phase: 0, direction: 0 }) },
+      time: 0, rig, draws: 0,
+    };
+    tree.bulbData = null;
+    tree.update(0, 0, ctx);
+    tree.bulbData = new Float32Array(11); // no visible bulb sprite
+    const foliage = (material) => [80, 100, 0, 0.8, 0, 0.6, 16, 0, 0, 0, 0, 0, material];
+    const materials = [
+      ['needleBatch', foliage(0)], ['snowBatch', foliage(1)],
+      ['trunkBatch', foliage(2)], ['driftBatch', foliage(1)],
+      ['ornamentBatch', [80, 100, 0, 1, 1, 1, 16, 0, 0, 0]],
+      ['ribbonBatch', [80, 100, 0, 16, 16, 0, 0, 1, 0, 0, 0]],
+    ];
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, ctx.width, ctx.height);
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 0);
+    const out = [];
+    for (const [name, data] of materials) {
+      for (const [batch] of materials) tree[batch].count = 0;
+      tree[name].upload(new Float32Array(data), 1);
+      tree.ribbonCount = name === 'ribbonBatch' ? 1 : 0;
+      tree.driftCount = name === 'driftBatch' ? 1 : 0;
+      const samples = [];
+      for (const [flip, lit] of [[false, false], [false, true], [true, true]]) {
+        tree.opts.flip = flip;
+        rig.clear();
+        if (lit) tree.contributeLights(rig, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        tree.render(ctx);
+        // Tree-space foliage/cloth normals mirror at the same local point.
+        // Sphere normals are screen-space: sample the opposite side instead.
+        const dx = name === 'ornamentBatch' ? (flip ? -5 : 4) : 0;
+        const pixel = new Uint8Array(4);
+        gl.readPixels(ctx.width / 2 + (flip ? -80 : 80) + dx, 104, 1, 1,
+          gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        samples.push(Array.from(pixel));
+      }
+      out.push({ name, dark: samples[0], normal: samples[1], mirrored: samples[2] });
+    }
+    return { materials: out, error: gl.getError() };
+  });
+  expect(results.error).toBe(0);
+  for (const { name, dark, normal, mirrored } of results.materials) {
+    expect(normal[0] - dark[0], `${name} receives the probe light`).toBeGreaterThan(10);
+    expect(normal[3], `${name} is visible`).toBeGreaterThan(100);
+    for (let channel = 0; channel < 4; channel++) {
+      expect(Math.abs(normal[channel] - mirrored[channel]), `${name} channel ${channel}`).toBeLessThanOrEqual(1);
+    }
+  }
+  expect(page.errorsSeen).toEqual([]);
+});
+
 test.describe('production overlay adoption', () => {
   // Small viewport on purpose: this project rasterises in software, where
   // a full-size frame takes long enough to starve the page. What is being
@@ -192,6 +343,29 @@ test.describe('production overlay adoption', () => {
     expect(await page.evaluate(() => window.snowOverlay.getTreeRenderer())).toBe('gl');
     await expect(page.locator('#snow-gl')).toBeVisible();
     await page.evaluate(() => { window.overlayGlTrees?.stop(); window.snowOverlay.stop(); });
+  });
+
+  test('shadow controls update live without rebuilding the tree layers', async ({ page }) => {
+    await page.goto('/overlay?renderer=webgl', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.overlayRenderer?.mode === 'webgl', null,
+      { polling: 300, timeout: 60000 });
+    const result = await page.evaluate(() => {
+      const bridge = window.overlayGlTrees;
+      bridge.stop();
+      window.snowOverlay.stop();
+      const scene = bridge.scene;
+      const tree = scene.layers.find((layer) => layer.opts?.shadowStrength !== undefined);
+      const foliage = tree.needleBatch;
+      bridge.applyLook({ shadowStrength: 0, shadowSoftness: 1.8 });
+      const off = { strength: tree.opts.shadowStrength, count: tree.shadowBatch.count };
+      bridge.applyLook({ shadowStrength: 1.4, shadowSoftness: 0.6 });
+      return {
+        off, strength: tree.opts.shadowStrength, softness: tree.opts.shadowSoftness,
+        count: tree.shadowBatch.count, sameScene: bridge.scene === scene, sameFoliage: tree.needleBatch === foliage,
+      };
+    });
+    expect(result.off).toEqual({ strength: 0, count: 0 });
+    expect(result).toMatchObject({ strength: 1.4, softness: 0.6, count: 1, sameScene: true, sameFoliage: true });
   });
 
   test('automatic mode refuses a software rasteriser', async ({ page }) => {

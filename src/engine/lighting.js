@@ -36,7 +36,8 @@ export class LightRig {
   /// peak — an inverse-square falloff with a softening term, which behaves
   /// like a real lamp without dividing by zero at the source.
   add(x, y, z, color, intensity, radius) {
-    if (this.count >= MAX_LIGHTS) return false;
+    if (this.count >= MAX_LIGHTS || !Number.isFinite(intensity) || intensity <= 0
+        || !Number.isFinite(radius) || radius <= 0) return false;
     const i = this.count;
     this.positions[i * 3] = x;
     this.positions[i * 3 + 1] = y;
@@ -49,6 +50,18 @@ export class LightRig {
     this.colors[i * 3 + 2] = srgbToLinear(color[2]) * intensity;
     this.radii[i] = radius;
     this.count++;
+    return true;
+  }
+
+  /// Copy an already-linear light without applying sRGB conversion twice.
+  copyLight(source, index) {
+    if (this.count >= MAX_LIGHTS || index < 0 || index >= source.count) return false;
+    const offset = this.count * 3;
+    for (let channel = 0; channel < 3; channel++) {
+      this.positions[offset + channel] = source.positions[index * 3 + channel];
+      this.colors[offset + channel] = source.colors[index * 3 + channel];
+    }
+    this.radii[this.count++] = source.radii[index];
     return true;
   }
 
@@ -100,6 +113,12 @@ vec3 ambientTerm(vec3 n) {
   return mix(uAmbientGround, uAmbientSky, n.y * 0.5 + 0.5);
 }
 
+float lightAttenuation(float dist2, float radius) {
+  float r = max(radius, 1e-4);
+  float attenuation = 1.0 / (1.0 + dist2 / max(r * r * 0.25, 1e-4));
+  return attenuation * (1.0 - smoothstep(0.25, 1.0, sqrt(dist2) / r));
+}
+
 /// Wrapped diffuse ("half-lambert"). Foliage scatters light through itself,
 /// so a needle facing 90 degrees away from a lamp is not black — clamping
 /// a plain N.L to zero is what makes CG plants look like cardboard.
@@ -112,11 +131,9 @@ vec3 lightTerm(vec3 p, vec3 n, vec3 viewDir, float translucency) {
     vec3 d = uLightPos[i] - p;
     float dist2 = dot(d, d);
     vec3 l = d * inversesqrt(max(dist2, 1e-4));
-    float r = uLightRadius[i];
     // Inverse-square with a softening term, then a smooth cutoff at the
     // radius so a light never leaves a visible circular edge.
-    float atten = 1.0 / (1.0 + dist2 / max(r * r * 0.25, 1e-4));
-    atten *= smoothstep(1.0, 0.25, sqrt(dist2) / r);
+    float atten = lightAttenuation(dist2, uLightRadius[i]);
     float wrapped = dot(n, l) * 0.5 + 0.5;
     float back = pow(max(dot(viewDir, -l), 0.0), 3.0) * translucency;
     total += uLightColor[i] * atten * (wrapped * wrapped + back);
@@ -135,9 +152,9 @@ vec3 specularTerm(vec3 p, vec3 n, vec3 viewDir, float shininess, float strength)
     vec3 d = uLightPos[i] - p;
     float dist2 = dot(d, d);
     vec3 l = d * inversesqrt(max(dist2, 1e-4));
-    float r = uLightRadius[i];
-    float atten = 1.0 / (1.0 + dist2 / max(r * r * 0.25, 1e-4));
-    vec3 h = normalize(l + viewDir);
+    float atten = lightAttenuation(dist2, uLightRadius[i]);
+    vec3 halfway = l + viewDir;
+    vec3 h = halfway * inversesqrt(max(dot(halfway, halfway), 1e-4));
     total += uLightColor[i] * atten * pow(max(dot(n, h), 0.0), shininess) * strength;
   }
   return total;

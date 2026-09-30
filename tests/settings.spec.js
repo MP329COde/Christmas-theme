@@ -211,6 +211,102 @@ test('background movement stays available and resets to still mode', async ({ pa
   expect(background).toEqual({ animation: 'none', motion: 0 });
 });
 
+test('scenic palette, fog and moon controls persist without changing another screen', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('christmas-theme-settings', JSON.stringify({
+      scene: { screens: { default: { background: 'alpine-lake', backgroundFog: 0.25 },
+        1: { background: 'animated-forest', backgroundPalette: 'glacier', backgroundMoon: 0 } } },
+    }));
+  });
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
+  await expect(page.locator('[data-testid="background-mode"]')).toHaveValue('alpine-lake');
+  await page.selectOption('[data-testid="background-palette"]', 'custom');
+  await page.locator('[data-testid="background-sky"]').fill('#182338');
+  await page.locator('[data-testid="background-horizon"]').fill('#6b819b');
+  await page.locator('[data-testid="background-snow"]').fill('#d9e8f5');
+  await page.locator('[data-testid="background-fog"]').fill('80');
+  await page.locator('[data-testid="background-moon"]').fill('140');
+  await page.locator('[data-testid="background-moon-x"]').fill('32');
+  await page.locator('[data-testid="background-moon-y"]').fill('25');
+  await page.waitForTimeout(300);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens);
+  expect(stored['0']).toMatchObject({
+    background: 'alpine-lake', backgroundPalette: 'custom', backgroundSky: '#182338',
+    backgroundHorizon: '#6b819b', backgroundSnow: '#d9e8f5', backgroundFog: 0.8,
+    backgroundMoon: 1.4, backgroundMoonX: 0.32, backgroundMoonY: 0.25,
+  });
+  expect(stored['1']).toEqual({ background: 'animated-forest', backgroundPalette: 'glacier', backgroundMoon: 0 });
+  expect(stored.default).toEqual({ background: 'alpine-lake', backgroundFog: 0.25 });
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
+  await expect(page.locator('[data-testid="background-palette"]')).toHaveValue('custom');
+  await expect(page.locator('[data-testid="background-sky"]')).toHaveValue('#182338');
+  await expect(page.locator('[data-testid="background-fog"]')).toHaveValue('80');
+  await expect(page.locator('[data-testid="background-moon-x"]')).toHaveValue('32');
+});
+
+test('removing an inherited image only clears this screen, not the default image', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('christmas-bg-screen-default', 'shared-image');
+    localStorage.setItem('christmas-theme-settings', JSON.stringify({
+      scene: { screens: { default: { background: 'image' } } },
+    }));
+  });
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
+  await page.click('[data-testid="background-clear"]');
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0']?.backgroundImageKey,
+  )).toBe('screen-0');
+  expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-default'))).toBe('shared-image');
+});
+
+for (const action of ['remove', 'replace']) {
+  test(`${action} an image preserves copied screens and saved presets`, async ({ page }) => {
+    await page.evaluate(() => {
+      const image = { background: 'image', backgroundImageKey: 'screen-0' };
+      localStorage.setItem('christmas-bg-screen-0', 'shared-image');
+      localStorage.setItem('christmas-bg-screen-0-1', 'preset-image');
+      localStorage.setItem('christmas-theme-settings', JSON.stringify({
+        scene: { screens: { 0: image, 1: image, default: image } },
+        presets: [{ id: 'saved', name: 'Saved', settings: {
+          scene: { screens: { 0: { ...image, backgroundImageKey: 'screen-0-1' } } },
+        } }],
+      }));
+    });
+    await page.reload();
+    await page.evaluate(() => window.settingsReady);
+    if (action === 'remove') {
+      await page.click('[data-testid="background-clear"]');
+    } else {
+      await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
+        name: 'background.svg', mimeType: 'image/svg+xml',
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>'),
+      });
+    }
+    await expect.poll(() => page.evaluate(() =>
+      JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].backgroundImageKey,
+    )).toBe('screen-0-2');
+    const result = await page.evaluate(() => ({
+      shared: localStorage.getItem('christmas-bg-screen-0'),
+      preset: localStorage.getItem('christmas-bg-screen-0-1'),
+      own: localStorage.getItem('christmas-bg-screen-0-2'),
+      screens: JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens,
+    }));
+    expect(result.shared).toBe('shared-image');
+    expect(result.preset).toBe('preset-image');
+    expect(result.screens['1'].backgroundImageKey).toBe('screen-0');
+    expect(result.screens.default.backgroundImageKey).toBe('screen-0');
+    if (action === 'remove') expect(result.own).toBeNull();
+    else expect(result.own).toMatch(/^data:image\/svg\+xml;base64,/);
+    await page.click('[data-testid="background-clear"]');
+    await expect(page.locator('[data-testid="status"]')).toHaveText('Background removed');
+    expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0-2'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0'))).toBe('shared-image');
+  });
+}
+
 test('snow density persists across a reload', async ({ page }) => {
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('300');

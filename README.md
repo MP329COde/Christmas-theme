@@ -66,8 +66,12 @@ snow overlay isn't a security risk).
   picks its own palette (multicolour, warm, cool, red & green, red & blue,
   candy, ice, gold, or your own colours), animation (twinkle, sparkle,
   chase, wave, steady), speed, bulb size and brightness.
-- **Background image**: give any screen a photograph behind the scene, with
-  cover / contain / stretch / tile and an opacity.
+- **Per-screen backgrounds**: choose a moonlit winter forest, an alpine frozen
+  lake, or your own photograph with cover / contain / stretch / tile and opacity.
+  Landscapes offer three palettes or custom sky, horizon and snow colours,
+  adjustable mist, moonlight and moon position. Still, drift and Ken Burns
+  movement respect the system's reduced-motion preference; Still also freezes
+  distant snowfall. Landscape layers are cached at a bounded resolution.
 - **Settings window**: theme picker; snow density, wind, flake size, accumulation and max
   snow depth; dock/taskbar toggle with a **status line saying what was actually detected**;
   tree/garland/fireplace/stocking/swag toggles and decoration size; light animation,
@@ -175,6 +179,8 @@ Test files:
   theme/density states (`tests/screenshots/`).
 - `tests/overlay.spec.js` — the snow canvas renderer in isolation (particle count, density
   changes, that it actually draws pixels).
+- `tests/backgrounds.spec.js` — landscape coverage, caching, reduced motion,
+  image loading and per-screen background inheritance.
 
 If you already have a Chromium binary on your machine (e.g. one Playwright previously
 installed, or your system's own) and don't want to (re)download one, point

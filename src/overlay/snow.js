@@ -20,6 +20,7 @@ import {
   drawSky, drawGlitter, drawIcicles, invalidateLights, invalidateAurora,
 } from './lights.js';
 import { QualityGovernor, debugEnabled } from '../shared/perf.js';
+import { createBackgroundImageLoader, createWinterBackgroundRenderer, drawImageBackground } from './background.js';
 
 function mulberry32(seed) {
   return function () {
@@ -191,7 +192,9 @@ function screenIndex() {
 // The resolved composition for THIS screen: which trees, where, at what
 // size, with which light strings, plus the sky layers and background.
 let sceneCfg = screenConfig(defaultScene(), 0);
-let backgroundImage = null;
+const backgroundLoader = createBackgroundImageLoader(loadBackground);
+const winterBackground = createWinterBackgroundRenderer();
+const backgroundReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 // This window's position in the OS's virtual desktop space (physical
 // px), relative to the virtual desktop's own top-left corner. Used to
@@ -324,194 +327,27 @@ const crystalStrip = (() => {
 /// Loads this screen's background image, if it has one. Stored by Rust in
 /// its own file rather than inside settings.json — see save_background —
 /// and fetched once here, not on every settings save.
-async function refreshBackground() {
-  if (sceneCfg.background === 'image') {
-    try {
-      const dataUrl = await loadBackground(`screen-${screenIndex()}`);
-      if (!dataUrl) {
-        backgroundImage = null;
-        return;
-      }
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = dataUrl;
-      });
-      backgroundImage = img;
-    } catch {
-      // A background that fails to decode must never take the overlay down
-      // with it; the scene simply renders without one.
-      backgroundImage = null;
-    }
-    return;
-  }
-  backgroundImage = null;
+function refreshBackground(force = false) {
+  return backgroundLoader.select(sceneCfg.background === 'image'
+    ? sceneCfg.backgroundImageKey ?? `screen-${screenIndex()}` : null, force);
 }
 
 // Procedurally-generated animated winter forest background, drawn behind
 // the aurora and snow. It reacts to the scene's light intensity so the
 // wallpaper never feels disconnected from the decorations.
 function drawAnimatedForest(c, w, h, time) {
-  const motion = Math.max(0, Number(sceneCfg.backgroundMotion ?? 1) || 0);
-  const moving = sceneCfg.backgroundAnimation !== 'none' && motion > 0;
-  const drift = moving ? Math.sin(time * 0.06) * w * 0.03 * motion : 0;
-  const opacity = sceneCfg.backgroundOpacity ?? 1;
-
-  c.save();
-  c.globalAlpha = opacity;
-  // Night sky gradient, tinted by aurora intensity.
-  const sky = c.createLinearGradient(0, 0, 0, h * 0.72);
-  sky.addColorStop(0, '#050912');
-  sky.addColorStop(0.55, '#0b1424');
-  sky.addColorStop(1, '#132236');
-  c.fillStyle = sky;
-  c.fillRect(0, 0, w, h);
-
-  // Distant moon glow, drifting very slowly with parallax.
-  const moonX = w * 0.78 + drift * 0.15;
-  const moonY = h * 0.16;
-  const moon = c.createRadialGradient(moonX, moonY, 0, moonX, moonY, h * 0.18);
-  moon.addColorStop(0, 'rgba(255,250,232,0.18)');
-  moon.addColorStop(0.25, 'rgba(255,246,214,0.06)');
-  moon.addColorStop(1, 'rgba(255,250,232,0)');
-  c.fillStyle = moon;
-  c.fillRect(0, 0, w, h);
-
-  // Far hills.
-  const farHill = (x) => h * 0.62
-    + Math.sin((x + drift * 0.3) * 0.0047) * h * 0.04
-    + Math.sin((x + drift * 0.3) * 0.011) * h * 0.02;
-  const hillGrad = c.createLinearGradient(0, h * 0.55, 0, h);
-  hillGrad.addColorStop(0, '#1a2b3f');
-  hillGrad.addColorStop(1, '#0d1722');
-  c.fillStyle = hillGrad;
-  c.beginPath();
-  c.moveTo(0, h);
-  for (let x = 0; x <= w; x += 8) c.lineTo(x, farHill(x));
-  c.lineTo(w, h);
-  c.closePath();
-  c.fill();
-
-  // Mid-distance pine silhouettes.
-  const drawPine = (x, y, s) => {
-    c.fillStyle = `rgba(12,24,20,${0.75 + s * 0.2})`;
-    c.beginPath();
-    c.moveTo(x, y);
-    c.lineTo(x + s * 30, y + s * 110);
-    c.lineTo(x - s * 30, y + s * 110);
-    c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(x, y - s * 45);
-    c.lineTo(x + s * 24, y + s * 60);
-    c.lineTo(x - s * 24, y + s * 60);
-    c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(x, y - s * 80);
-    c.lineTo(x + s * 16, y + s * 15);
-    c.lineTo(x - s * 16, y + s * 15);
-    c.closePath();
-    c.fill();
-  };
-
-  const rand = mulberry32(2026);
-  const baseTreeX = (i) => ((i * 137.5 + rand() * 60) % (w + 160)) - 80 + drift * 0.55;
-  for (let i = 0; i < 18; i++) {
-    const x = baseTreeX(i);
-    const scale = 0.55 + rand() * 0.55;
-    drawPine(x, h * 0.74 + rand() * h * 0.05, scale);
-  }
-
-  // Snow-covered foreground hill.
-  const nearHill = (x) => h * 0.82
-    + Math.sin((x - drift) * 0.0033) * h * 0.035
-    + Math.sin((x - drift) * 0.009) * h * 0.015;
-  const snowGrad = c.createLinearGradient(0, h * 0.78, 0, h);
-  snowGrad.addColorStop(0, '#d8e6f0');
-  snowGrad.addColorStop(0.45, '#b6c9d9');
-  snowGrad.addColorStop(1, '#8ca4b8');
-  c.fillStyle = snowGrad;
-  c.beginPath();
-  c.moveTo(0, h);
-  for (let x = 0; x <= w; x += 6) c.lineTo(x, nearHill(x));
-  c.lineTo(w, h);
-  c.closePath();
-  c.fill();
-
-  // Subtle warm light wash from the fireplace/trees, driven by decorConfig.
-  const warm = (decorConfig.lightIntensity ?? 1) * 0.5;
-  if (warm > 0.05) {
-    const glow = c.createRadialGradient(w * 0.5, h, 0, w * 0.5, h, w * 0.65);
-    glow.addColorStop(0, `rgba(255,160,72,${0.12 * warm})`);
-    glow.addColorStop(0.5, `rgba(255,140,58,${0.04 * warm})`);
-    glow.addColorStop(1, 'rgba(255,120,40,0)');
-    c.fillStyle = glow;
-    c.fillRect(0, 0, w, h);
-  }
-
-  // Soft falling snow in the background layer, linked to the real snow
-  // intensity but kept faint so it doesn't compete with the overlay flakes.
-  const bgFlakes = Math.round(w / 45);
-  c.fillStyle = 'rgba(235,244,255,0.55)';
-  for (let i = 0; i < bgFlakes; i++) {
-    const fx = ((i * 97.3 + time * (8 + (i % 5)) * 0.4 + drift * (0.5 + (i % 3) * 0.2)) % (w + 20)) - 10;
-    const fy = ((i * 53.7 + time * (12 + (i % 7)) * 0.55) % (h * 0.72));
-    const fr = 0.6 + (i % 4) * 0.35;
-    c.globalAlpha = opacity * (0.2 + (i % 5) * 0.08);
-    c.beginPath();
-    c.arc(fx, fy, fr, 0, Math.PI * 2);
-    c.fill();
-  }
-  c.globalAlpha = 1;
-  c.restore();
+  winterBackground.draw(c, w, h, time, sceneCfg, decorConfig, backgroundReducedMotion.matches);
 }
 
 /// Draws the background under everything else: either an image or the
 /// procedural animated winter forest.
 function drawBackground(w, h, time) {
-  if (sceneCfg.background === 'animated-forest') {
+  if (sceneCfg.background === 'animated-forest' || sceneCfg.background === 'alpine-lake') {
     drawAnimatedForest(ctx, w, h, time);
     return;
   }
-  if (!backgroundImage) return;
-  const iw = backgroundImage.naturalWidth;
-  const ih = backgroundImage.naturalHeight;
-  if (!iw || !ih) return;
-  const animation = sceneCfg.backgroundAnimation ?? 'drift';
-  const motion = Math.max(0, Number(sceneCfg.backgroundMotion ?? 1) || 0);
-  const moving = animation !== 'none' && motion > 0;
-  const driftX = moving ? Math.sin(time * 0.11) * w * 0.028 * motion : 0;
-  const driftY = moving ? Math.cos(time * 0.08 + 0.9) * h * 0.022 * motion : 0;
-  const extraScale = !moving ? 1 : animation === 'kenburns'
-    ? 1 + 0.08 * motion + 0.04 * motion * (0.5 + 0.5 * Math.sin(time * 0.15 + 0.5))
-    : 1 + 0.03 * motion;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, w, h);
-  ctx.clip();
-  ctx.globalAlpha = sceneCfg.backgroundOpacity ?? 1;
-  const fit = sceneCfg.backgroundFit ?? 'cover';
-  if (fit === 'stretch') {
-    const dw = w * extraScale;
-    const dh = h * extraScale;
-    ctx.drawImage(backgroundImage, (w - dw) / 2 + driftX, (h - dh) / 2 + driftY, dw, dh);
-  } else if (fit === 'tile') {
-    const offsetX = ((driftX % iw) + iw) % iw;
-    const offsetY = ((driftY % ih) + ih) % ih;
-    for (let y = -ih + offsetY; y < h; y += ih) {
-      for (let x = -iw + offsetX; x < w; x += iw) ctx.drawImage(backgroundImage, x, y);
-    }
-  } else {
-    const scale = fit === 'contain'
-      ? Math.min(w / iw, h / ih)
-      : Math.max(w / iw, h / ih);
-    const dw = iw * scale * extraScale;
-    const dh = ih * scale * extraScale;
-    ctx.drawImage(backgroundImage, (w - dw) / 2 + driftX, (h - dh) / 2 + driftY, dw, dh);
-  }
-  ctx.restore();
+  if (sceneCfg.background !== 'image') return;
+  drawImageBackground(ctx, backgroundLoader.image, w, h, sceneCfg, time, backgroundReducedMotion.matches);
 }
 
 // The canvas BACKING STORE (canvas.width/height) is sized in DEVICE
@@ -961,7 +797,6 @@ window.snowOverlay = {
 async function applyThemeAndSettings(theme, settings) {
   if (!theme) return;
   const index = screenIndex();
-  const previousBackground = `${sceneCfg.background}|${sceneCfg.backgroundFit}`;
   sceneCfg = screenConfig(settings?.scene ?? defaultScene(), index);
 
   // A screen can override the global snow density, so one monitor can be
@@ -995,11 +830,7 @@ async function applyThemeAndSettings(theme, settings) {
     decorScale: settings?.decorScale ?? 1,
   };
 
-  if (`${sceneCfg.background}|${sceneCfg.backgroundFit}` !== previousBackground
-      || sceneCfg.background === 'image'
-      || sceneCfg.background === 'animated-forest') {
-    await refreshBackground();
-  }
+  const backgroundReady = refreshBackground();
 
   // The GL tree renderer, if it started, rebuilds from the same
   // composition — there is one source of truth, not two.
@@ -1010,6 +841,7 @@ async function applyThemeAndSettings(theme, settings) {
       lightIntensity: decorConfig.lightIntensity,
     });
   }
+  await backgroundReady;
 }
 
 async function initFromBackend() {
@@ -1039,7 +871,7 @@ onSettingsChanged(({ theme, settings }) => {
 // The image itself travels outside the settings payload (it is megabytes),
 // so its own event tells this window to re-read it.
 onBackgroundChanged((key) => {
-  if (key === `screen-${screenIndex()}`) refreshBackground();
+  if (key === sceneCfg.backgroundImageKey) void refreshBackground(true);
 });
 
 // Exposed so the settings window's per-screen editor can be driven from a
@@ -1051,6 +883,7 @@ window.snowOverlayScene = {
     const prevPalette = sceneCfg.auroraPalette;
     const prevCustom = sceneCfg.auroraCustomColors;
     sceneCfg = screenConfig({ screens: { [String(screenIndex())]: next } }, screenIndex());
+    void refreshBackground();
     bankDirty = true;
     if (sceneCfg.auroraPalette !== prevPalette
         || JSON.stringify(sceneCfg.auroraCustomColors) !== JSON.stringify(prevCustom)) {

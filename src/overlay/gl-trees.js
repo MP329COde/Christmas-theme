@@ -201,6 +201,9 @@ export class GlTrees {
   applyLook(look, fireplaces) {
     if (!this.renderer) return;
     const l = { ...defaultLook(), ...(look ?? {}) };
+    for (const layer of this.scene?.layers ?? []) {
+      if (layer instanceof ChristmasTree) layer.setShadow(l.shadowStrength, l.shadowSoftness);
+    }
     this.renderer.setGrade({
       exposure: l.exposure,
       bloomStrength: l.bloom,
