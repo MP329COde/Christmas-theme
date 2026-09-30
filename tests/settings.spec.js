@@ -100,11 +100,11 @@ test('tree species can be changed', async ({ page }) => {
 });
 
 test('tree snow can be adjusted independently and persists', async ({ page }) => {
-  await page.locator('[data-testid="tree-0-snow"]').fill('175');
+  await page.locator('[data-testid="tree-0-snow"]').fill('170');
   await page.waitForTimeout(300);
   const snow = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].trees[0].snow);
-  expect(snow).toBe(1.75);
+  expect(snow).toBe(1.7);
 });
 
 test('holiday decorations can be added, configured, and removed', async ({ page }) => {
