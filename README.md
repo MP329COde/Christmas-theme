@@ -36,7 +36,10 @@ l'arrête pas. Utilisez l'icône pour mettre en pause, rouvrir les réglages ou 
 - **Neige** : densité, vent, accumulation au sol, flocons doux ou cristaux, scintillement.
 - **Guirlande du haut** : cinq styles (ampoules rétro, branches de sapin, rideau lumineux, guirlande scintillante, fanions) et
   animations de lumières (scintillement, étincelles, poursuite, vague, pulsation…).
-- **Fond animé** : aurore boréale, étoiles, ou arrière-plan personnalisé.
+- **Fond animé** : paysages hivernaux, village, salon, chalet, ville nocturne, fenêtre givrée et
+  fonds abstraits, ou image personnelle. Réglages par écran pour la palette, l'opacité et le mouvement ;
+  les scènes d'intérieur et de ville offrent également une intensité lumineuse réglable. Les animations
+  respectent la préférence système de réduction des mouvements.
 - **Dock / barre des tâches** : guirlande, stalactites et neige sur la bande du système, sur tous les bords.
 - **Thèmes et préréglages** : 8 thèmes de couleurs, palettes personnalisées, préréglages enregistrables,
   importables et exportables.

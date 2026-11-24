@@ -15,6 +15,7 @@
 
 import './snow.js';
 import { GlTrees } from './gl-trees.js';
+import { ENCLOSED_BACKGROUNDS } from './interiors.js';
 import { getSettings } from '../shared/bridge.js';
 import { resolvePerformance } from '../shared/scene.js';
 
@@ -53,11 +54,15 @@ async function boot() {
   // The engine and the Canvas 2D renderer read the SAME composition, so
   // switching between them changes fidelity and nothing else.
   let latestScene = null;
+  let frontMode = false;
+  // Pas d'aurore au plafond d'un salon : le moteur GPU la dessine sinon.
+  const forGl = (cfg) => (cfg && !frontMode && ENCLOSED_BACKGROUNDS.has(cfg.background) ? { ...cfg, aurora: false } : cfg);
   let latestTheme = { primary: '#c0392b', secondary: '#1e7d32', accent: '#f1c40f' };
   let adopted = false;
 
   overlay.onSceneChanged((sceneCfg, appSettings) => {
     latestScene = sceneCfg;
+    if (appSettings) frontMode = appSettings.displayMode === 'front';
     if (appSettings?.themeColors) latestTheme = appSettings.themeColors;
     if (appSettings?.fpsLimit !== undefined) {
       settings.fpsLimit = appSettings.fpsLimit;
@@ -68,7 +73,7 @@ async function boot() {
       if (appSettings.paused) { glTrees.stop(); glCanvas.hidden = true; }
       else { glCanvas.hidden = false; glTrees.run(); }
     }
-    if (adopted) glTrees.sync(sceneCfg, latestTheme);
+    if (adopted) glTrees.sync(forGl(sceneCfg), latestTheme);
   });
 
   if (!glTrees.start({
@@ -79,7 +84,7 @@ async function boot() {
     return;
   }
 
-  const built = await glTrees.sync(latestScene ?? { trees: [] }, latestTheme);
+  const built = await glTrees.sync(forGl(latestScene) ?? { trees: [] }, latestTheme);
   if (!built || !producedGeometry(glTrees)) {
     glTrees.dispose();
     window.overlayRenderer = { mode: 'canvas2d', reason: 'engine produced no geometry' };

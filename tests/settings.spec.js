@@ -220,6 +220,19 @@ test('animated forest background exposes opacity and motion controls', async ({ 
   expect(background).toBe('animated-forest');
 });
 
+test('scene lighting is saved per screen and restored', async ({ page }) => {
+  await page.selectOption('[data-testid="background-mode"]', 'living-room');
+  await page.locator('[data-testid="background-lighting"]').fill('160');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('christmas-theme-settings')).scene.screens['0'].backgroundLighting)).toBe(1.6);
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
+  await expect(page.locator('[data-testid="background-lighting"]')).toHaveValue('160');
+  await page.selectOption('[data-testid="background-mode"]', 'animated-forest');
+  await expect(page.locator('[data-testid="background-lighting"]')).toHaveCount(0);
+});
+
 test('background animation controls are saved per screen', async ({ page }) => {
   await page.selectOption('[data-testid="background-mode"]', 'image');
   await page.selectOption('[data-testid="background-animation"]', 'kenburns');
