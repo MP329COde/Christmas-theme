@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Christmas Theme",
+  "productName": "Décoration de Noël",
   "version": "0.1.0",
   "identifier": "com.christmastheme.app",
   "build": {
@@ -15,12 +15,15 @@
     "windows": [
       {
         "label": "settings",
-        "title": "Christmas Theme Settings",
+        "title": "Décoration de Noël",
         "url": "/settings/index.html",
-        "width": 460,
-        "height": 640,
+        "width": 1000,
+        "height": 700,
         "resizable": true,
-        "visible": true
+        "visible": false,
+        "minWidth": 820,
+        "minHeight": 560,
+        "center": true
       }
     ],
     "security": {
@@ -29,12 +32,78 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "msi", "nsis", "dmg"],
+    "targets": [
+      "app",
+      "dmg",
+      "msi",
+      "nsis",
+      "deb",
+      "rpm",
+      "appimage"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.png"
-    ]
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "Décoration de Noël",
+    "copyright": "© Décoration de Noël — licence MIT",
+    "category": "Entertainment",
+    "shortDescription": "Décorez votre bureau pour Noël",
+    "longDescription": "Neige animée, sapins, guirlandes et cheminée réalistes sur votre bureau, avec décoration du Dock ou de la barre des tâches. Aucune donnée collectée.",
+    "licenseFile": "installer/LICENCE.fr.txt",
+    "windows": {
+      "nsis": {
+        "languages": [
+          "French",
+          "English",
+          "Spanish",
+          "German",
+          "Italian"
+        ],
+        "displayLanguageSelector": true,
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
+        "startMenuFolder": "Décoration de Noël",
+        "installerHooks": "installer/hooks.nsh"
+      },
+      "wix": {
+        "language": "fr-FR"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "dmg": {
+        "background": "installer/dmg-background.png",
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 170,
+          "y": 210
+        },
+        "applicationFolderPosition": {
+          "x": 490,
+          "y": 210
+        }
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "libayatana-appindicator-gtk3"
+        ]
+      }
+    }
   }
 }

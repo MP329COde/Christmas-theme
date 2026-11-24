@@ -1,19 +1,19 @@
-// The scene schema: what can be put on a screen, and how it is described.
+// Le schéma de la scène : ce qui peut être mis sur un écran, et comment il est décrit.
 //
-// This is the single source of truth for the composition, shared by the
-// settings window (which edits it) and the overlay (which renders it).
-// The Rust side stores it as opaque JSON precisely so this file can own
-// the shape — see the comment on AppSettings::scene.
+// C'est la source unique de vérité pour la composition, partagée par la
+// fenêtre des paramètres (qui la modifie) et la superposition (qui la rend).
+// Le côté Rust la stocke comme JSON opaque précisément pour que ce fichier
+// possède le contrôle du format — voir le commentaire sur AppSettings::scene.
 //
-// SHAPE
+// STRUCTURE
 //
-//   scene.screens["0"]        per-monitor composition, keyed by overlay index
-//   scene.screens.default     used by any monitor with no entry of its own
+//   scene.screens["0"]        composition par moniteur, indexée par overlay
+//   scene.screens.default     utilisée par tout moniteur sans entrée propre
 //
-// A screen holds LISTS of elements rather than booleans, which is what
-// makes "two trees on the left screen and a fireplace on the right"
-// expressible at all. Every element carries its own position, scale and
-// light style, so nothing is hard-coded to a corner any more.
+// Un écran contient des LISTES d'éléments plutôt que des booléens, ce qui
+// rend possible « deux sapins sur l'écran de gauche et une cheminée sur le droit ».
+// Chaque élément porte sa propre position, taille et style de lumière,
+// rien n'est donc plus codé en dur dans un coin.
 
 export const LIGHT_PALETTES = {
   multicolor: ['#ff5d5d', '#ffc93c', '#3ddc97', '#5b8def', '#c77dff'],
@@ -24,6 +24,20 @@ export const LIGHT_PALETTES = {
   candy: ['#ff4d6d', '#ffffff'],
   ice: ['#dff6ff', '#a7d8f0', '#ffffff'],
   gold: ['#ffd75e', '#ffb02e', '#fff0c2'],
+};
+
+export const LIGHT_PALETTE_LABELS = {
+  multicolor: 'Multicolore', warm: 'Blanc chaud', cool: 'Blanc froid', 'red-green': 'Rouge et vert',
+  'red-blue': 'Rouge et bleu', candy: 'Sucre d\'orge', ice: 'Glace', gold: 'Or',
+};
+
+export const LIGHT_MODE_LABELS = {
+  twinkle: 'Scintillement', sparkle: 'Étincelles', chase: 'Poursuite', wave: 'Vague',
+  pulse: 'Pulsation', shimmer: 'Chatoiement', steady: 'Fixe',
+};
+
+export const AURORA_PALETTE_LABELS = {
+  classic: 'Classique', emerald: 'Émeraude', arctic: 'Arctique', twilight: 'Crépuscule',
 };
 
 export const LIGHT_MODES = ['twinkle', 'sparkle', 'chase', 'wave', 'pulse', 'shimmer', 'steady'];
@@ -52,9 +66,12 @@ export const AURORA_PALETTES = {
 };
 
 export const BACKGROUND_PALETTES = {
-  midnight: { label: 'Moonlit blue', sky: '#06101f', horizon: '#48677d', snow: '#b5cee0' },
-  glacier: { label: 'Glacier teal', sky: '#071c26', horizon: '#518b96', snow: '#c6e5e6' },
-  twilight: { label: 'Winter dusk', sky: '#20162e', horizon: '#9c748c', snow: '#e0d0e1' },
+  midnight: { label: 'Bleu lunaire', sky: '#06101f', horizon: '#48677d', snow: '#b5cee0' },
+  glacier: { label: 'Bleu glacier', sky: '#071c26', horizon: '#518b96', snow: '#c6e5e6' },
+  twilight: { label: 'Crépuscule hivernal', sky: '#20162e', horizon: '#9c748c', snow: '#e0d0e1' },
+  festive: { label: 'Rouge de fête', sky: '#1c0a10', horizon: '#8c3b3b', snow: '#f1dcd2' },
+  emerald: { label: 'Vert sapin', sky: '#06170f', horizon: '#3f7a5c', snow: '#d5e8dc' },
+  dawn: { label: 'Aube dorée', sky: '#1a2238', horizon: '#d99a6c', snow: '#f4e3d3' },
 };
 
 /// Lighten/darken a hex colour by a percentage, returning a hex string.
@@ -66,13 +83,14 @@ function shadeHex(hex, amt) {
   return `#${rgb.map((c) => clamp(c + d).toString(16).padStart(2, '0')).join('')}`;
 }
 
-/// Coordinated per-screen weather recipes. The numeric values are
-/// multipliers applied to the user's global snow controls, preserving a
-/// preferred baseline while letting each display have its own conditions.
+/// Recettes météo coordonnées par écran. Les valeurs numériques sont
+/// des multiplicateurs appliqués aux contrôles globaux de neige de l'utilisateur,
+/// préservant une ligne de base tout en permettant à chaque écran
+/// d'avoir ses propres conditions.
 export const WEATHER_PROFILES = {
-  calm: { label: 'Calm', flakeScale: 0.7, wind: 0.35, accumulate: 0.45, glitterDensity: 0.45 },
-  gentle: { label: 'Gentle snowfall', flakeScale: 0.9, wind: 0.7, accumulate: 0.8, glitterDensity: 0.8 },
-  winter: { label: 'Winter day', flakeScale: 1, wind: 1, accumulate: 1, glitterDensity: 1 },
+  calm: { label: 'Calme', flakeScale: 0.7, wind: 0.35, accumulate: 0.45, glitterDensity: 0.45 },
+  gentle: { label: 'Neige légère', flakeScale: 0.9, wind: 0.7, accumulate: 0.8, glitterDensity: 0.8 },
+  winter: { label: 'Jour d\'hiver', flakeScale: 1, wind: 1, accumulate: 1, glitterDensity: 1 },
   blizzard: { label: 'Blizzard', flakeScale: 1.35, wind: 1.65, accumulate: 1.5, glitterDensity: 1.35 },
 };
 
@@ -81,11 +99,11 @@ export function resolveWeatherProfile(profile) {
 }
 
 export const CAMERA_MOTION_PROFILES = {
-  system: { label: 'System preference', motion: 1 },
-  still: { label: 'Locked off', motion: 0 },
-  gentle: { label: 'Gentle drift', motion: 0.45 },
-  cinematic: { label: 'Cinematic drift', motion: 1 },
-  immersive: { label: 'Immersive drift', motion: 1.6 },
+  system: { label: 'Préférence système', motion: 1 },
+  still: { label: 'Fixe', motion: 0 },
+  gentle: { label: 'Dérive douce', motion: 0.45 },
+  cinematic: { label: 'Dérive cinématique', motion: 1 },
+  immersive: { label: 'Dérive immersive', motion: 1.6 },
 };
 
 export function resolveCameraMotionProfile(profile, reducedMotion = false) {
@@ -103,43 +121,49 @@ export function resolveAuroraPalette(palette, customColors = null) {
   return AURORA_PALETTES[palette] ?? AURORA_PALETTES.classic;
 }
 
-/// Species. `dark`/`light` are the two ends of the needle gradient the
-/// WebGL foliage shader mixes between per sprig — they are part of the
-/// species, not a theme colour, because what separates a Nordmann from a
-/// blue spruce at a glance is the colour of the needles, not its width.
-/// A tree may still override them (`needleDark` / `needleLight`).
+/// Essences. `dark`/`light` sont les deux extrémités du dégradé d'aiguilles que
+/// le shader de feuillage WebGL mélange par brin — elles font partie de
+/// l'essence, pas d'une couleur de thème, car ce qui distingue un Nordmann
+/// d'un épicéa bleu d'un coup d'oeil est la couleur des aiguilles, pas leur largeur.
+/// Un sapin peut toujours les surcharger (`needleDark` / `needleLight`).
 export const TREE_STYLES = {
   nordmann: {
     needle: 'secondary', density: 1.0, width: 1.0,
-    dark: '#0c2013', light: '#3c6b2b', label: 'Nordmann (full)',
+    dark: '#0c2013', light: '#3c6b2b', label: 'Nordmann (dense)',
   },
   spruce: {
     needle: 'secondary', density: 0.85, width: 0.82,
-    dark: '#0a1c18', light: '#2f5f43', label: 'Spruce (narrow)',
+    dark: '#0a1c18', light: '#2f5f43', label: 'Épicéa (étroit)',
   },
   pine: {
     needle: 'secondary', density: 1.15, width: 1.12,
-    dark: '#12210e', light: '#4d7a2c', label: 'Pine (broad)',
+    dark: '#12210e', light: '#4d7a2c', label: 'Pin (large)',
   },
   snowy: {
     needle: 'secondary', density: 1.0, width: 1.0, snow: 2.0, frost: 0.55,
-    dark: '#152a24', light: '#4a7566', label: 'Snow-laden',
+    dark: '#152a24', light: '#4a7566', label: 'Chargé de neige',
   },
   blue: {
     needle: 'secondary', density: 0.95, width: 0.9, frost: 0.4,
-    dark: '#0d1c2b', light: '#4a7a92', label: 'Blue spruce',
+    dark: '#0d1c2b', light: '#4a7a92', label: 'Picea bleu',
   },
   golden: {
     needle: 'accent', density: 1.05, width: 1.0,
-    dark: '#1d2410', light: '#7e8a34', label: 'Golden fir',
+    dark: '#1d2410', light: '#7e8a34', label: 'Sapin doré',
   },
 };
 
 export const HOLIDAY_DECORATION_TYPES = {
-  snowman: { label: 'Snowman', glyph: '⛄', y: 0.84 },
-  presents: { label: 'Presents', glyph: '🎁', y: 0.88 },
-  wreath: { label: 'Wreath', glyph: '🎀', y: 0.24 },
-  'candy-cane': { label: 'Candy cane', glyph: '🍬', y: 0.86 },
+  snowman: { label: 'Bonhomme de neige', glyph: '⛄', y: 0.84 },
+  presents: { label: 'Cadeaux', glyph: '🎁', y: 0.88 },
+  wreath: { label: 'Couronne', glyph: '🎀', y: 0.24 },
+  'candy-cane': { label: 'Sucre d\'orge', glyph: '🍬', y: 0.86 },
+  lantern: { label: 'Lanterne', glyph: '🏮', y: 0.87 },
+  reindeer: { label: 'Renne', glyph: '🦌', y: 0.84 },
+  bell: { label: 'Cloches', glyph: '🔔', y: 0.2 },
+  star: { label: 'Étoile lumineuse', glyph: '🌟', y: 0.16 },
+  gingerbread: { label: 'Bonhomme en pain d\'épices', glyph: '🍪', y: 0.86 },
+  sleigh: { label: 'Traîneau', glyph: '🛷', y: 0.87 },
 };
 
 /// A light string's appearance. Used by garlands, tree strings and the
@@ -216,6 +240,11 @@ export function defaultHolidayDecoration(overrides = {}) {
     x: 0.5,
     y: HOLIDAY_DECORATION_TYPES[type].y,
     scale: 1,
+    // 'theme' suit les couleurs du thème ; sinon une couleur hexadécimale
+    // qui remplace la teinte principale de cette décoration.
+    color: 'theme',
+    flip: false,
+    opacity: 1,
     ...overrides,
     type,
   };
@@ -267,15 +296,23 @@ export function defaultFireplace(overrides = {}) {
     id: `fire-${Math.random().toString(36).slice(2, 8)}`,
     x: 0.5,
     scale: 1,
-    // 'rustic' (dry-stone surround, tall arched firebox, mantel beam) or
-    // 'modern' (flat panel, suspended shelf, a wide linear flame) — see
-    // decor.js's bakeFireplace/bakeModernSurround. A theme can set its own
-    // default via themes/*.json's "fireplaceStyle"; each fireplace can
-    // still override it individually here.
-    fireplaceStyle: overrides.fireplaceStyle ?? 'rustic',
+    // 'classic' (briques, manteau peint), 'rustic' (pierre sèche, poutre) ou
+    // 'modern' (panneau plat, étagère suspendue) — voir bakeFireplace dans
+    // decor.js. Un thème peut définir le sien via "fireplaceStyle" ;
+    // chaque cheminée peut le remplacer individuellement.
+    fireplaceStyle: overrides.fireplaceStyle ?? 'classic',
+    // Style « classique » : teinte des briques (red | ochre | grey | white)
+    // et couleur du manteau ; intensité du feu pour tous les styles.
+    brick: 'red',
+    mantelColor: '#ece6d8',
+    flameIntensity: 1,
     stockings: true,
     mantelGarland: true,
     candles: true,
+    // Garnitures optionnelles : couronne au-dessus du manteau (style
+    // classique) et pare-feu devant le foyer.
+    wreath: false,
+    fireScreen: false,
     lights: defaultLightStyle({ palette: 'warm', mode: 'twinkle' }),
     ...overrides,
   };
@@ -284,6 +321,12 @@ export function defaultFireplace(overrides = {}) {
 export function defaultGarland(overrides = {}) {
   return {
     enabled: true,
+    // Voir GARLAND_STYLES : même câble, rendu différent.
+    style: 'classic',
+    // Nombre de festons entre deux points d'accroche.
+    swags: 3,
+    bulbShape: 'drop', // drop | round | star | globe
+    glow: 1,
     sag: 1,
     spacing: 1,
     lights: defaultLightStyle(),
@@ -439,4 +482,176 @@ export function bulbLevel(mode, time, index, phase = 0, count = 1, speed = 1) {
     default:
       return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 1.7 + phase));
   }
+}
+
+// ---------------------------------------------------------------------------
+// guirlandes, fonds animés, modes et profils de performance
+// ---------------------------------------------------------------------------
+
+export const GARLAND_STYLES = {
+  classic: { label: 'Ampoules rétro' },
+  pine: { label: 'Branches de sapin' },
+  curtain: { label: 'Rideau lumineux' },
+  tinsel: { label: 'Guirlande scintillante' },
+  bunting: { label: 'Fanions de fête' },
+};
+
+export const BULB_SHAPES = {
+  drop: 'Goutte', round: 'Ronde', globe: 'Globe', star: 'Étoile',
+};
+
+/// Fonds animés procéduraux (background.js). Tous sont cuits une fois en
+/// calques puis animés par simples copies : leur coût par image est fixe.
+export const ANIMATED_BACKGROUNDS = {
+  'animated-forest': { label: 'Forêt hivernale illuminée' },
+  'alpine-lake': { label: 'Lac alpin gelé' },
+  village: { label: 'Village enneigé' },
+  'sleigh-night': { label: 'Nuit du traîneau' },
+  bokeh: { label: 'Lumières de fête (moderne)' },
+  'aurora-gradient': { label: 'Dégradé boréal (moderne)' },
+};
+
+export function isAnimatedBackground(id) {
+  return Object.prototype.hasOwnProperty.call(ANIMATED_BACKGROUNDS, id);
+}
+
+/// Où la décoration se place par rapport aux fenêtres.
+export const DISPLAY_MODES = {
+  wallpaper: { label: 'Fond d\'écran', hint: 'Derrière vos fenêtres, sur le bureau' },
+  front: { label: 'Par-dessus tout', hint: 'La neige tombe devant vos fenêtres, sans gêner les clics' },
+};
+
+export const DOCK_PLACEMENTS = {
+  behind: { label: 'Derrière les fenêtres', hint: 'La bande reste sous vos fenêtres et ne gêne rien' },
+  front: { label: 'Par-dessus tout', hint: 'La bande passe devant les fenêtres, sans gêner les clics' },
+};
+
+/// Profils de performance. C'est LE réglage qui décide si les ventilateurs
+/// se déclenchent : cadence, résolution interne (plafond de DPR), palier de
+/// qualité minimal imposé et moteur des sapins. « custom » laisse la main
+/// aux réglages détaillés (fpsLimit / renderer).
+export const PERFORMANCE_PROFILES = {
+  eco: {
+    label: 'Silencieux', hint: 'Ventilateurs au repos : 15 i/s, graphismes allégés',
+    fpsLimit: 15, dprCap: 1, minTier: 2, renderer: 'canvas', dockFps: 8, snowScale: 0.5, motion: 0.6,
+  },
+  balanced: {
+    label: 'Équilibré', hint: 'Recommandé : 30 i/s, qualité adaptée automatiquement',
+    fpsLimit: 30, dprCap: 1.5, minTier: 0, renderer: 'auto', dockFps: 20, snowScale: 1, motion: 1,
+  },
+  quality: {
+    label: 'Qualité maximale', hint: '60 i/s et tous les détails : pour les machines puissantes',
+    fpsLimit: 60, dprCap: 2, minTier: 0, renderer: 'auto', dockFps: 30, snowScale: 1, motion: 1,
+  },
+};
+
+export function resolvePerformance(settings) {
+  const profile = PERFORMANCE_PROFILES[settings?.performanceMode];
+  if (profile) return { mode: settings.performanceMode, ...profile };
+  return {
+    mode: 'custom',
+    fpsLimit: Number(settings?.fpsLimit ?? 30) || 0,
+    dprCap: Number(settings?.dprCap ?? 2) || 2,
+    minTier: Number(settings?.minTier ?? 0) || 0,
+    renderer: settings?.renderer ?? 'auto',
+    dockFps: 30,
+    snowScale: 1,
+    motion: 1,
+  };
+}
+
+/// Modes : une composition complète en un clic. Chaque mode réécrit
+/// l'écran visé à partir de defaultScreen, et peut ajuster quelques
+/// réglages globaux (neige, thème). Rien de définitif : tout reste
+/// modifiable ensuite.
+export const SCENE_MODES = {
+  cosy: {
+    label: 'Coin du feu', glyph: '🔥', hint: 'Cheminée, sapins et guirlande de sapin',
+    global: { snowDensity: 120, themeId: 'classic-red' },
+    screen: () => defaultScreen({
+      garland: defaultGarland({ style: 'pine', lights: defaultLightStyle({ palette: 'warm' }) }),
+      decorations: [defaultHolidayDecoration({ type: 'presents', x: 0.28 })],
+    }),
+  },
+  forest: {
+    label: 'Forêt enchantée', glyph: '🌲', hint: 'Forêt animée, aurore et sapins givrés',
+    global: { snowDensity: 180, themeId: 'frosty-blue' },
+    screen: () => defaultScreen({
+      background: 'animated-forest', fireplaces: [],
+      trees: [
+        defaultTree({ x: 0.08, seed: 11, style: 'snowy', scale: 1.15 }),
+        defaultTree({ x: 0.24, seed: 23, style: 'blue', scale: 0.8 }),
+        defaultTree({ x: 0.9, seed: 37, style: 'spruce', flip: true }),
+      ],
+      garland: defaultGarland({ style: 'curtain', lights: defaultLightStyle({ palette: 'ice', mode: 'shimmer' }) }),
+      decorations: [defaultHolidayDecoration({ type: 'reindeer', x: 0.62 })],
+    }),
+  },
+  village: {
+    label: 'Village de Noël', glyph: '🏘️', hint: 'Village enneigé, lanternes et bonhomme de neige',
+    global: { snowDensity: 160, themeId: 'midnight-gold' },
+    screen: () => defaultScreen({
+      background: 'village', aurora: false, fireplaces: [],
+      trees: [defaultTree({ x: 0.9, seed: 5, flip: true, lights: defaultLightStyle({ palette: 'gold' }) })],
+      garland: defaultGarland({ style: 'classic', bulbShape: 'globe', lights: defaultLightStyle({ palette: 'warm', mode: 'steady' }) }),
+      decorations: [
+        defaultHolidayDecoration({ type: 'snowman', x: 0.16 }),
+        defaultHolidayDecoration({ type: 'lantern', x: 0.3 }),
+      ],
+    }),
+  },
+  party: {
+    label: 'Fête', glyph: '🎉', hint: 'Lumières multicolores, fanions et cadeaux',
+    global: { snowDensity: 120, themeId: 'candy-cane' },
+    screen: () => defaultScreen({
+      background: 'bokeh', aurora: false, stars: false, fireplaces: [],
+      trees: [
+        defaultTree({ x: 0.12, seed: 71, lights: defaultLightStyle({ palette: 'multicolor', mode: 'chase' }) }),
+        defaultTree({ x: 0.88, seed: 72, flip: true, lights: defaultLightStyle({ palette: 'multicolor', mode: 'chase' }) }),
+      ],
+      garland: defaultGarland({ style: 'bunting', lights: defaultLightStyle({ palette: 'multicolor', mode: 'wave' }) }),
+      decorations: [
+        defaultHolidayDecoration({ type: 'presents', x: 0.3 }),
+        defaultHolidayDecoration({ type: 'candy-cane', x: 0.7 }),
+        defaultHolidayDecoration({ type: 'bell', x: 0.5 }),
+      ],
+    }),
+  },
+  polar: {
+    label: 'Nuit polaire', glyph: '🌌', hint: 'Traîneau devant la lune, étoiles et aurore',
+    global: { snowDensity: 90, themeId: 'arctic-aurora' },
+    screen: () => defaultScreen({
+      background: 'sleigh-night', fireplaces: [], icicles: true,
+      auroraPalette: 'arctic', starDensity: 1.5,
+      trees: [defaultTree({ x: 0.92, seed: 404, style: 'snowy', flip: true })],
+      garland: defaultGarland({ style: 'tinsel', lights: defaultLightStyle({ palette: 'cool', mode: 'sparkle' }) }),
+    }),
+  },
+  minimal: {
+    label: 'Minimal', glyph: '❄️', hint: 'Seulement la neige, discrète et légère',
+    global: { snowDensity: 60, themeId: 'minimal-white', snowAccumulate: false },
+    screen: () => defaultScreen({
+      aurora: false, stars: false, icicles: false, snowGlitter: false,
+      trees: [], fireplaces: [], decorations: [],
+      garland: defaultGarland({ enabled: false }),
+    }),
+  },
+};
+
+/// Applique un mode à `settings` (en place) pour l'écran donné, ou pour
+/// tous les écrans connus si `screen` vaut null.
+export function applySceneMode(settings, modeId, screen = null) {
+  const mode = SCENE_MODES[modeId];
+  if (!mode) return false;
+  if (!settings.scene?.screens) settings.scene = defaultScene();
+  const keys = screen === null ? Object.keys(settings.scene.screens) : [String(screen)];
+  for (const key of keys) {
+    const next = mode.screen();
+    // Un seul foyer sur un bureau multi-écran : seul l'écran 0 le garde.
+    if (screen === null && key !== '0') next.fireplaces = [];
+    settings.scene.screens[key] = next;
+  }
+  Object.assign(settings, mode.global);
+  settings.sceneMode = modeId;
+  return true;
 }

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "frosty-blue",
-  "name": "Frosty Blue",
+  "name": "Bleu givré",
   "colors": { "primary": "#3498db", "secondary": "#eaf6ff", "accent": "#ffffff", "background": "#081a2e" },
   "snow": { "density": 200, "accumulate": true, "wind": 0.6, "flakeSize": 2 },
   "sound": { "ambient": "bells", "volume": 0.3 },

@@ -104,6 +104,9 @@ export class QualityGovernor {
 
     this.monitor = new FrameMonitor();
     this.localTier = 0;
+    // Plancher imposé par le profil de performance (« Silencieux » démarre
+    // directement allégé, sans attendre que la machine chauffe).
+    this.minTier = 0;
     this.effectiveTier = 0;
     this.overSince = 0;
     this.underSince = 0;
@@ -161,7 +164,7 @@ export class QualityGovernor {
     }
 
     const peerFresh = now - this.peerAt < this.peerTimeoutMs;
-    const effective = Math.max(this.localTier, peerFresh ? this.peerTier : 0);
+    const effective = Math.max(this.localTier, this.minTier, peerFresh ? this.peerTier : 0);
     if (effective !== this.effectiveTier) {
       this.effectiveTier = effective;
       if (this.debug) {
@@ -188,6 +191,19 @@ export class QualityGovernor {
 
   get tierIndex() {
     return this.effectiveTier;
+  }
+
+  /// Impose un palier minimal (0 = aucune contrainte). Prend effet tout de
+  /// suite, sans attendre la prochaine image mesurée.
+  setMinTier(tier) {
+    const next = Math.max(0, Math.min(this.tiers.length - 1, Math.round(Number(tier) || 0)));
+    if (next === this.minTier) return;
+    this.minTier = next;
+    const effective = Math.max(this.localTier, next);
+    if (effective !== this.effectiveTier) {
+      this.effectiveTier = effective;
+      this.onChange?.(this.tiers[effective], effective);
+    }
   }
 
   setTargetFrameMs(ms) {

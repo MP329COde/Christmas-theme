@@ -14,7 +14,8 @@
 // one drawing routine covers a Dock on the left, right or bottom and a
 // taskbar on any of the four edges.
 
-import { GARLAND_PALETTES, bulbLevel, glowSprite } from '../overlay/decor.js';
+import { glowSprite, drawGarland } from '../overlay/decor.js';
+import { LIGHT_PALETTES, resolvePerformance } from '../shared/scene.js';
 import { getSettings, listThemes, onSettingsChanged } from '../shared/bridge.js';
 
 const canvas = document.getElementById('dock');
@@ -40,9 +41,25 @@ let opts = {
   animation: 'twinkle',
   lightIntensity: 1,
   enabled: true,
+  garland: true,
+  icicles: true,
+  snow: true,
+  fps: 20,
 };
+let lastFrame = 0;
+let rafId = null;
+
+/// La bande ne dessine que si elle est activée et visible ; sinon aucune
+/// image n'est demandée. Elle tournait auparavant à la cadence de l'écran
+/// (60 à 120 i/s) pour une frise de quelques pixels.
+function schedule() {
+  if (rafId !== null || !opts.enabled || document.hidden) return;
+  rafId = requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange', schedule);
 let bake = null; // baked static art: snow ledge, swag, icicles
 let bakeKey = '';
+let liveBulbs = 0;
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -69,7 +86,7 @@ function mulberry32(seed) {
 /// positions so the lights can be animated live on top of it. Same reason
 /// as the main overlay: this window redraws continuously and must not cost
 /// anything meaningful.
-function bakeStrip(length, depth, scale) {
+function bakeStrip(length, depth, scale, show = { garland: true, icicles: true, snow: true }) {
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.ceil(length));
   cv.height = Math.max(1, Math.ceil(depth));
@@ -81,47 +98,15 @@ function bakeStrip(length, depth, scale) {
   const ledgeY = Math.min(depth * 0.34, 16 * s);
   const bulbs = [];
 
-  // --- pine swag along the leading edge ------------------------------------
-  // Each pin point gets a fan of needles rather than two strokes, so the
-  // swag reads as foliage at this small size instead of scribble.
-  const sprigs = Math.max(6, Math.round(length / (7 * s)));
-  const pinEvery = 210 * s;
-  for (let i = 0; i <= sprigs; i++) {
-    const p = i / sprigs;
-    const x = p * length;
-    // Real garland is pinned every so often and sags between the pins; it
-    // does not hang in one long curve across a whole screen.
-    const sag = Math.abs(Math.sin((x / pinEvery) * Math.PI)) * 6 * s;
-    const y = ledgeY + sag;
-    const green = `hsl(${134 + rand() * 20}, ${34 + rand() * 24}%, ${13 + rand() * 15}%)`;
-    c.strokeStyle = green;
-    c.lineCap = 'round';
-    for (let n = 0; n < 5; n++) {
-      const len = (5 + rand() * 9) * s;
-      const ang = Math.PI / 2 + (rand() - 0.5) * 2.1;
-      c.lineWidth = (0.9 + rand() * 1.3) * s;
-      c.beginPath();
-      c.moveTo(x, y);
-      c.lineTo(x + Math.cos(ang) * len, y + Math.abs(Math.sin(ang)) * len * 0.9);
-      c.stroke();
-    }
-    if (rand() > 0.85) {
-      c.fillStyle = rand() > 0.5 ? '#c0182a' : '#9d1220';
-      c.beginPath();
-      c.arc(x + (rand() - 0.5) * 6 * s, y + (3 + rand() * 5) * s, 1.7 * s, 0, Math.PI * 2);
-      c.fill();
-    }
-    if (i % 7 === 0) {
-      bulbs.push({ x, y: y + (6 + rand() * 4) * s, phase: rand() * 6.28 });
-    }
-  }
+  // The garland itself is drawn live every frame with the same renderer as
+  // the desktop overlay (see drawGarland), so it matches that style.
 
   // --- icicles hanging off the ledge ---------------------------------------
   // Same treatment as the desktop fringe: clustered rather than evenly
   // spaced, and mostly transparent with the contrast in the rim.
   let ix = rand() * 30 * s;
   const tips = [];
-  while (ix < length) {
+  while (show.icicles && ix < length) {
     if (rand() < 0.45) {
       ix += (20 + rand() * 60) * s;
       continue;
@@ -153,7 +138,7 @@ function bakeStrip(length, depth, scale) {
   grad.addColorStop(0, 'rgba(255,255,255,0.98)');
   grad.addColorStop(0.7, 'rgba(240,248,255,0.9)');
   grad.addColorStop(1, 'rgba(206,226,246,0.35)');
-  c.fillStyle = grad;
+  c.fillStyle = show.snow ? grad : 'rgba(0,0,0,0)';
   c.beginPath();
   c.moveTo(0, ledgeY + 1 * s);
   for (let x = 0; x <= length; x += 7 * s) {
@@ -218,7 +203,13 @@ function applyEdgeTransform(edge, w, h) {
 }
 
 function frame(now) {
-  requestAnimationFrame(frame);
+  rafId = null;
+  schedule();
+  if (opts.fps > 0 && now - lastFrame < 1000 / opts.fps - 0.5) return;
+  // Pas proportionnel au temps écoulé (référence 60 i/s), pour que les
+  // flocons gardent la même vitesse quelle que soit la cadence.
+  const k = lastFrame ? Math.max(0.5, Math.min(8, (now - lastFrame) / (1000 / 60))) : 1;
+  lastFrame = now;
   const time = now / 1000;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!opts.enabled || canvas.width < 4 || canvas.height < 4) return;
@@ -231,9 +222,9 @@ function frame(now) {
   // folded in here or every element would come out double size on a
   // Retina display.
   const drawScale = Math.max(0.7, Math.min(1.8, depth / 78));
-  const key = `${Math.round(length)}x${Math.round(depth)}`;
+  const key = `${Math.round(length)}x${Math.round(depth)}|${opts.garland}|${opts.icicles}|${opts.snow}`;
   if (!bake || bakeKey !== key) {
-    bake = bakeStrip(length, depth, drawScale);
+    bake = bakeStrip(length, depth, drawScale, opts);
     bakeKey = key;
     bake.scale = drawScale;
     seedFlakes(length, depth);
@@ -241,10 +232,10 @@ function frame(now) {
 
   // Drifting flakes go behind the garland.
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  for (const f of flakes) {
-    f.y += f.vy;
-    f.drift += 0.02;
-    f.x += Math.sin(f.drift) * 0.25;
+  for (const f of opts.snow ? flakes : []) {
+    f.y += f.vy * k;
+    f.drift += 0.02 * k;
+    f.x += Math.sin(f.drift) * 0.25 * k;
     if (f.y > depth) {
       f.y = -2;
       f.x = Math.random() * length;
@@ -258,18 +249,20 @@ function frame(now) {
 
   ctx.drawImage(bake.cv, 0, 0);
 
-  // Lights, driven by the same controller as the desktop scene.
-  const palette = GARLAND_PALETTES[opts.style] ?? GARLAND_PALETTES.multicolor;
+  // Bulb string: same renderer as the desktop overlay, so the dock matches.
+  const palette = LIGHT_PALETTES[opts.style] ?? LIGHT_PALETTES.multicolor;
   const gain = opts.lightIntensity ?? 1;
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < bake.bulbs.length; i++) {
-    const b = bake.bulbs[i];
-    const color = palette[i % palette.length];
-    const lit = bulbLevel(opts.animation, time, i, b.phase, bake.bulbs.length);
-    const size = (16 + 13 * lit) * bake.scale;
-    ctx.globalAlpha = Math.min(1, 0.8 * lit * gain);
-    ctx.drawImage(glowSprite(color), b.x - size / 2, b.y - size / 2, size, size);
+  if (opts.garland) {
+    ctx.save();
+    ctx.translate(0, bake.ledgeY - 2 * bake.scale);
+    liveBulbs = drawGarland(ctx, length, time, palette, {
+      style: 'classic', swags: Math.max(2, Math.round(length / 420)),
+      sag: 0.35, size: Math.max(0.55, Math.min(1.1, depth / 90)),
+      animation: opts.animation, lightIntensity: gain,
+    });
+    ctx.restore();
   }
+  ctx.globalCompositeOperation = 'lighter';
   // Icicle tips pick up that light.
   for (const t of bake.tips) {
     const shine = 0.3 + 0.35 * Math.sin(time * 1.4 + t.phase);
@@ -280,28 +273,24 @@ function frame(now) {
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
 
-  // Bulb bodies on top of their own glow.
-  for (let i = 0; i < bake.bulbs.length; i++) {
-    const b = bake.bulbs[i];
-    const color = palette[i % palette.length];
-    const lit = bulbLevel(opts.animation, time, i, b.phase, bake.bulbs.length);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.55 + 0.45 * lit;
-    ctx.beginPath();
-    ctx.ellipse(b.x, b.y, 2.4 * bake.scale, 3.2 * bake.scale, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
   ctx.globalAlpha = 1;
   ctx.restore();
 }
 
 function applySettings(_theme, settings) {
   opts = {
-    style: settings?.garlandStyle ?? 'multicolor',
+    style: settings?.dockPalette ?? settings?.garlandStyle ?? 'multicolor',
     animation: settings?.lightAnimation ?? 'twinkle',
     lightIntensity: settings?.lightIntensity ?? 1,
-    enabled: (settings?.dockDecoration ?? true) || (settings?.taskbarDecoration ?? true),
+    enabled: ((settings?.dockDecoration ?? true) || (settings?.taskbarDecoration ?? true))
+      && settings?.paused !== true,
+    garland: settings?.dockGarland !== false,
+    icicles: settings?.dockIcicles !== false,
+    snow: settings?.dockSnow !== false,
+    fps: resolvePerformance(settings).dockFps,
   };
+  if (!opts.enabled) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  schedule();
 }
 
 if (isTauri) {
@@ -329,8 +318,10 @@ window.dockDecoration = {
   },
   setOptions(next) {
     opts = { ...opts, ...next };
+    schedule();
   },
-  getBulbCount: () => (bake ? bake.bulbs.length : 0),
+  getOptions: () => ({ ...opts }),
+  getBulbCount: () => liveBulbs,
   getGeometry: () => ({ ...geom }),
 };
 
@@ -344,4 +335,4 @@ window.dockDecorationReady = (async () => {
 })();
 
 resize();
-requestAnimationFrame(frame);
+schedule();

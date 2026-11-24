@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16324a"/><stop offset="1" stop-color="#07131f"/></linearGradient>
+<linearGradient id="t1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fae5f"/><stop offset="1" stop-color="#14612f"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.3" r="0.6"><stop offset="0" stop-color="#ffd86b" stop-opacity=".55"/><stop offset="1" stop-color="#ffd86b" stop-opacity="0"/></radialGradient>
+</defs>
+<rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+<rect x="64" y="64" width="896" height="896" rx="200" fill="url(#glow)"/>
+<g fill="#fff" opacity=".85"><circle cx="220" cy="240" r="9"/><circle cx="800" cy="200" r="12"/><circle cx="740" cy="400" r="7"/><circle cx="270" cy="470" r="8"/><circle cx="860" cy="560" r="9"/><circle cx="170" cy="660" r="7"/></g>
+<rect x="470" y="740" width="84" height="110" rx="10" fill="#6b4220"/>
+<path d="M512 250 L690 470 H600 L760 690 H264 L424 470 H334 Z" fill="url(#t1)"/>
+<path d="M512 250 L600 360 L512 340 L424 360 Z" fill="#5fcf80" opacity=".5"/>
+<path d="M280 676 Q512 720 744 676 L760 690 H264 Z" fill="#fff" opacity=".9"/>
+<polygon points="512,160 534,222 600,224 548,264 566,328 512,290 458,328 476,264 424,224 490,222" fill="#ffd23f"/>
+<circle cx="440" cy="560" r="22" fill="#e0453a"/><circle cx="590" cy="620" r="22" fill="#e0453a"/><circle cx="520" cy="440" r="18" fill="#ffd23f"/><circle cx="420" cy="660" r="18" fill="#4aa3ff"/><circle cx="620" cy="520" r="16" fill="#4aa3ff"/>
+<path d="M300 880 Q512 830 724 880 L724 900 H300 Z" fill="#f4f8fb"/>
+</svg>

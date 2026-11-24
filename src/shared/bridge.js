@@ -1,6 +1,6 @@
-// Thin IPC bridge. Falls back to localStorage + fetch when not running
-// inside Tauri, so the same UI code is servable as a plain static page
-// for Playwright tests (see docs/ARCHITECTURE.md, section 5).
+// Pont IPC fin. Rebondit sur localStorage + fetch quand il n'est pas dans Tauri,
+// de sorte que la même interface peut être servée comme page statique simple
+// pour les tests Playwright (voir docs/ARCHITECTURE.md, section 5).
 
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
@@ -46,6 +46,26 @@ const DEFAULT_SETTINGS = {
   renderer: 'auto',
   soundVolume: 0.4,
   autostart: false,
+  onboardingDone: false,
+  language: 'auto',
+  // Voir PERFORMANCE_PROFILES (shared/scene.js). « custom » rend la main à
+  // fpsLimit / renderer / dprCap / minTier ci-dessous.
+  performanceMode: 'balanced',
+  dprCap: 2,
+  minTier: 0,
+  paused: false,
+  displayMode: 'wallpaper',
+  dockPlacement: 'behind',
+  overlayOpacity: 1,
+  sceneMode: null,
+  snowColor: '#ffffff',
+  snowSpeed: 1,
+  flakeStyle: 'mixed', // mixed | soft | crystal
+  // Décoration du Dock / de la barre des tâches.
+  dockPalette: 'multicolor',
+  dockGarland: true,
+  dockIcicles: true,
+  dockSnow: true,
   // Per-screen composition and saved presets. Null here rather than a
   // built-in default, so the renderer can tell "never configured" (use the
   // stock composition) from "configured to be empty".
@@ -78,36 +98,38 @@ export async function saveSettings(settings) {
     return window.__TAURI__.core.invoke('save_settings', { settings });
   }
   localStorage.setItem('christmas-theme-settings', JSON.stringify(settings));
+  // Hors Tauri, les autres pages du même navigateur (aperçu) sont prévenues
+  // par l'évènement « storage » ; voir onSettingsChanged.
 }
 
-/// Where the Dock/taskbar strip was found, or why it wasn't. The settings
-/// window shows this next to the toggle so "it's on but nothing happens"
-/// is always explained rather than silent.
+/// Où la barre de Dock/tâches a été trouvée, ou pourquoi pas. Le panneau
+/// de paramètres l'affiche à côté du bouton pour expliquer « activé mais
+/// rien ne se passe » plutôt que de laisser un silence inexpliqué.
 export async function dockStatus() {
   if (isTauri) {
     return window.__TAURI__.core.invoke('dock_status');
   }
-  return { strips: [], reason: 'Dock/taskbar decoration only runs in the desktop app.' };
+  return { strips: [], reason: "La décoration du Dock / de la barre des tâches ne fonctionne que dans l'application de bureau." };
 }
 
-/// The connected displays, so the per-screen editor can name them. Outside
-/// Tauri there is exactly one notional screen, which is what keeps the
-/// settings UI testable as a plain page.
+/// Les écrans connectés, pour que l'éditeur par écran puisse les nommer.
+/// Hors Tauri, un seul écran est théorique, ce qui garde l'interface
+/// testable comme une page simple.
 export async function listScreens() {
   if (isTauri) {
     return window.__TAURI__.core.invoke('list_screens');
   }
   return [{
-    index: 0, label: 'overlay-0', name: 'Preview display',
+    index: 0, label: 'overlay-0', name: 'Écran de prévisualisation',
     x: 0, y: 0, width: 1920, height: 1080, scaleFactor: 1, primary: true,
     virtualOriginX: 0, virtualOriginY: 0,
   }];
 }
 
-/// Background images are stored per screen in their own files, never
-/// inside settings.json: a 4K photo as a data URL is megabytes, and
-/// putting it in the settings payload would mean rewriting and
-/// re-broadcasting it on every slider change.
+/// Les images d'arrière-plan sont stockées par écran dans leurs propres fichiers,
+/// jamais dans settings.json : une photo 4K en URL de données fait des
+/// mégaoctets, et l'écrire dans la charge utile des paramètres signifierait
+/// la réécrire et la renvoyer à chaque changement de curseur.
 export async function saveBackground(key, dataUrl) {
   if (isTauri) {
     return window.__TAURI__.core.invoke('save_background', { key, dataUrl });
@@ -121,6 +143,12 @@ export async function loadBackground(key) {
     return window.__TAURI__.core.invoke('load_background', { key });
   }
   return localStorage.getItem(`christmas-bg-${key}`);
+}
+
+/// Libellés traduits du menu de la barre des menus / zone de notification.
+export async function setTrayLabels(labels) {
+  if (isTauri) return window.__TAURI__.core.invoke('set_tray_labels', { labels });
+  return undefined;
 }
 
 export function onBackgroundChanged(callback) {
@@ -139,14 +167,24 @@ export async function disableEverything() {
   localStorage.removeItem('christmas-theme-settings');
 }
 
-// Lets the overlay window(s) react live when settings are saved from the
-// settings window, instead of only picking up changes on next launch.
-// The backend (main.rs) emits 'settings-changed' with { settings, theme }
-// right after save_settings persists. No equivalent exists outside Tauri
-// since there's only one page/window when testing standalone.
+// Permet aux fenêtres de superposition de réagir en live quand les paramètres
+// sont sauvegardés depuis la fenêtre des paramètres, au lieu d'attendre
+// le prochain lancement.
+// Le backend (main.rs) émet 'settings-changed' avec { settings, theme }
+// juste après que save_settings a persisté. Aucun équivalent n'existe hors Tauri
+// puisqu'il n'y a qu'une seule page/fenêtre lors des tests standalone.
 export function onSettingsChanged(callback) {
   if (!isTauri) {
-    return () => {};
+    // Aperçu dans un navigateur : une page d'aperçu ouverte à côté des
+    // paramètres suit les enregistrements via l'évènement « storage ».
+    const handler = async (e) => {
+      if (e.key !== 'christmas-theme-settings') return;
+      const settings = await getSettings();
+      const themes = await listThemes();
+      callback({ settings, theme: themes.find((x) => x.id === settings.themeId) ?? themes[0] });
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
   }
   let unlisten = () => {};
   window.__TAURI__.event
@@ -157,16 +195,16 @@ export function onSettingsChanged(callback) {
   return () => unlisten();
 }
 
-// The overlay publishes its measured frame rate / frame cost so the
-// settings window can display it. Broadcast straight over the Tauri event
-// bus rather than through a Rust command: it fires twice a second and has
-// no business touching the backend.
+// La superposition publie son taux de frames / coût par frame mesurés pour que
+// la fenêtre des paramètres puisse les afficher. Diffusion directe sur le bus
+// d'événements Tauri plutôt que via une commande Rust : elle se déclenche
+// deux fois par seconde et n'a pas à toucher le backend.
 export function publishStats(stats) {
   if (!isTauri) return;
   try {
     window.__TAURI__.event.emit('overlay-stats', stats);
   } catch {
-    /* the overlay must never break because stats couldn't be sent */
+    /* la superposition ne doit jamais échouer parce que les statistiques n'ont pas pu être envoyées */
   }
 }
 

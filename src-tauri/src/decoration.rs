@@ -210,12 +210,12 @@ fn platform_fallback(_monitor: &Monitor) -> Option<DockStrip> {
 /// mystery.
 pub fn unavailable_reason() -> &'static str {
     if cfg!(target_os = "macos") {
-        "No Dock strip detected — the Dock is probably set to auto-hide. \
-         Turn auto-hide off in System Settings › Desktop & Dock to decorate it."
+        "Aucune barre Dock détectée — le Dock est probablement masqué automatiquement. \
+         Désactivez le masquage dans Réglages Système › Bureau et Dock pour le décorer."
     } else if cfg!(target_os = "windows") {
-        "No taskbar strip detected — Explorer may not be running."
+        "Aucune barre des tâches détectée — l'Explorateur Windows n'est peut-être pas lancé."
     } else {
-        "Dock/taskbar decoration needs a desktop shell that reserves screen \
-         work area (macOS Dock or Windows taskbar)."
+        "La décoration du Dock / de la barre des tâches nécessite un environnement \
+         qui réserve une zone de travail (Dock macOS ou barre des tâches Windows)."
     }
 }

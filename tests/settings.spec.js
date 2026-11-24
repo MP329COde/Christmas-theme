@@ -4,13 +4,17 @@ test.beforeEach(async ({ page }) => {
   // Cleared ONCE, not through addInitScript: an init script runs on every
   // navigation, so it also wiped the storage a reload test was checking.
   await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(() => {
+    localStorage.clear();
+    // Les tests existants pilotent tous les réglages détaillés.
+    localStorage.setItem('christmas-advanced', '1');
+  });
   await page.reload();
   await page.evaluate(() => window.settingsReady);
 });
 
 test('opens on the scene tab with a screen picker', async ({ page }) => {
-  await expect(page.locator('h1')).toHaveText('🎄 Christmas Theme');
+  await expect(page.locator('h1')).toHaveText('Scène');
   await expect(page.locator('[data-testid="tab-scene"]')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-testid="screen-chip-0"]')).toBeVisible();
 });
@@ -44,8 +48,8 @@ test('a second fireplace can be added', async ({ page }) => {
   await expect(page.locator('[data-testid="fireplace-card-1"]')).toBeVisible();
 });
 
-test('a fireplace defaults to the rustic style and can be switched to modern', async ({ page }) => {
-  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('rustic');
+test('a fireplace defaults to the classic style and can be switched to modern', async ({ page }) => {
+  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('classic');
   await page.selectOption('[data-testid="fire-0-style"]', 'modern');
   await page.waitForTimeout(300);
   const stored = await page.evaluate(() =>
@@ -61,7 +65,7 @@ test('a theme with its own fireplaceStyle seeds new fireplaces with it', async (
   await page.click('[data-testid="fireplace-add"]');
   await expect(page.locator('[data-testid="fire-1-style"]')).toHaveValue('modern');
   // The existing (first) fireplace must NOT have been changed retroactively.
-  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('rustic');
+  await expect(page.locator('[data-testid="fire-0-style"]')).toHaveValue('classic');
 });
 
 test('a tree position slider moves the element and persists', async ({ page }) => {
@@ -199,7 +203,7 @@ test('background image controls appear only in image mode', async ({ page }) => 
 test('background panel identifies its renderer separately from WebGL scene layers', async ({ page }) => {
   await page.selectOption('[data-testid="background-mode"]', 'animated-forest');
   await expect(page.locator('[data-testid="background-renderer-info"]'))
-    .toContainText('Backgrounds use the Canvas 2D renderer');
+    .toContainText('utilisent le rendu Canvas 2D');
   await expect(page.locator('[data-testid="background-renderer-info"]'))
     .toContainText('WebGL');
 });
@@ -332,7 +336,7 @@ for (const action of ['remove', 'replace']) {
     if (action === 'remove') expect(result.own).toBeNull();
     else expect(result.own).toMatch(/^data:image\/svg\+xml;base64,/);
     await page.click('[data-testid="background-clear"]');
-    await expect(page.locator('[data-testid="status"]')).toHaveText('Background removed');
+    await expect(page.locator('[data-testid="status"]')).toHaveText('Arrière-plan retiré');
     expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0-2'))).toBeNull();
     expect(await page.evaluate(() => localStorage.getItem('christmas-bg-screen-0'))).toBe('shared-image');
   });
@@ -448,7 +452,7 @@ test('the performance panel explains a degraded quality tier', async ({ page }) 
   });
 
   await expect(page.locator('[data-testid="perf-tier-explain"]'))
-    .toContainText('reduced to “low”');
+    .toContainText('Qualité réduite à « basse »');
   await expect(page.locator('[data-testid="perf-tier-explain"]'))
     .toContainText('software rasteriser');
 
@@ -464,10 +468,55 @@ test('the performance panel explains a degraded quality tier', async ({ page }) 
 test('dock status line explains what was detected', async ({ page }) => {
   await page.click('[data-testid="tab-system"]');
   await expect(page.locator('[data-testid="dock-status"]'))
-    .toHaveText(/desktop app|Detected on|No Dock/);
+    .toHaveText(/application de bureau|Détectée sur|Aucune barre/);
 });
 
 test('disable everything reports back', async ({ page }) => {
   await page.click('[data-testid="disable-all"]');
-  await expect(page.locator('[data-testid="status"]')).toHaveText('Everything disabled');
+  await expect(page.locator('[data-testid="status"]')).toHaveText('Tout est désactivé');
+});
+
+test.describe('mode simple', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('christmas-advanced', '0'));
+    await page.reload();
+    await page.evaluate(() => window.settingsReady);
+  });
+
+  test('hides detailed controls until the advanced switch is on', async ({ page }) => {
+    await expect(page.locator('[data-testid="tree-0-x"]')).toBeVisible();
+    await expect(page.locator('[data-testid="tree-0-ornaments"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="preset-export"]')).toBeHidden();
+    await page.locator('[data-testid="advanced-toggle"]').check();
+    await expect(page.locator('[data-testid="tree-0-ornaments"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preset-export"]')).toBeVisible();
+  });
+
+  test('snow quantity is a single four-way choice', async ({ page }) => {
+    await page.click('[data-testid="tab-snow"]');
+    await page.click('[data-testid="snow-level-heavy"]');
+    await expect(page.locator('[data-testid="snow-level-heavy"]')).toHaveAttribute('aria-checked', 'true');
+    await page.waitForTimeout(300);
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('christmas-theme-settings') ?? '{}').snowDensity);
+    expect(stored).toBe(320);
+  });
+
+  test('fireplace garnishes are toggles and persist', async ({ page }) => {
+    await page.locator('[data-testid="fire-0-wreath"]').check();
+    await page.locator('[data-testid="fire-0-screen"]').check();
+    await expect(page.locator('[data-testid="fire-0-wreath"]')).toBeChecked();
+    await page.selectOption('[data-testid="fire-0-style"]', 'modern');
+    await expect(page.locator('[data-testid="fire-0-wreath"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="fire-0-screen"]')).toBeChecked();
+  });
+});
+
+test('the dock strip placement defaults to behind windows and can be switched', async ({ page }) => {
+  await page.click('[data-testid="tab-system"]');
+  await expect(page.locator('[data-testid="dock-placement-behind"]')).toHaveAttribute('aria-checked', 'true');
+  await page.click('[data-testid="dock-placement-front"]');
+  await expect(page.locator('[data-testid="dock-placement-front"]')).toHaveAttribute('aria-checked', 'true');
+  const saved = await page.evaluate(() => window.settingsReady.then(() => JSON.stringify(localStorage)));
+  expect(saved).toContain('front');
 });

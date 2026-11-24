@@ -11,7 +11,11 @@ use serde::Serialize;
 use settings::AppSettings;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{Emitter, EventTarget, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{
+    Emitter, EventTarget, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 use theme::Theme;
 
 struct AppState {
@@ -23,6 +27,117 @@ struct AppState {
     /// this is what keeps that poll from re-emitting an identical payload
     /// once a second forever.
     dock_strips: HashMap<String, Option<DockStrip>>,
+    /// Derniers réglages enregistrés, gardés en mémoire : la boucle de
+    /// surveillance du Dock relisait et re-parsait settings.json sur le
+    /// disque toutes les 1,2 s, pour toujours.
+    settings: AppSettings,
+    /// Vrai après « Tout désactiver » : plus rien n'est affiché jusqu'au
+    /// prochain enregistrement des réglages.
+    disabled: bool,
+    tray_items: Option<TrayItems>,
+    tray_labels: TrayLabels,
+}
+
+struct TrayItems {
+    open: MenuItem<tauri::Wry>,
+    pause: MenuItem<tauri::Wry>,
+    quit: MenuItem<tauri::Wry>,
+}
+
+/// Libellés du menu de la barre des menus / zone de notification. Ils
+/// viennent de l'interface (src/i18n) pour que toutes les traductions
+/// vivent à un seul endroit ; les valeurs par défaut ne servent que le
+/// temps que la fenêtre des paramètres se charge.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct TrayLabels {
+    open: String,
+    pause: String,
+    resume: String,
+    quit: String,
+    tooltip: String,
+}
+
+impl Default for TrayLabels {
+    fn default() -> Self {
+        Self {
+            open: "Ouvrir les paramètres".into(),
+            pause: "Mettre en pause".into(),
+            resume: "Reprendre la décoration".into(),
+            quit: "Quitter".into(),
+            tooltip: "Décoration de Noël".into(),
+        }
+    }
+}
+
+fn refresh_tray(app: &tauri::AppHandle) {
+    let state = app.state::<Mutex<AppState>>();
+    let state = state.lock().unwrap();
+    if let Some(items) = &state.tray_items {
+        let labels = &state.tray_labels;
+        let _ = items.open.set_text(&labels.open);
+        let _ = items.quit.set_text(&labels.quit);
+        let hidden = state.settings.paused || state.disabled;
+        let _ = items.pause.set_text(if hidden { &labels.resume } else { &labels.pause });
+    }
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(&state.tray_labels.tooltip));
+    }
+}
+
+#[tauri::command]
+fn set_tray_labels(app: tauri::AppHandle, state: State<Mutex<AppState>>, labels: TrayLabels) {
+    state.lock().unwrap().tray_labels = labels;
+    refresh_tray(&app);
+}
+
+/// Applique aux fenêtres ce que les réglages disent d'elles : visibles ou
+/// non (pause), et à quel niveau (fond d'écran ou par-dessus tout).
+fn apply_window_state(app: &tauri::AppHandle) {
+    let (hidden, front, dock_enabled) = {
+        let state = app.state::<Mutex<AppState>>();
+        let state = state.lock().unwrap();
+        let s = &state.settings;
+        (
+            s.paused || state.disabled,
+            s.display_mode == "front",
+            s.dock_decoration || s.taskbar_decoration,
+        )
+    };
+    for (label, window) in app.webview_windows() {
+        if !label.starts_with("overlay-") {
+            continue;
+        }
+        if hidden {
+            let _ = window.hide();
+        } else {
+            let _ = window.set_always_on_bottom(!front);
+            let _ = window.set_always_on_top(front);
+            let _ = window.show();
+            let _ = window.set_ignore_cursor_events(true);
+        }
+    }
+    sync_dock_windows(app, dock_enabled && !hidden);
+    refresh_tray(app);
+}
+
+/// Bascule la pause depuis le menu : même chemin qu'un enregistrement
+/// depuis la fenêtre des paramètres, pour que tout le monde soit prévenu.
+fn toggle_pause(app: &tauri::AppHandle) {
+    let payload = {
+        let state = app.state::<Mutex<AppState>>();
+        let mut state = state.lock().unwrap();
+        if state.disabled {
+            state.disabled = false;
+            state.settings.paused = false;
+        } else {
+            state.settings.paused = !state.settings.paused;
+        }
+        let _ = state.settings.save(&state.settings_path);
+        let theme = resolve_theme(&all_themes(&state.themes_dir), &state.settings.theme_id);
+        SettingsChanged { settings: state.settings.clone(), theme }
+    };
+    let _ = app.emit("settings-changed", payload);
+    apply_window_state(app);
 }
 
 /// Payload broadcast to every window whenever settings are saved, so the
@@ -66,8 +181,7 @@ fn list_themes(state: State<Mutex<AppState>>) -> Vec<Theme> {
 
 #[tauri::command]
 fn get_settings(state: State<Mutex<AppState>>) -> AppSettings {
-    let state = state.lock().unwrap();
-    AppSettings::load(&state.settings_path)
+    state.lock().unwrap().settings.clone()
 }
 
 #[tauri::command]
@@ -76,22 +190,34 @@ fn save_settings(
     state: State<Mutex<AppState>>,
     settings: AppSettings,
 ) -> Result<(), String> {
-    let state = state.lock().unwrap();
+    let mut state = state.lock().unwrap();
     settings.save(&state.settings_path).map_err(|e| e.to_string())?;
+    state.settings = settings.clone();
+    state.disabled = false;
     if let Some(player) = &state.player {
         player.set_volume(settings.sound_volume);
     }
 
+    // Le réglage « démarrage automatique » n'était que mémorisé : on
+    // l'applique réellement auprès du système (LaunchAgent / clé Run).
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let launcher = app.autolaunch();
+        if let Ok(enabled) = launcher.is_enabled() {
+            if enabled != settings.autostart {
+                let _ = if settings.autostart { launcher.enable() } else { launcher.disable() };
+            }
+        }
+    }
+
     let theme = resolve_theme(&all_themes(&state.themes_dir), &settings.theme_id);
-    let dock_enabled = settings.dock_decoration || settings.taskbar_decoration;
     let _ = app.emit(
         "settings-changed",
         SettingsChanged { settings, theme },
     );
-    // Released before syncing: sync_dock_windows locks the same state to
-    // compare against the last pushed geometry.
+    // Released before syncing: apply_window_state locks the same state.
     drop(state);
-    sync_dock_windows(&app, dock_enabled);
+    apply_window_state(&app);
     Ok(())
 }
 
@@ -100,21 +226,31 @@ fn disable_everything(
     app: tauri::AppHandle,
     state: State<Mutex<AppState>>,
 ) -> Result<(), String> {
-    let state_guard = state.lock().unwrap();
+    let mut state_guard = state.lock().unwrap();
     AppSettings::wipe(&state_guard.settings_path).map_err(|e| e.to_string())?;
+    // La langue est conservée : tout désactiver ne doit pas faire
+    // rebasculer l'interface dans une autre langue sous les yeux.
+    let language = state_guard.settings.language.clone();
+    state_guard.settings = AppSettings { language, ..AppSettings::default() };
+    state_guard.disabled = true;
     if let Some(player) = &state_guard.player {
         player.stop();
     }
     let config_dir = state_guard.settings_path.parent().map(|p| p.to_path_buf());
     drop(state_guard);
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let _ = app.autolaunch().disable();
+    }
     // "No residual trace" means every file this app wrote, not only the
     // settings: stored background images go too.
     if let Some(dir) = config_dir {
         let _ = std::fs::remove_dir_all(dir.join("backgrounds"));
     }
-    // It also includes screen furniture: take the dock decoration down
-    // immediately rather than at next launch.
-    sync_dock_windows(&app, false);
+    // It also includes screen furniture: the snow overlays and the dock
+    // decoration come down immediately rather than at next launch (the
+    // overlays used to keep snowing after "disable everything").
+    apply_window_state(&app);
     Ok(())
 }
 
@@ -129,7 +265,7 @@ fn spawn_dock_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
         let label = format!("dock-{i}");
         let window =
             WebviewWindowBuilder::new(app, &label, WebviewUrl::App("dock/index.html".into()))
-                .title("Dock Decoration")
+                .title("Décoration de Bureau")
                 .transparent(true)
                 .decorations(false)
                 // Without this, macOS draws its native drop shadow behind
@@ -139,12 +275,8 @@ fn spawn_dock_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
                 // halo hugging the decoration's outline instead of a clean
                 // transparent edge.
                 .shadow(false)
-                // Unlike the snow overlay (a live wallpaper, deliberately
-                // at the bottom), this one has to sit above the desktop
-                // to decorate the shell bar at all. It's a thin strip in
-                // screen furniture no app window occupies, and it's
-                // click-through, so it stays out of the way.
-                .always_on_top(true)
+                // Le niveau (devant / derrière les fenêtres) dépend du
+                // réglage `dockPlacement` : voir sync_dock_windows.
                 .skip_taskbar(true)
                 .focused(false)
                 .visible(false)
@@ -163,11 +295,20 @@ fn sync_dock_windows(app: &tauri::AppHandle, enabled: bool) {
     let Ok(monitors) = app.available_monitors() else {
         return;
     };
+    let dock_front = {
+        let state = app.state::<Mutex<AppState>>();
+        let state = state.lock().unwrap();
+        state.settings.dock_placement == "front"
+    };
     for (i, monitor) in monitors.iter().enumerate() {
         let label = format!("dock-{i}");
         let Some(window) = app.get_webview_window(&label) else {
             continue;
         };
+        // Appliqué à chaque synchronisation (et pas seulement quand la
+        // géométrie change) pour qu'un changement de réglage soit immédiat.
+        let _ = window.set_always_on_bottom(!dock_front);
+        let _ = window.set_always_on_top(dock_front);
         let strip = if enabled {
             decoration::detect(monitor)
         } else {
@@ -252,7 +393,7 @@ fn list_screens(app: tauri::AppHandle) -> Vec<ScreenInfo> {
             name: m
                 .name()
                 .cloned()
-                .unwrap_or_else(|| format!("Display {}", index + 1)),
+                .unwrap_or_else(|| format!("Écran {}", index + 1)),
             x: m.position().x,
             y: m.position().y,
             width: m.size().width,
@@ -362,7 +503,7 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
     for (i, monitor) in monitors.iter().enumerate() {
         let label = format!("overlay-{i}");
         let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("overlay/index.html".into()))
-            .title("Snow Overlay")
+            .title("Superposition de Neige")
             .transparent(true)
             .decorations(false)
             // Same reasoning as the dock windows: this window covers the
@@ -377,7 +518,9 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
             .always_on_bottom(true)
             .skip_taskbar(true)
             .focused(false)
-            .visible(true)
+            // Affichée par apply_window_state une fois les réglages connus
+            // (pause, mode d'affichage), jamais avant.
+            .visible(false)
             .inner_size(monitor.size().width as f64, monitor.size().height as f64)
             .position(monitor.position().x as f64, monitor.position().y as f64)
             .build()?;
@@ -399,8 +542,71 @@ fn spawn_overlay_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Réaffiche la fenêtre des paramètres (fermée vers la zone de notification).
+fn show_settings(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// Icône de la zone de notification : l'application vit en arrière-plan,
+/// fermer les paramètres ne doit donc pas arrêter la décoration.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let labels = TrayLabels::default();
+    let open = MenuItem::with_id(app, "open", &labels.open, true, None::<&str>)?;
+    let pause = MenuItem::with_id(app, "pause", &labels.pause, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open, &sep1, &pause, &sep2, &quit])?;
+
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip(&labels.tooltip)
+        .menu(&menu)
+        // macOS : un clic sur une icône de la barre des menus ouvre son
+        // menu, c'est la convention. Windows / Linux : le clic gauche ouvre
+        // directement les paramètres, le clic droit le menu.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_settings(app),
+            "pause" => toggle_pause(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if cfg!(target_os = "macos") {
+                return;
+            }
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_settings(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    app.state::<Mutex<AppState>>().lock().unwrap().tray_items =
+        Some(TrayItems { open, pause, quit });
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if window.label() == "settings" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -418,21 +624,40 @@ fn main() {
                 .join("themes");
 
             let player = AmbientPlayer::new();
+            let initial = AppSettings::load(&settings_path);
+            let first_run = !initial.onboarding_done;
 
             app.manage(Mutex::new(AppState {
                 settings_path,
                 themes_dir,
                 player,
                 dock_strips: HashMap::new(),
+                settings: initial,
+                disabled: false,
+                tray_items: None,
+                tray_labels: TrayLabels::default(),
             }));
 
+            // macOS : application « accessoire » — aucune icône dans le Dock
+            // ni dans le sélecteur d'applications, seulement l'icône de la
+            // barre des menus. Sous Windows et Linux, les fenêtres de
+            // décoration sont déjà hors barre des tâches (skip_taskbar) et
+            // l'application vit dans la zone de notification.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            build_tray(app)?;
             spawn_overlay_windows(app.handle())?;
             spawn_dock_windows(app.handle())?;
+            apply_window_state(app.handle());
 
-            let initial = AppSettings::load(
-                &app.state::<Mutex<AppState>>().lock().unwrap().settings_path.clone(),
-            );
-            sync_dock_windows(app.handle(), initial.dock_decoration || initial.taskbar_decoration);
+            // La fenêtre des paramètres ne s'ouvre d'elle-même qu'au tout
+            // premier lancement (assistant de configuration). Ensuite, un
+            // démarrage — notamment automatique à l'ouverture de session —
+            // reste silencieux : on y revient par l'icône.
+            if first_run {
+                show_settings(app.handle());
+            }
 
             // Poll for Dock/taskbar geometry changes. Neither macOS nor
             // Windows offers a dependable notification for "the Dock moved
@@ -447,9 +672,11 @@ fn main() {
                 let _ = handle.run_on_main_thread(move || {
                     let enabled = {
                         let state = h.state::<Mutex<AppState>>();
-                        let path = state.lock().unwrap().settings_path.clone();
-                        let s = AppSettings::load(&path);
-                        s.dock_decoration || s.taskbar_decoration
+                        let state = state.lock().unwrap();
+                        let s = &state.settings;
+                        (s.dock_decoration || s.taskbar_decoration)
+                            && !s.paused
+                            && !state.disabled
                     };
                     sync_dock_windows(&h, enabled);
                 });
@@ -465,8 +692,9 @@ fn main() {
             dock_status,
             list_screens,
             save_background,
-            load_background
+            load_background,
+            set_tray_labels
         ])
         .run(tauri::generate_context!())
-        .expect("error while running christmas-theme app");
+        .expect("erreur lors de l'exécution de Décoration de Noël");
 }

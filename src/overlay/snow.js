@@ -15,7 +15,10 @@ import {
   listScreens,
 } from '../shared/bridge.js';
 import { drawGarland, drawTree, drawFireplace, drawHolidayDecoration } from './decor.js';
-import { screenConfig, resolvePalette, resolveWeatherProfile, TREE_STYLES, defaultScene } from '../shared/scene.js';
+import {
+  screenConfig, resolvePalette, resolveWeatherProfile, TREE_STYLES, defaultScene,
+  isAnimatedBackground, resolvePerformance,
+} from '../shared/scene.js';
 import {
   drawSky, drawGlitter, drawIcicles, invalidateLights, invalidateAurora,
 } from './lights.js';
@@ -71,7 +74,21 @@ let config = {
   maxSnowHeight: 60,
   glitterDensity: 1,
   color: '#ffffff',
+  speed: 1,
+  flakeStyle: 'mixed',
 };
+
+// Profil de performance en vigueur (shared/scene.js) : plafond de densité
+// de pixels, facteur de neige et mouvement. Le plafond de DPR est le
+// levier le plus rentable après la cadence : sur un écran Retina, passer
+// de 2 à 1 divise par quatre le nombre de pixels composés à chaque image.
+let perf = { dprCap: 2, snowScale: 1, motion: 1 };
+let paused = false;
+let frontMode = false;
+// Durée de l'image courante rapportée à 30 i/s. La neige avançait d'un pas
+// fixe PAR IMAGE : elle tombait deux fois plus vite à 60 i/s qu'à 30, et
+// aurait rampé à 15. Le pas est maintenant proportionnel au temps écoulé.
+let frameScale = 1;
 
 // 0 = uncapped, i.e. run at whatever the display refreshes at (120Hz on a
 // ProMotion panel). The cap is there to save battery, it is not a floor.
@@ -336,13 +353,16 @@ function refreshBackground(force = false) {
 // the aurora and snow. It reacts to the scene's light intensity so the
 // wallpaper never feels disconnected from the decorations.
 function drawAnimatedForest(c, w, h, time) {
-  winterBackground.draw(c, w, h, time, sceneCfg, decorConfig, backgroundReducedMotion.matches);
+  winterBackground.draw(c, w, h, time * (perf.motion ?? 1), sceneCfg,
+    { ...decorConfig, detail: quality.tier.starDetail }, backgroundReducedMotion.matches);
 }
 
 /// Draws the background under everything else: either an image or the
 /// procedural animated winter forest.
 function drawBackground(w, h, time) {
-  if (sceneCfg.background === 'animated-forest' || sceneCfg.background === 'alpine-lake') {
+  // Par-dessus les fenêtres, un fond opaque masquerait tout l'écran.
+  if (frontMode) return;
+  if (isAnimatedBackground(sceneCfg.background)) {
     drawAnimatedForest(ctx, w, h, time);
     return;
   }
@@ -363,7 +383,7 @@ let viewH = window.innerHeight;
 let dpr = 1;
 
 function resize() {
-  dpr = window.devicePixelRatio || 1;
+  dpr = Math.min(window.devicePixelRatio || 1, perf.dprCap || 2);
   viewW = window.innerWidth;
   viewH = window.innerHeight;
   canvas.width = Math.round(viewW * dpr);
@@ -403,7 +423,9 @@ function resetFlake(f, atTop) {
   f.layer = depth > 0.72 ? 2 : depth > 0.38 ? 1 : 0;
   // Only mid/near flakes are ever detailed crystals — a distant flake is
   // too small for the shape to read, so drawing one is wasted work.
-  f.isCrystal = depth > 0.45 && Math.random() < 0.4;
+  f.isCrystal = config.flakeStyle === 'soft' ? false
+    : config.flakeStyle === 'crystal' ? depth > 0.3 && Math.random() < 0.85
+      : depth > 0.45 && Math.random() < 0.4;
   f.x = Math.random() * viewW;
   f.y = atTop ? -10 : Math.random() * -viewH;
   f.r = config.flakeSize * config.flakeScale * (0.35 + depth * 1.5) * (0.75 + Math.random() * 0.5);
@@ -444,7 +466,7 @@ function resizeFlakes(n) {
 /// which is exactly "the smaller of what the user asked for and what the
 /// machine can currently afford".
 function applyDensity() {
-  resizeFlakes(config.density * (quality.tier.snowScale ?? 1));
+  resizeFlakes(config.density * (quality.tier.snowScale ?? 1) * (perf.snowScale ?? 1));
 }
 
 export function setDensity(density) {
@@ -493,6 +515,56 @@ export function stop() {
 
 export function start() {
   running = true;
+  schedule();
+}
+
+/// Une seule demande d'image en attente à la fois, et aucune tant que la
+/// décoration est en pause ou la fenêtre masquée : une boucle rAF qui
+/// tourne à vide réveille quand même le processus 60 fois par seconde.
+function schedule() {
+  if (rafId !== null || paused || document.hidden) return;
+  rafId = requestAnimationFrame(tick);
+}
+
+function setPaused(value) {
+  if (paused === !!value) return;
+  paused = !!value;
+  if (paused) {
+    ctx.clearRect(0, 0, viewW, viewH);
+    fctx.clearRect(0, 0, viewW, viewH);
+  } else {
+    lastFrameAt = 0;
+    schedule();
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { lastFrameAt = 0; schedule(); }
+});
+
+/// Teinte un sprite blanc : même forme et même transparence, autre couleur.
+function tinted(sprite, color) {
+  const cv = document.createElement('canvas');
+  cv.width = sprite.width; cv.height = sprite.height;
+  const c = cv.getContext('2d');
+  c.drawImage(sprite, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  c.globalAlpha = 0.88;
+  c.fillStyle = color;
+  c.fillRect(0, 0, cv.width, cv.height);
+  return cv;
+}
+
+let activeFlakeSprites = flakeSprites;
+let activeCrystalStrip = crystalStrip;
+let activeFlakeColor = '#ffffff';
+function applyFlakeColor(color) {
+  const next = /^#[0-9a-f]{6}$/i.test(color ?? '') ? color.toLowerCase() : '#ffffff';
+  if (next === activeFlakeColor) return;
+  activeFlakeColor = next;
+  const white = next === '#ffffff';
+  activeFlakeSprites = white ? flakeSprites : flakeSprites.map((sp) => tinted(sp, next));
+  activeCrystalStrip = white ? crystalStrip : tinted(crystalStrip, next);
 }
 
 /// Draws one snowflake, scaled and softened by its depth. Distant flakes
@@ -508,7 +580,7 @@ function drawFlake(target, f) {
   // back to it rather than draw an illegible hollow circle.
   if (!f.isCrystal || f.r < 4) {
     const size = f.r * 4;
-    target.drawImage(flakeSprites[f.layer], f.x - size / 2, f.y - size / 2, size, size);
+    target.drawImage(activeFlakeSprites[f.layer], f.x - size / 2, f.y - size / 2, size, size);
     return;
   }
 
@@ -517,7 +589,7 @@ function drawFlake(target, f) {
   if (step < 0) step += CRYSTAL_STEPS;
   const size = f.r * 4.4;
   target.drawImage(
-    crystalStrip, step * CRYSTAL_SIZE, 0, CRYSTAL_SIZE, CRYSTAL_SIZE,
+    activeCrystalStrip, step * CRYSTAL_SIZE, 0, CRYSTAL_SIZE, CRYSTAL_SIZE,
     f.x - size / 2, f.y - size / 2, size, size
   );
 }
@@ -527,14 +599,15 @@ function drawFlake(target, f) {
 /// the decorations, then near snow) while each flake is still stepped
 /// exactly once per frame.
 function stepFlake(f, gust) {
-  f.y += f.speed;
-  f.drift += f.driftRate;
+  const k = frameScale;
+  f.y += f.speed * config.speed * k;
+  f.drift += f.driftRate * k;
   // Nearer flakes are pushed further by the same wind, which is what makes
   // the layers visibly separate instead of moving as one sheet.
-  f.x += Math.sin(f.drift) * config.wind * gust * (0.35 + f.depth * 1.3);
+  f.x += Math.sin(f.drift) * config.wind * gust * (0.35 + f.depth * 1.3) * k;
   // A gust also drives the whole field sideways, not just the flutter.
-  f.x += config.wind * (gust - 1) * 0.9 * (0.3 + f.depth);
-  f.rotation += f.spin;
+  f.x += config.wind * (gust - 1) * 0.9 * (0.3 + f.depth) * k;
+  f.rotation += f.spin * k;
 
   if (f.x < -40) f.x = viewW + 40;
   else if (f.x > viewW + 40) f.x = -40;
@@ -689,6 +762,11 @@ function render(time) {
       size: garland.lights?.size,
       sag: garland.sag,
       spacing: garland.spacing,
+      style: garland.style,
+      swags: garland.swags,
+      bulbShape: garland.bulbShape,
+      glow: garland.glow,
+      detail: quality.tier.starDetail,
       lightIntensity: (decorConfig.lightIntensity ?? 1) * (garland.lights?.intensity ?? 1),
     });
   }
@@ -728,16 +806,18 @@ function render(time) {
 }
 
 function tick(now) {
-  rafId = requestAnimationFrame(tick);
+  rafId = null;
+  schedule();
 
   const ts = now ?? performance.now();
-  if (!running) return;
+  if (!running || paused) return;
 
   if (fpsLimit > 0) {
     // Half a millisecond of slack: without it a 120Hz display running a
     // 120 cap drops every other frame to 60 through rounding.
     if (ts - lastFrameAt < 1000 / fpsLimit - 0.5) return;
   }
+  frameScale = lastFrameAt ? Math.max(0.25, Math.min(4, (ts - lastFrameAt) / (1000 / 30))) : 1;
   lastFrameAt = ts;
 
   const t0 = performance.now();
@@ -763,7 +843,7 @@ function tick(now) {
 
 resize();
 setDensity(config.density);
-tick();
+schedule();
 
 // Expose for Playwright / manual debugging without a module bundler step.
 window.snowOverlay = {
@@ -771,6 +851,8 @@ window.snowOverlay = {
   getSnowConfig: () => ({ ...config }),
   getDecorConfig: () => ({ ...decorConfig }),
   onQualityTierChanged, getQualityTier,
+  getPerformance: () => ({ ...perf, dpr, paused, fpsLimit }),
+  isPaused: () => paused,
   /// Test-only hook: feeds a synthetic frame cost straight into the
   /// quality governor, bypassing the real render loop entirely, so a
   /// Playwright test can simulate a slow machine deterministically
@@ -810,6 +892,17 @@ async function applyThemeAndSettings(theme, settings) {
     : Number(sceneCfg.snowDensity);
   const weather = resolveWeatherProfile(sceneCfg.weatherProfile);
 
+  const nextPerf = resolvePerformance(settings);
+  const dprChanged = nextPerf.dprCap !== perf.dprCap;
+  perf = nextPerf;
+  quality.setMinTier(perf.minTier);
+  if (dprChanged) resize();
+  frontMode = settings?.displayMode === 'front';
+  const opacity = Math.max(0.1, Math.min(1, Number(settings?.overlayOpacity ?? 1) || 1));
+  document.body.style.opacity = String(opacity);
+  applyFlakeColor(settings?.snowColor);
+  setPaused(settings?.paused === true);
+
   setConfig({
     density: sceneCfg.enabled === false ? 0 : density,
     wind: (settings?.snowWind ?? theme.snow.wind) * weather.wind,
@@ -818,8 +911,10 @@ async function applyThemeAndSettings(theme, settings) {
     accumulate: settings?.snowAccumulate ?? theme.snow.accumulate,
     maxSnowHeight: (settings?.maxSnowHeight ?? 60) * weather.accumulate,
     glitterDensity: weather.glitterDensity,
+    speed: Math.max(0.2, Math.min(3, Number(settings?.snowSpeed ?? 1) || 1)),
+    flakeStyle: settings?.flakeStyle ?? 'mixed',
   });
-  setFpsLimit(settings?.fpsLimit ?? 0);
+  setFpsLimit(perf.fpsLimit);
   themeColors = theme.colors;
   bankDirty = true;
 
@@ -841,7 +936,9 @@ async function applyThemeAndSettings(theme, settings) {
   for (const listener of sceneListeners) {
     listener(sceneCfg, {
       themeColors,
-      fpsLimit: settings?.fpsLimit ?? 0,
+      fpsLimit: perf.fpsLimit,
+      paused,
+      perf,
       lightIntensity: decorConfig.lightIntensity,
     });
   }

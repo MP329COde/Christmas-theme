@@ -10,3 +10,4 @@ playwright-report/
 # local scratch for capture/debug scripts
 .scratch/
 test-results/
+dist-release/

@@ -16,6 +16,7 @@
 import './snow.js';
 import { GlTrees } from './gl-trees.js';
 import { getSettings } from '../shared/bridge.js';
+import { resolvePerformance } from '../shared/scene.js';
 
 const glCanvas = document.getElementById('snow-gl');
 const overlay = window.snowOverlay;
@@ -38,9 +39,10 @@ async function boot() {
   await window.snowOverlayReady;
   const params = new URLSearchParams(location.search);
   const stored = await getSettings().catch(() => ({}));
-  const preference = params.get('renderer') ?? stored?.renderer ?? 'auto';
+  const perf = resolvePerformance(stored);
+  const preference = params.get('renderer') ?? perf.renderer ?? 'auto';
 
-  const settings = { fpsLimit: stored?.fpsLimit ?? 0 };
+  const settings = { fpsLimit: perf.fpsLimit };
   const glTrees = new GlTrees(glCanvas);
 
   if (preference === 'canvas') {
@@ -60,6 +62,11 @@ async function boot() {
     if (appSettings?.fpsLimit !== undefined) {
       settings.fpsLimit = appSettings.fpsLimit;
       glTrees.setFpsLimit(appSettings.fpsLimit);
+    }
+    // En pause, le moteur GPU s'arrête complètement (pas seulement masqué).
+    if (appSettings && adopted) {
+      if (appSettings.paused) { glTrees.stop(); glCanvas.hidden = true; }
+      else { glCanvas.hidden = false; glTrees.run(); }
     }
     if (adopted) glTrees.sync(sceneCfg, latestTheme);
   });

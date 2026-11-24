@@ -24,7 +24,7 @@
 // Re-exported so existing importers of this module keep working; the
 // definition lives in shared/scene.js because BOTH renderers need it and
 // neither owns it.
-import { bulbLevel } from '../shared/scene.js';
+import { bulbLevel, HOLIDAY_DECORATION_TYPES } from '../shared/scene.js';
 export { bulbLevel };
 
 export const GARLAND_PALETTES = {
@@ -181,60 +181,8 @@ function bough(c, x, y, len, angle, width, color, rand) {
 // garland (top of screen)
 // ---------------------------------------------------------------------------
 
-/// A hung cable with bulbs. The wire is one cheap stroked path; each bulb
-/// is a baked glow sprite plus a tiny shaded body, so the whole string
-/// costs a couple of dozen blits instead of a couple of dozen gradients.
-export function drawGarland(ctx, width, time, colors, opts = {}) {
-  const spacing = 54 * (opts.spacing ?? 1);
-  const count = Math.max(2, Math.round(width / spacing));
-  const sag = opts.sag ?? 1;
-  const wireY = (t) => 8 + Math.sin(t * Math.PI * 2) * 4 * sag + Math.sin(t * Math.PI) * 26 * sag;
-
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(16,20,26,0.8)';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  for (let i = 0; i <= count * 3; i++) {
-    const t = i / (count * 3);
-    const x = t * width;
-    const y = wireY(t);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  for (let i = 0; i <= count; i++) {
-    const t = i / count;
-    const x = t * width;
-    const capY = wireY(t);
-    const y = capY + 11;
-    const color = colors[i % colors.length];
-    const lit = bulbLevel(opts.animation, time, i, i * 1.37, count + 1, opts.speed ?? 1);
-    const gain = opts.lightIntensity ?? 1;
-
-    ctx.fillStyle = '#22262d';
-    ctx.fillRect(x - 2, capY, 4, 5);
-
-    const glow = glowSprite(color);
-    const gs = 40 * lit * (0.8 + 0.2 * gain) * (opts.size ?? 1);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = Math.min(1, 0.85 * lit * gain);
-    ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = shade(color, -10 + 40 * lit);
-    ctx.beginPath();
-    ctx.ellipse(x, y + 1, 3.4, 4.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(255,255,255,${0.55 * lit})`;
-    ctx.beginPath();
-    ctx.ellipse(x - 1.3, y - 0.9, 1, 1.5, -0.4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
+// Voir garland.js : cinq styles, câble et décor cuits une fois.
+export { drawGarland } from './garland.js';
 
 // ---------------------------------------------------------------------------
 // conifers
@@ -1643,13 +1591,424 @@ function bakeModernFireplace(scale, colors, opts) {
   };
 }
 
+/// Cheminée classique : conduit en briques à joints clairs, manteau en bois
+/// peint sur corbeaux, foyer cerclé de fonte avec fond noirci par la suie,
+/// bûches et chenets, dalle de marbre. Même forme de retour que les autres
+/// styles : l'animation (flammes, braises, lumière) n'a rien à changer.
+const CLASSIC_BRICKS = {
+  red: [158, 72, 54, 24, 18, 14],
+  ochre: [190, 138, 78, 22, 20, 14],
+  grey: [128, 126, 124, 20, 20, 20],
+  white: [214, 208, 198, 14, 14, 14],
+};
+
+function bakeClassicFireplace(scale, colors, opts) {
+  const [br0, bg0, bb0, brv, bgv, bbv] = CLASSIC_BRICKS[opts.brick] ?? CLASSIC_BRICKS.red;
+  const mantelBase = /^#[0-9a-f]{6}$/i.test(opts.mantelColor ?? '') ? opts.mantelColor : '#ece6d8';
+  const w = 320 * scale;
+  const h = 440 * scale;
+  const cv = makeCanvas(w, h);
+  const c = cv.getContext('2d');
+  const rand = mulberry32(1225);
+  const S = scale;
+
+  const mantelY = 118 * S;
+  const mantelH = 26 * S;
+  const hearthTop = h - 34 * S;
+  const openW = 150 * S;
+  const openH = 190 * S;
+  const ox = (w - openW) / 2;
+  const oy = hearthTop - openH;
+
+  // --- briques : appareil à joints décalés, couleur propre à chaque brique
+  const brickArea = (x0, x1, y0, y1) => {
+    c.save();
+    c.beginPath();
+    c.rect(x0, y0, x1 - x0, y1 - y0);
+    c.clip();
+    c.fillStyle = '#b3a793';
+    c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    const bw = 30 * S;
+    const bh = 11 * S;
+    let row = 0;
+    for (let y = y0; y < y1; y += bh, row++) {
+      let x = x0 - (row % 2 ? bw / 2 : 0);
+      for (; x < x1; x += bw) {
+        const tone = 0.78 + rand() * 0.4;
+        const r = clamp255((br0 + rand() * brv) * tone);
+        const g = clamp255((bg0 + rand() * bgv) * tone);
+        const b = clamp255((bb0 + rand() * bbv) * tone);
+        const base = `rgb(${r},${g},${b})`;
+        const bx = x + 1.2 * S;
+        const by = y + 1.2 * S;
+        const bwi = bw - 2.4 * S;
+        const bhi = bh - 2.4 * S;
+        const grad = c.createLinearGradient(0, by, 0, by + bhi);
+        grad.addColorStop(0, shade(base, 16));
+        grad.addColorStop(0.5, base);
+        grad.addColorStop(1, shade(base, -22));
+        c.fillStyle = grad;
+        roundRect(c, bx, by, bwi, bhi, 1.4 * S);
+        c.fill();
+        if (rand() < 0.5) {
+          c.fillStyle = `rgba(30,12,6,${0.08 + rand() * 0.12})`;
+          c.fillRect(bx + rand() * bwi * 0.7, by + rand() * bhi * 0.7, (3 + rand() * 6) * S, (1 + rand() * 2) * S);
+        }
+      }
+    }
+    c.restore();
+  };
+
+  const breastX = 38 * S;
+  const breastW = w - 76 * S;
+  brickArea(breastX, breastX + breastW, 0, hearthTop);
+
+  // Ombre portée sur les côtés du conduit : volume.
+  for (const [gx, dir] of [[breastX, 1], [breastX + breastW, -1]]) {
+    const g = c.createLinearGradient(gx, 0, gx + dir * 26 * S, 0);
+    g.addColorStop(0, 'rgba(15,6,2,0.5)');
+    g.addColorStop(1, 'rgba(15,6,2,0)');
+    c.fillStyle = g;
+    c.fillRect(dir > 0 ? gx : gx - 26 * S, 0, 26 * S, hearthTop);
+  }
+
+  // Le conduit se fond dans le mur vers le haut.
+  c.save();
+  c.globalCompositeOperation = 'destination-out';
+  const fade = c.createLinearGradient(0, 0, 0, 70 * S);
+  fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = fade;
+  c.fillRect(0, 0, w, 70 * S);
+  c.restore();
+
+  // --- linteau : rang de briques posées de chant + cornière d'acier
+  const lintelH = 20 * S;
+  brickArea(ox - 12 * S, ox + openW + 12 * S, oy - lintelH - 6 * S, oy - 6 * S);
+  const steel = c.createLinearGradient(0, oy - 8 * S, 0, oy);
+  steel.addColorStop(0, '#53575e');
+  steel.addColorStop(1, '#1d1f23');
+  c.fillStyle = steel;
+  c.fillRect(ox - 14 * S, oy - 8 * S, openW + 28 * S, 8 * S);
+
+  // --- foyer : fond de brique réfractaire noirci par la suie
+  const frame = 9 * S;
+  c.fillStyle = '#17120f';
+  c.fillRect(ox - frame, oy - frame, openW + frame * 2, openH + frame);
+  const back = c.createLinearGradient(0, oy, 0, hearthTop);
+  back.addColorStop(0, '#0a0706');
+  back.addColorStop(0.55, '#1c120d');
+  back.addColorStop(1, '#3a2418');
+  c.fillStyle = back;
+  c.fillRect(ox, oy, openW, openH);
+  c.save();
+  c.beginPath();
+  c.rect(ox, oy, openW, openH);
+  c.clip();
+  c.globalAlpha = 0.35;
+  brickArea(ox, ox + openW, oy, hearthTop);
+  c.globalAlpha = 1;
+  const soot = c.createLinearGradient(0, oy, 0, hearthTop);
+  soot.addColorStop(0, 'rgba(0,0,0,0.92)');
+  soot.addColorStop(0.7, 'rgba(8,3,1,0.55)');
+  soot.addColorStop(1, 'rgba(30,10,2,0.2)');
+  c.fillStyle = soot;
+  c.fillRect(ox, oy, openW, openH);
+  // Parois latérales en fuite.
+  for (const side of [0, 1]) {
+    const sx = side ? ox + openW : ox;
+    const sg = c.createLinearGradient(sx, 0, sx + (side ? -1 : 1) * 30 * S, 0);
+    sg.addColorStop(0, 'rgba(0,0,0,0.75)');
+    sg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sg;
+    c.fillRect(side ? sx - 30 * S : sx, oy, 30 * S, openH);
+  }
+  c.restore();
+
+  // Cadre de fonte avec filet de lumière.
+  c.strokeStyle = '#2a2c31';
+  c.lineWidth = frame;
+  c.strokeRect(ox - frame / 2, oy - frame / 2, openW + frame, openH + frame / 2);
+  c.strokeStyle = 'rgba(190,200,215,0.28)';
+  c.lineWidth = 1.2 * S;
+  c.beginPath();
+  c.moveTo(ox - frame + 1.5 * S, hearthTop);
+  c.lineTo(ox - frame + 1.5 * S, oy - frame + 1.5 * S);
+  c.lineTo(ox + openW + frame - 1.5 * S, oy - frame + 1.5 * S);
+  c.stroke();
+
+  // --- chenets et bûches
+  const logBase = hearthTop - 6 * S;
+  for (const fx of [ox + 18 * S, ox + openW - 18 * S]) {
+    c.fillStyle = '#16181b';
+    c.fillRect(fx - 2.5 * S, logBase - 34 * S, 5 * S, 34 * S);
+    c.beginPath();
+    c.arc(fx, logBase - 37 * S, 5 * S, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(200,210,225,0.35)';
+    c.beginPath();
+    c.arc(fx - 1.5 * S, logBase - 38.5 * S, 1.8 * S, 0, Math.PI * 2);
+    c.fill();
+  }
+  const drawLog = (cx, cy, len, rad, tilt) => {
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(tilt);
+    const bark = c.createLinearGradient(0, -rad, 0, rad);
+    bark.addColorStop(0, '#6a4526');
+    bark.addColorStop(0.45, '#3d2412');
+    bark.addColorStop(1, '#150b05');
+    c.fillStyle = bark;
+    roundRect(c, -len / 2, -rad, len, rad * 2, rad * 0.6);
+    c.fill();
+    c.strokeStyle = 'rgba(10,4,1,0.55)';
+    c.lineWidth = 0.9 * S;
+    for (let i = 0; i < 6; i++) {
+      const yy = -rad + (i + 0.5) * (rad * 2 / 6);
+      c.beginPath();
+      c.moveTo(-len / 2 + 3 * S, yy);
+      c.lineTo(len / 2 - 3 * S, yy + (rand() - 0.5) * 2 * S);
+      c.stroke();
+    }
+    c.fillStyle = '#c99a62';
+    c.beginPath();
+    c.ellipse(len / 2 - 1 * S, 0, rad * 0.45, rad * 0.92, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = 'rgba(90,50,20,0.7)';
+    c.lineWidth = 0.8 * S;
+    c.beginPath();
+    c.ellipse(len / 2 - 1 * S, 0, rad * 0.25, rad * 0.55, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+  };
+  drawLog(ox + openW / 2, logBase - 7 * S, openW * 0.78, 8 * S, 0.02);
+  drawLog(ox + openW / 2 - 14 * S, logBase - 22 * S, openW * 0.6, 7 * S, -0.06);
+  drawLog(ox + openW / 2 + 12 * S, logBase - 20 * S, openW * 0.55, 7 * S, 0.08);
+
+  // --- dalle de marbre : dessus en perspective, tranche, ombre
+  const slabTop = hearthTop;
+  const top = c.createLinearGradient(0, slabTop, 0, slabTop + 14 * S);
+  top.addColorStop(0, '#efeae2');
+  top.addColorStop(1, '#bdb6aa');
+  c.fillStyle = top;
+  c.beginPath();
+  c.moveTo(ox - frame - 14 * S, slabTop);
+  c.lineTo(ox + openW + frame + 14 * S, slabTop);
+  c.lineTo(w - 10 * S, slabTop + 16 * S);
+  c.lineTo(10 * S, slabTop + 16 * S);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = 'rgba(120,125,140,0.35)';
+  c.lineWidth = 0.9 * S;
+  for (let i = 0; i < 5; i++) {
+    c.beginPath();
+    const vx = 30 * S + rand() * (w - 60 * S);
+    c.moveTo(vx, slabTop + 1 * S);
+    c.quadraticCurveTo(vx + (rand() - 0.5) * 40 * S, slabTop + 8 * S, vx + (rand() - 0.5) * 60 * S, slabTop + 15 * S);
+    c.stroke();
+  }
+  const edge = c.createLinearGradient(0, slabTop + 16 * S, 0, h);
+  edge.addColorStop(0, '#a49d92');
+  edge.addColorStop(1, '#6d675e');
+  c.fillStyle = edge;
+  c.fillRect(10 * S, slabTop + 16 * S, w - 20 * S, h - slabTop - 16 * S);
+  c.fillStyle = 'rgba(255,255,255,0.55)';
+  c.fillRect(10 * S, slabTop + 16 * S, w - 20 * S, 1.4 * S);
+
+  // --- manteau : bois peint, moulure, corbeaux, ombre portée sur la brique
+  const under = c.createLinearGradient(0, mantelY + mantelH, 0, mantelY + mantelH + 34 * S);
+  under.addColorStop(0, 'rgba(10,4,2,0.6)');
+  under.addColorStop(1, 'rgba(10,4,2,0)');
+  c.fillStyle = under;
+  c.fillRect(breastX, mantelY + mantelH, breastW, 34 * S);
+  // Les corbeaux soutiennent les extrémités du manteau, à l'aplomb du
+  // conduit : ils ne doivent ni se cacher derrière un bas ni dépasser seuls.
+  for (const cx of [breastX - 4 * S, breastX + breastW - 14 * S]) {
+    const cg = c.createLinearGradient(cx, 0, cx + 18 * S, 0);
+    cg.addColorStop(0, shade(mantelBase, 8));
+    cg.addColorStop(1, shade(mantelBase, -30));
+    c.fillStyle = cg;
+    c.beginPath();
+    c.moveTo(cx, mantelY + mantelH);
+    c.lineTo(cx + 18 * S, mantelY + mantelH);
+    c.quadraticCurveTo(cx + 18 * S, mantelY + mantelH + 22 * S, cx + 5 * S, mantelY + mantelH + 30 * S);
+    c.lineTo(cx, mantelY + mantelH + 30 * S);
+    c.closePath();
+    c.fill();
+  }
+  const shelf = c.createLinearGradient(0, mantelY, 0, mantelY + mantelH);
+  shelf.addColorStop(0, shade(mantelBase, 14));
+  shelf.addColorStop(0.3, mantelBase);
+  shelf.addColorStop(0.75, shade(mantelBase, -22));
+  shelf.addColorStop(1, shade(mantelBase, -48));
+  c.fillStyle = shelf;
+  roundRect(c, 6 * S, mantelY, w - 12 * S, mantelH, 3 * S);
+  c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  c.fillRect(8 * S, mantelY + 1 * S, w - 16 * S, 2 * S);
+  c.strokeStyle = 'rgba(110,100,80,0.45)';
+  c.lineWidth = 1.1 * S;
+  c.beginPath();
+  c.moveTo(14 * S, mantelY + 12 * S);
+  c.lineTo(w - 14 * S, mantelY + 12 * S);
+  c.moveTo(14 * S, mantelY + 18 * S);
+  c.lineTo(w - 14 * S, mantelY + 18 * S);
+  c.stroke();
+
+  // --- bas de Noël
+  if (opts.stockings !== false) {
+    const sockColors = [colors.primary, '#e8e3d8', colors.primary, '#e8e3d8'];
+    const cuffs = ['#f3efe6', '#c0182a', '#f3efe6', '#c0182a'];
+    for (let i = 0; i < 4; i++) {
+      // Quatre bas répartis régulièrement sur la largeur du conduit.
+      drawStocking(c, breastX + breastW * (0.18 + i * 0.21) - 13 * S, mantelY + mantelH + 2 * S, S, sockColors[i], cuffs[i]);
+    }
+  }
+
+  // --- bougies (flammes animées à l'affichage)
+  const candles = [];
+  if (opts.candles !== false) {
+    for (const [px, ch] of [[0.2, 30], [0.31, 20], [0.8, 26]]) {
+      const cxp = w * px;
+      const hgt = ch * S;
+      const cw = 8 * S;
+      const base = mantelY + 1;
+      const wax = c.createLinearGradient(cxp - cw / 2, 0, cxp + cw / 2, 0);
+      wax.addColorStop(0, '#d9d0bd');
+      wax.addColorStop(0.45, '#fbf5e6');
+      wax.addColorStop(1, '#c4baa4');
+      c.fillStyle = wax;
+      c.fillRect(cxp - cw / 2, base - hgt, cw, hgt);
+      c.strokeStyle = '#2b2118';
+      c.lineWidth = 1.1 * S;
+      c.beginPath();
+      c.moveTo(cxp, base - hgt - 1 * S);
+      c.lineTo(cxp, base - hgt - 4 * S);
+      c.stroke();
+      candles.push({ x: cxp, y: base - hgt - 4 * S, phase: rand() * 6.28 });
+    }
+  }
+
+  if (opts.wreath === true) drawWreath(c, w / 2, mantelY - 50 * S, 30 * S, S, colors, rand);
+
+  const garlandLights = drawMantelGarland(
+    c, -6 * S, mantelY - 10 * S, w + 12 * S, S, colors, rand, opts.mantelGarland !== false
+  );
+
+  return {
+    sprite: cv,
+    candles,
+    lights: garlandLights,
+    geom: { w, h, ox, oy, openW, openH, fireX: ox + openW / 2, fireY: logBase - 4 * S },
+  };
+}
+
+/// Couronne de Noël accrochée au conduit : rameaux en couronne, baies et
+/// nœud. Posée par-dessus la brique, avant la guirlande du manteau.
+function drawWreath(c, cx, cy, r, S, colors, rand) {
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.22)';
+  c.beginPath();
+  c.ellipse(cx + 3 * S, cy + 4 * S, r + 8 * S, r + 8 * S, 0, 0, Math.PI * 2);
+  c.fill();
+  for (let i = 0; i < 46; i++) {
+    const a = (i / 46) * Math.PI * 2;
+    c.save();
+    c.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    c.rotate(a + Math.PI / 2 + (rand() - 0.5) * 0.5);
+    const g = c.createLinearGradient(0, -9 * S, 0, 9 * S);
+    g.addColorStop(0, i % 3 ? '#2f7a43' : '#3c8f52');
+    g.addColorStop(1, '#0f3a22');
+    c.fillStyle = g;
+    c.beginPath();
+    c.ellipse(0, 0, 4.2 * S, 11 * S, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * Math.PI * 2 + 0.3;
+    const rr = r + (rand() - 0.5) * 7 * S;
+    const bx = cx + Math.cos(a) * rr;
+    const by = cy + Math.sin(a) * rr;
+    c.fillStyle = '#b3172a';
+    c.beginPath();
+    c.arc(bx, by, 3.1 * S, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.65)';
+    c.beginPath();
+    c.arc(bx - 0.9 * S, by - 1 * S, 0.9 * S, 0, Math.PI * 2);
+    c.fill();
+  }
+  // Nœud de velours en bas de la couronne.
+  const by = cy + r + 1 * S;
+  c.fillStyle = shade(colors.primary, -8);
+  for (const dir of [-1, 1]) {
+    c.beginPath();
+    c.moveTo(cx, by);
+    c.quadraticCurveTo(cx + dir * 20 * S, by - 12 * S, cx + dir * 21 * S, by + 4 * S);
+    c.quadraticCurveTo(cx + dir * 12 * S, by + 2 * S, cx, by);
+    c.fill();
+  }
+  c.fillStyle = shade(colors.primary, 14);
+  c.beginPath();
+  c.arc(cx, by, 4.2 * S, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/// Pare-feu : cadre fin et grille métallique devant le foyer. Cuit une
+/// fois ; la flamme est dessinée dessous, donc le maillage la voile
+/// légèrement comme un vrai pare-étincelles.
+function bakeFireScreen(geom, scale) {
+  const w = Math.ceil(geom.openW);
+  const h = Math.ceil(geom.openH);
+  const cv = makeCanvas(w, h);
+  const c = cv.getContext('2d');
+  const step = Math.max(4, 6 * scale);
+  c.strokeStyle = 'rgba(8,9,12,0.42)';
+  c.lineWidth = Math.max(0.7, 0.9 * scale);
+  c.beginPath();
+  for (let x = step; x < w; x += step) { c.moveTo(x, 0); c.lineTo(x, h); }
+  for (let y = step; y < h; y += step) { c.moveTo(0, y); c.lineTo(w, y); }
+  c.stroke();
+  const sheen = c.createLinearGradient(0, 0, w, 0);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0.07)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = sheen;
+  c.fillRect(0, 0, w, h);
+  c.strokeStyle = '#15171b';
+  c.lineWidth = 3 * scale;
+  c.strokeRect(1.5 * scale, 1.5 * scale, w - 3 * scale, h - 3 * scale);
+  return cv;
+}
+
+/// Version teintée de la maçonnerie, éclairée depuis le foyer. Dessinée en
+/// additif par-dessus la pierre, elle fait vaciller la lumière sur la
+/// brique, le manteau et les bas au rythme du feu — un seul drawImage.
+function bakeFireLight(sprite, geom) {
+  const cv = makeCanvas(sprite.width, sprite.height);
+  const c = cv.getContext('2d');
+  c.drawImage(sprite, 0, 0);
+  c.globalCompositeOperation = 'source-in';
+  const r = Math.max(geom.w, geom.h) * 0.75;
+  const g = c.createRadialGradient(geom.fireX, geom.fireY, 0, geom.fireX, geom.fireY, r);
+  g.addColorStop(0, 'rgba(255,150,60,0.9)');
+  g.addColorStop(0.45, 'rgba(255,104,28,0.4)');
+  g.addColorStop(1, 'rgba(255,80,10,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, sprite.width, sprite.height);
+  return cv;
+}
+
 /// Picks the bake for the requested style. Any unrecognised value falls
 /// back to 'rustic' rather than erroring — a bad/old theme value must
-/// never leave the overlay without a fireplace at all.
+/// never leave the overlay without a fireplace at all. Le style par défaut
+/// est désormais 'classic' (cheminée en briques).
 function bakeFireplace(scale, colors, opts) {
-  return opts.fireplaceStyle === 'modern'
-    ? bakeModernFireplace(scale, colors, opts)
-    : bakeRusticFireplace(scale, colors, opts);
+  if (opts.fireplaceStyle === 'modern') return bakeModernFireplace(scale, colors, opts);
+  if (opts.fireplaceStyle === 'rustic') return bakeRusticFireplace(scale, colors, opts);
+  return bakeClassicFireplace(scale, colors, opts);
 }
 
 // --- flame sprite sheet ------------------------------------------------------
@@ -1869,13 +2228,18 @@ function bakeFlameSheet(fw, fh, scale) {
 /// this moment, ember bed, sparks, and warm light spilling into the room.
 export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts = {}) {
   const scale = Math.max(0.6, Math.min(2.6, (height / 900) * (spec.scale ?? 1)));
-  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${spec.stockings}|${spec.mantelGarland}|${spec.candles}|${spec.fireplaceStyle}`;
+  const key = `${scale.toFixed(2)}|${colors.primary}|${colors.secondary}|${spec.stockings}|${spec.mantelGarland}|${spec.candles}|${spec.fireplaceStyle}|${spec.brick}|${spec.mantelColor}|${spec.wreath}`;
   let cached = fireCache.get(key);
   if (!cached) {
     const baked = bakeFireplace(scale, colors, spec);
     const fw = Math.ceil(baked.geom.openW);
     const fh = Math.ceil(baked.geom.openH * 0.85);
-    cached = { ...baked, flame: bakeFlameSheet(fw, fh, scale) };
+    cached = {
+      ...baked,
+      flame: bakeFlameSheet(fw, fh, scale),
+      lit: bakeFireLight(baked.sprite, baked.geom),
+      screen: bakeFireScreen(baked.geom, scale),
+    };
     if (fireCache.size > 6) fireCache.clear();
     fireCache.set(key, cached);
   }
@@ -1891,6 +2255,8 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   const fireX = x + geom.fireX;
   const fireY = y + geom.fireY;
   const breathe = 0.86 + 0.1 * Math.sin(time * 2.3) + 0.04 * Math.sin(time * 7.1);
+  // Intensité du feu réglable : taille des flammes et force de la lueur.
+  const fi = Math.max(0.3, Math.min(2, spec.flameIntensity ?? 1));
   const shadowStrength = Math.max(0, opts.shadowStrength ?? 1);
   const shadowSoftness = Math.max(0.4, opts.shadowSoftness ?? 1);
 
@@ -1915,6 +2281,13 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   ctx.globalCompositeOperation = 'source-over';
 
   ctx.drawImage(sprite, x, y);
+
+  // Lumière du foyer sur la maçonnerie, qui vacille avec la flamme.
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = Math.min(0.62, 0.3 * breathe * Math.min(1.6, spec.flameIntensity ?? 1) * gain);
+  ctx.drawImage(cached.lit, x, y);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
 
   // Mantel garland lights.
   if (lights.length) {
@@ -1979,22 +2352,24 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
   const whiteCoreGlow = glowSprite('#fff0a0', 48);
 
   const es = 230 * scale * breathe;
-  ctx.globalAlpha = 0.62 * breathe;
+  ctx.globalAlpha = Math.min(1, 0.62 * breathe * Math.min(1.5, fi));
   ctx.drawImage(emberGlow, fireX - es / 2, fireY - es * 0.44, es, es * 0.52);
 
   const cs = 130 * scale * breathe;
-  ctx.globalAlpha = 0.52 * breathe;
+  ctx.globalAlpha = Math.min(1, 0.52 * breathe * Math.min(1.5, fi));
   ctx.drawImage(coreGlow, fireX - cs / 2, fireY - cs * 0.38, cs, cs * 0.45);
 
   const ws = 70 * scale * breathe;
-  ctx.globalAlpha = 0.40 * breathe;
+  ctx.globalAlpha = Math.min(1, 0.40 * breathe * Math.min(1.5, fi));
   ctx.drawImage(whiteCoreGlow, fireX - ws / 2, fireY - ws * 0.35, ws, ws * 0.40);
 
   const frame = Math.floor((time * 26) % flame.frames);
-  ctx.globalAlpha = breathe;
+  ctx.globalAlpha = Math.min(1, breathe * Math.min(1.2, 0.5 + fi / 2));
+  const fh2 = flame.fh * fi;
+  const fw2 = flame.fw * Math.sqrt(fi);
   ctx.drawImage(
     flame.sheet, frame * flame.fw, 0, flame.fw, flame.fh,
-    fireX - flame.fw / 2, fireY - flame.fh + 8 * scale, flame.fw, flame.fh
+    fireX - fw2 / 2, fireY - fh2 + 8 * scale, fw2, fh2
   );
 
   // Dynamic rising embers with natural swirling trajectories and cooling color gradient
@@ -2024,6 +2399,10 @@ export function drawFireplace(ctx, width, height, time, colors, spec = {}, opts 
     ctx.fill();
   }
   ctx.restore();
+
+  if (spec.fireScreen === true) {
+    ctx.drawImage(cached.screen, Math.round(x + geom.ox), Math.round(y + geom.oy));
+  }
 
   ctx.restore();
 }
@@ -2098,15 +2477,120 @@ function bakeHolidayDecoration(type, colors) {
     c.setLineDash([]);
     c.strokeStyle = 'rgba(210,225,232,0.9)'; c.lineWidth = 2;
     c.beginPath(); c.moveTo(94, 139); c.lineTo(94, 62); c.stroke();
+  } else if (type === 'lantern') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 147, 34, 7, 0, 0, TAU); c.fill();
+    const halo = c.createRadialGradient(80, 92, 4, 80, 92, 78);
+    halo.addColorStop(0, 'rgba(255,196,96,0.55)'); halo.addColorStop(1, 'rgba(255,170,60,0)');
+    c.fillStyle = halo; c.fillRect(0, 10, 160, 150);
+    const pane = c.createRadialGradient(80, 98, 2, 80, 98, 44);
+    pane.addColorStop(0, '#fff6d8'); pane.addColorStop(0.45, '#ffc867'); pane.addColorStop(1, '#b8651c');
+    c.fillStyle = pane; c.fillRect(52, 58, 56, 78);
+    c.fillStyle = '#20242a';
+    c.fillRect(46, 134, 68, 10); c.fillRect(48, 50, 64, 9);
+    for (const x of [50, 77, 105]) c.fillRect(x, 56, 5, 80);
+    c.beginPath(); c.moveTo(48, 50); c.lineTo(80, 26); c.lineTo(112, 50); c.closePath(); c.fill();
+    c.strokeStyle = '#20242a'; c.lineWidth = 4;
+    c.beginPath(); c.arc(80, 20, 9, 0, TAU); c.stroke();
+    c.fillStyle = '#fffbe8'; c.beginPath(); c.ellipse(80, 108, 5, 11, 0, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.95)'; c.beginPath(); c.ellipse(80, 28, 30, 5, 0, Math.PI, TAU); c.fill();
+  } else if (type === 'reindeer') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 148, 46, 7, 0, 0, TAU); c.fill();
+    const coat = '#8a5a35', dark = '#5e3b21';
+    c.strokeStyle = dark; c.lineWidth = 8; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(52, 104); c.lineTo(48, 146); c.moveTo(68, 108); c.lineTo(70, 146);
+    c.moveTo(98, 108); c.lineTo(96, 146); c.moveTo(112, 104); c.lineTo(116, 146); c.stroke();
+    c.fillStyle = coat; c.beginPath(); c.ellipse(82, 96, 42, 21, 0, 0, TAU); c.fill();
+    c.fillStyle = '#f1e2cf'; c.beginPath(); c.ellipse(84, 106, 26, 8, 0, 0, TAU); c.fill();
+    c.strokeStyle = coat; c.lineWidth = 15;
+    c.beginPath(); c.moveTo(112, 88); c.lineTo(124, 58); c.stroke();
+    c.fillStyle = coat; c.beginPath(); c.ellipse(130, 50, 17, 12, 0.35, 0, TAU); c.fill();
+    c.fillStyle = '#e02b2b'; c.beginPath(); c.arc(146, 56, 5.5, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,120,120,0.35)'; c.beginPath(); c.arc(146, 56, 11, 0, TAU); c.fill();
+    c.fillStyle = '#14100d'; c.beginPath(); c.arc(132, 46, 2.3, 0, TAU); c.fill();
+    c.strokeStyle = '#d8c3a0'; c.lineWidth = 3.5;
+    c.beginPath(); c.moveTo(122, 42); c.lineTo(112, 14); c.moveTo(116, 28); c.lineTo(102, 20);
+    c.moveTo(114, 21); c.lineTo(122, 8); c.moveTo(130, 40); c.lineTo(136, 12); c.moveTo(134, 24); c.lineTo(147, 16); c.stroke();
+    c.fillStyle = '#f1e2cf'; c.beginPath(); c.ellipse(41, 90, 6, 9, 0.5, 0, TAU); c.fill();
+    c.strokeStyle = colors.primary; c.lineWidth = 6;
+    c.beginPath(); c.moveTo(108, 70); c.lineTo(126, 80); c.stroke();
+    c.fillStyle = colors.accent; c.beginPath(); c.arc(118, 82, 5, 0, TAU); c.fill();
+  } else if (type === 'bell') {
+    c.strokeStyle = '#2a6b3a'; c.lineWidth = 3;
+    for (let i = 0; i < 16; i++) {
+      const a = Math.PI * (0.1 + i * 0.05);
+      c.beginPath(); c.moveTo(80, 30); c.lineTo(80 + Math.cos(a) * 34 * (i % 2 ? 1 : -1), 30 + Math.sin(a) * 16 - 6); c.stroke();
+    }
+    for (const [dx, rot] of [[-22, 0.35], [22, -0.35]]) {
+      c.save(); c.translate(80 + dx, 86); c.rotate(rot);
+      const g = c.createLinearGradient(-30, 0, 30, 0);
+      g.addColorStop(0, shade(colors.accent, -45)); g.addColorStop(0.4, shade(colors.accent, 45)); g.addColorStop(1, shade(colors.accent, -60));
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(-8, -46); c.bezierCurveTo(-26, -40, -20, 8, -34, 28);
+      c.lineTo(34, 28); c.bezierCurveTo(20, 8, 26, -40, 8, -46); c.closePath(); c.fill();
+      c.fillStyle = shade(colors.accent, -70); c.fillRect(-34, 26, 68, 6);
+      c.beginPath(); c.arc(0, 40, 8, 0, TAU); c.fill();
+      c.restore();
+    }
+    c.fillStyle = colors.primary;
+    c.beginPath(); c.ellipse(64, 34, 17, 10, -0.4, 0, TAU); c.ellipse(96, 34, 17, 10, 0.4, 0, TAU); c.fill();
+    c.fillStyle = shade(colors.primary, -40); c.beginPath(); c.arc(80, 36, 7, 0, TAU); c.fill();
+  } else if (type === 'star') {
+    const halo = c.createRadialGradient(80, 80, 4, 80, 80, 80);
+    halo.addColorStop(0, rgba(colors.accent, 0.7)); halo.addColorStop(0.5, rgba(colors.accent, 0.18)); halo.addColorStop(1, rgba(colors.accent, 0));
+    c.fillStyle = halo; c.fillRect(0, 0, 160, 160);
+    c.strokeStyle = rgba('#ffffff', 0.55); c.lineWidth = 2;
+    c.beginPath(); c.moveTo(80, 4); c.lineTo(80, 156); c.moveTo(4, 80); c.lineTo(156, 80); c.stroke();
+    const g = c.createRadialGradient(74, 72, 2, 80, 80, 46);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, shade(colors.accent, 40)); g.addColorStop(1, shade(colors.accent, -30));
+    c.fillStyle = g; star(c, 80, 80, 5, 46, 19); c.fill();
+  } else if (type === 'gingerbread') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 148, 40, 7, 0, 0, TAU); c.fill();
+    c.strokeStyle = '#a5622b'; c.fillStyle = '#a5622b'; c.lineCap = 'round'; c.lineWidth = 26;
+    c.beginPath(); c.moveTo(80, 70); c.lineTo(80, 100); c.moveTo(42, 78); c.lineTo(118, 78);
+    c.moveTo(74, 104); c.lineTo(58, 138); c.moveTo(86, 104); c.lineTo(102, 138); c.stroke();
+    c.beginPath(); c.arc(80, 40, 25, 0, TAU); c.fill();
+    c.strokeStyle = '#fff7ea'; c.lineWidth = 3;
+    c.beginPath(); c.arc(80, 43, 12, 0.2, Math.PI - 0.2); c.stroke();
+    for (const [x, y] of [[40, 78], [120, 78], [57, 136], [103, 136]]) {
+      c.beginPath(); c.moveTo(x - 7, y - 5); c.quadraticCurveTo(x, y + 1, x + 7, y - 5); c.stroke();
+    }
+    c.fillStyle = '#2b1a10'; c.beginPath(); c.arc(71, 35, 3, 0, TAU); c.arc(89, 35, 3, 0, TAU); c.fill();
+    for (const [y, color] of [[76, colors.primary], [92, colors.secondary], [108, colors.accent]]) {
+      c.fillStyle = color; c.beginPath(); c.arc(80, y, 4.5, 0, TAU); c.fill();
+    }
+  } else if (type === 'sleigh') {
+    c.fillStyle = 'rgba(0,0,0,0.2)';
+    c.beginPath(); c.ellipse(80, 148, 60, 7, 0, 0, TAU); c.fill();
+    c.strokeStyle = colors.accent; c.lineWidth = 5; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(18, 140); c.lineTo(126, 140); c.quadraticCurveTo(150, 138, 146, 116);
+    c.moveTo(48, 140); c.lineTo(52, 116); c.moveTo(108, 140); c.lineTo(104, 116); c.stroke();
+    for (const [x, y, w, h, color] of [[52, 52, 30, 30, colors.secondary], [78, 40, 34, 42, colors.accent], [40, 62, 22, 22, '#f4f1e8']]) {
+      c.fillStyle = color; c.fillRect(x, y, w, h);
+      c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillRect(x + w * 0.42, y, w * 0.16, h);
+    }
+    const body = c.createLinearGradient(0, 60, 0, 120);
+    body.addColorStop(0, shade(colors.primary, 20)); body.addColorStop(1, shade(colors.primary, -45));
+    c.fillStyle = body;
+    c.beginPath(); c.moveTo(16, 58); c.quadraticCurveTo(22, 118, 52, 118); c.lineTo(118, 118);
+    c.quadraticCurveTo(146, 112, 140, 76); c.quadraticCurveTo(128, 92, 106, 84); c.lineTo(46, 84);
+    c.quadraticCurveTo(26, 78, 16, 58); c.fill();
+    c.strokeStyle = colors.accent; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(30, 102); c.quadraticCurveTo(80, 112, 132, 100); c.stroke();
   }
   return cv;
 }
 
 export function drawHolidayDecoration(ctx, width, height, spec = {}, colors = {}) {
   const type = spec.type;
-  if (!['snowman', 'presents', 'wreath', 'candy-cane'].includes(type)) return;
+  if (!HOLIDAY_DECORATION_TYPES[type]) return;
+  // Une couleur propre remplace la teinte principale ET l'accent : c'est
+  // ce qui distingue visiblement deux décorations du même type.
+  const own = /^#[0-9a-f]{6}$/i.test(spec.color ?? '') ? spec.color : null;
   const palette = {
-    primary: colors.primary ?? '#c0392b',
+    primary: own ?? colors.primary ?? '#c0392b',
     secondary: colors.secondary ?? '#1e7d32',
     accent: colors.accent ?? '#f1c40f',
   };
@@ -2120,5 +2604,15 @@ export function drawHolidayDecoration(ctx, width, height, spec = {}, colors = {}
   const size = Math.min(width, height) * 0.2 * Math.max(0.3, Math.min(2.5, Number(spec.scale) || 1));
   const x = Math.max(0, Math.min(1, Number(spec.x) || 0)) * width;
   const y = Math.max(0, Math.min(1, Number(spec.y) || 0)) * height;
-  ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+  const alpha = Math.max(0.1, Math.min(1, Number(spec.opacity ?? 1) || 1));
+  if (!spec.flip && alpha === 1) {
+    ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  if (spec.flip) ctx.scale(-1, 1);
+  ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+  ctx.restore();
 }

@@ -18,6 +18,9 @@ test('scene tab baseline', async ({ page }) => {
 });
 
 test('scene tab with a custom palette open', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('christmas-advanced', '1'));
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
   await page.selectOption('[data-testid="garland-palette"]', 'custom');
   await expectScreenshot(page, 'settings-custom-palette.png');
 });
@@ -28,12 +31,18 @@ test('snow tab baseline', async ({ page }) => {
 });
 
 test('max snow density baseline', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('christmas-advanced', '1'));
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('600');
   await expectScreenshot(page, 'settings-snow-max.png');
 });
 
 test('min snow density baseline', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('christmas-advanced', '1'));
+  await page.reload();
+  await page.evaluate(() => window.settingsReady);
   await page.click('[data-testid="tab-snow"]');
   await page.locator('[data-testid="snow-density"]').fill('0');
   await expectScreenshot(page, 'settings-snow-min.png');

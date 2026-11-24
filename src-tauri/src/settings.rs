@@ -97,6 +97,31 @@ pub struct AppSettings {
     #[serde(rename = "soundVolume")]
     pub sound_volume: f32,
     pub autostart: bool,
+    /// Vrai une fois l'assistant de première utilisation terminé.
+    #[serde(rename = "onboardingDone")]
+    pub onboarding_done: bool,
+    /// Langue de l'interface : "auto" (langue du système) ou un code
+    /// ("fr", "en", "es", "de", "it").
+    pub language: String,
+    /// Profil de performance : "eco" | "balanced" | "quality" | "custom".
+    /// Interprété par src/shared/scene.js (PERFORMANCE_PROFILES).
+    #[serde(rename = "performanceMode")]
+    pub performance_mode: String,
+    /// Décoration suspendue depuis la barre des menus / zone de
+    /// notification : les fenêtres sont masquées et ne dessinent plus.
+    pub paused: bool,
+    /// "wallpaper" (derrière les fenêtres) ou "front" (par-dessus tout).
+    #[serde(rename = "displayMode")]
+    pub display_mode: String,
+    /// Position de la bande du Dock / de la barre des tâches :
+    /// "behind" (derrière les fenêtres) ou "front" (par-dessus tout).
+    #[serde(rename = "dockPlacement")]
+    pub dock_placement: String,
+    /// Tout réglage que ce binaire ne connaît pas est conservé tel quel :
+    /// l'interface peut ajouter une option sans toucher au Rust, et un
+    /// binaire plus ancien ne détruit pas la configuration d'un plus récent.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for AppSettings {
@@ -130,6 +155,13 @@ impl Default for AppSettings {
             fps_limit: 30,
             sound_volume: 0.4,
             autostart: false,
+            onboarding_done: false,
+            language: "auto".into(),
+            performance_mode: "balanced".into(),
+            paused: false,
+            display_mode: "wallpaper".into(),
+            dock_placement: "behind".into(),
+            extra: serde_json::Map::new(),
         }
     }
 }

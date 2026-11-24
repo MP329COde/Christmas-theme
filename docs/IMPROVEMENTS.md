@@ -1,46 +1,56 @@
-# Visual Improvement Roadmap
+# Feuille de route des améliorations visuelles
 
-The Christmas tree is validated and is intentionally out of scope for this roadmap.
+Le sapin de Noël est validé et reste volontairement hors du périmètre de cette feuille de route.
 
-## Completed: Aurora palette profiles
+## Terminé : cheminée classique et réglages détaillés
 
-- Per-screen palette choices make the aurora fit a scene without altering its animation budget.
-- Canvas 2D and WebGL resolve the same palette, so renderer fallback preserves the selected look.
-- The selected profile is persisted with the screen composition.
+- Nouveau style par défaut « classique » : conduit en briques à joints décalés, linteau, foyer cerclé de fonte noirci par la suie, chenets, bûches, manteau peint sur corbeaux et dalle de marbre.
+- Réglages par cheminée : intensité du feu (braises à brasier), teinte des briques (rouges, ocre, gris pierre, blanches) et couleur du manteau.
+- Les styles « rustique » et « moderne » restent disponibles.
 
-## Completed: Weather profiles
+## Terminé : installation personnalisée
 
-- Per-screen weather profiles coordinate snow size, wind, accumulation depth, and settled-snow sparkle density.
-- Profiles modulate the existing global snow controls, preserving a user's preferred baseline while allowing each display its own weather.
-- The selected profile is persisted with the screen composition and saved presets.
+- Assistant de première utilisation : ambiance, quantité de neige, Dock, démarrage automatique et volume.
+- Installateur Windows en français (licence, images, nettoyage du démarrage automatique) et image disque macOS personnalisée.
 
-## Completed: Sky density and shooting-star frequency
+## Terminé : profils de palette de l'aurore
 
-- Per-screen controls tune the density of the continuous star field and the cadence of shooting stars.
-- A zero shooting-star frequency disables comets without disabling the stars themselves.
-- Both controls are persisted with the screen composition and preserved by saved presets.
+- Les choix de palette par écran adaptent l'aurore à la scène sans modifier son budget d'animation.
+- Canvas 2D et WebGL utilisent la même palette : le repli de moteur conserve donc l'apparence choisie.
+- Le profil choisi est enregistré avec la composition de l'écran.
 
-## Completed: Camera-motion profiles
+## Terminé : profils météo
 
-- Per-screen profiles range from locked-off framing to immersive drift while preserving existing camera-motion values.
-- The default system profile honors the operating system's reduced-motion preference.
+- Les profils météo par écran coordonnent la taille des flocons, le vent, l'épaisseur du dépôt et la densité de scintillement de la neige.
+- Ils modulent les réglages globaux de neige : la préférence de base est conservée, mais chaque écran a sa propre météo.
+- Le profil est enregistré avec la composition de l'écran et les préréglages.
 
-## Completed: Lighting-rig editor
+## Terminé : densité du ciel et fréquence des étoiles filantes
 
-- Per-screen controls tune ambient warmth, bloom, and fireplace contribution while preserving the existing default look.
-- The Canvas fireplace spill and WebGL tree rig resolve the same fireplace contribution.
+- Des réglages par écran ajustent la densité du champ d'étoiles et la cadence des étoiles filantes.
+- Une fréquence nulle désactive les comètes sans désactiver les étoiles.
 
-## Completed: Preview thumbnails for saved scene presets
+## Terminé : profils de mouvement de caméra
 
-- Saving a preset renders a small stylised thumbnail (sky, aurora, snow line, trees, fireplace glow) from the settings snapshot and stores it alongside the preset.
-- The preset bar shows the thumbnail of the currently selected preset next to the picker.
+- Du cadrage fixe à la dérive immersive, par écran, en préservant les valeurs existantes.
+- Le profil « système » respecte la préférence de réduction des animations du système.
 
-## Completed: Real-GPU performance diagnostic
+## Terminé : éditeur d'éclairage
 
-- The System panel's Performance card now shows a frame-time sparkline (last ~180 samples, red above the quality governor's own budget line) alongside the existing fps readout.
-- A plain-language explanation names the active quality tier and, if the tree renderer fell back to Canvas 2D, why (software rasteriser, no GPU, failed first frame, ...).
-- Both are driven by the same measurement the automatic degrade already acts on, not a separate reading.
+- Chaleur ambiante, halation et contribution de la cheminée par écran, en préservant l'apparence par défaut.
+- La lueur de la cheminée (Canvas) et l'éclairage des sapins (WebGL) utilisent la même contribution.
 
-## Next tasks
+## Terminé : vignettes des préréglages
 
-- Add visual regression coverage for every sky palette and degraded quality tier.
+- L'enregistrement d'un préréglage génère une petite vignette stylisée (ciel, aurore, neige, sapins, lueur de la cheminée).
+- La barre des préréglages affiche la vignette du préréglage sélectionné.
+
+## Terminé : diagnostic de performance
+
+- Le panneau Système affiche un graphique des temps d'image (rouge au-delà du budget du gouverneur de qualité) à côté du compteur d'images par seconde.
+- Une explication en clair nomme le palier de qualité actif et, si les sapins sont repassés sur Canvas 2D, pourquoi.
+
+## Prochaines étapes
+
+- Ajouter une couverture de régression visuelle pour chaque palette du ciel et chaque palier de qualité dégradé.
+- Ajouter une capture des nouvelles teintes de cheminée aux tests visuels.

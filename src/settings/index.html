@@ -1,45 +1,133 @@
 <!doctype html>
-<html>
+<html lang="fr">
 <head>
 <meta charset="utf-8" />
-<title>Christmas Theme Settings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Décoration de Noël</title>
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>🎄 Christmas Theme</h1>
-    <div class="preset-bar">
-      <img id="preset-thumb" data-testid="preset-thumb" class="preset-thumb" alt="" hidden />
-      <select id="preset-select" data-testid="preset-select" aria-label="Preset">
-        <option value="">— Preset —</option>
-      </select>
-      <button id="preset-save" data-testid="preset-save" class="ghost" title="Save the current look as a preset">Save as…</button>
-      <button id="preset-delete" data-testid="preset-delete" class="ghost" title="Delete the selected preset">Delete</button>
-      <button id="preset-export" data-testid="preset-export" class="ghost" title="Export presets to a file">Export</button>
-      <label class="ghost file" title="Import presets from a file">
-        Import<input type="file" id="preset-import" data-testid="preset-import" accept="application/json" hidden />
-      </label>
+  <!-- Sidebar navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L9 7H12L9 12L6 8L3 12L6 16L9 12L12 17Z" fill="#c0392b"/>
+          <path d="M12 2L15 7H12L15 12L18 8L21 12L18 16L15 12L12 17Z" fill="#27ae60"/>
+          <path d="M10 17H14L13 22H11L10 17Z" fill="#8B4513"/>
+          <circle cx="12" cy="2" r="1.5" fill="#f1c40f"/>
+        </svg>
+      </div>
+      <div>
+        <p class="brand-title" data-i18n>Décoration de Noël</p>
+        <span class="brand-subtitle" data-i18n>Votre bureau en fête</span>
+      </div>
     </div>
-  </header>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab" data-tab="scene" data-testid="tab-scene" role="tab" aria-selected="true">Scene</button>
-    <button class="tab" data-tab="snow" data-testid="tab-snow" role="tab" aria-selected="false">Snow</button>
-    <button class="tab" data-tab="lights" data-testid="tab-lights" role="tab" aria-selected="false">Lights</button>
-    <button class="tab" data-tab="system" data-testid="tab-system" role="tab" aria-selected="false">System</button>
-  </nav>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="scene" data-testid="tab-scene" role="tab" aria-selected="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M9 3v18"/>
+          <path d="M3 9h18"/>
+        </svg>
+        <span data-i18n>Scène</span>
+      </button>
+      <button class="nav-item" data-tab="snow" data-testid="tab-snow">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span data-i18n>Neige</span>
+      </button>
+      <button class="nav-item" data-tab="lights" data-testid="tab-lights">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <span data-i18n>Ambiance</span>
+      </button>
+      <button class="nav-item" data-tab="perf" data-testid="tab-perf">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 14l4-6"/><path d="M4.5 18a9 9 0 1115 0"/><circle cx="12" cy="14" r="1.6"/>
+        </svg>
+        <span data-i18n>Performances</span>
+      </button>
+      <button class="nav-item" data-tab="system" data-testid="tab-system">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        <span data-i18n>Système</span>
+      </button>
+    </nav>
 
-  <main>
-    <section class="panel" id="panel-scene" data-testid="panel-scene"></section>
-    <section class="panel" id="panel-snow" data-testid="panel-snow" hidden></section>
-    <section class="panel" id="panel-lights" data-testid="panel-lights" hidden></section>
-    <section class="panel" id="panel-system" data-testid="panel-system" hidden></section>
-  </main>
+    <div class="sidebar-footer">
+      <label class="adv-switch" for="advanced-toggle" title="Afficher tous les réglages détaillés" data-i18n-title>
+        <span data-i18n>Mode avancé</span>
+        <input type="checkbox" id="advanced-toggle" data-testid="advanced-toggle" />
+      </label>
+      <div class="version-badge">v0.1.0</div>
+    </div>
+  </aside>
 
-  <footer>
-    <button id="disable-btn" data-testid="disable-all" class="danger">Disable everything</button>
+  <!-- Main content area -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 id="section-title" data-i18n>Scène</h1>
+      </div>
+      <div class="topbar-right">
+        <button id="pause-toggle" data-testid="pause-toggle" class="ghost pause-btn" aria-pressed="false">
+          <svg class="icon-pause" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg>
+          <svg class="icon-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 001.5.86l12-7.5a1 1 0 000-1.72l-12-7.5A1 1 0 007 4.5z"/></svg>
+          <span>Pause</span>
+        </button>
+        <div class="preset-bar">
+          <img id="preset-thumb" data-testid="preset-thumb" class="preset-thumb" alt="" hidden />
+          <select id="preset-select" data-testid="preset-select" aria-label="Préréglage" data-i18n-aria>
+            <option value="">— Préréglage —</option>
+          </select>
+          <button id="preset-save" data-testid="preset-save" class="ghost" title="Enregistrer la configuration actuelle comme préréglage" data-i18n-title>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M12 17V7M12 7L9 10M12 7l3 3"/></svg>
+            <span data-i18n>Enregistrer…</span>
+          </button>
+          <button id="preset-delete" data-testid="preset-delete" class="ghost" title="Supprimer le préréglage sélectionné" data-i18n-title>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            <span data-i18n>Supprimer</span>
+          </button>
+          <button id="preset-export" data-testid="preset-export" class="ghost adv-only" title="Exporter les préréglages dans un fichier" data-i18n-title>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span data-i18n>Exporter</span>
+          </button>
+          <label class="ghost file adv-only" title="Importer des préréglages depuis un fichier" data-i18n-title>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <span data-i18n>Importer</span>
+            <input type="file" id="preset-import" data-testid="preset-import" accept="application/json" hidden />
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <div class="content-scroll">
+      <section class="panel" id="panel-scene" data-testid="panel-scene"></section>
+      <section class="panel" id="panel-snow" data-testid="panel-snow" hidden></section>
+      <section class="panel" id="panel-lights" data-testid="panel-lights" hidden></section>
+      <section class="panel" id="panel-perf" data-testid="panel-perf" hidden></section>
+      <section class="panel" id="panel-system" data-testid="panel-system" hidden></section>
+    </div>
+
+  <!-- Bottom action bar -->
+  <footer class="bottom-bar">
+    <button id="disable-btn" data-testid="disable-all" class="danger">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/>
+      </svg>
+      <span data-i18n>Tout désactiver</span>
+    </button>
     <span id="status" data-testid="status" role="status"></span>
   </footer>
+  </main>
 
   <script type="module" src="./settings.js"></script>
 </body>
