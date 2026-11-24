@@ -22,7 +22,7 @@ test('still, zero movement and reduced motion freeze every scenic layer includin
       return canvas.toDataURL();
     };
     const results = [];
-    for (const background of ['animated-forest', 'alpine-lake']) {
+    for (const background of ['animated-forest', 'alpine-lake', 'living-room', 'log-cabin', 'night-city', 'frosted-window']) {
       for (const [overrides, reduced] of [
         [{ backgroundAnimation: 'none' }, false],
         [{ backgroundMotion: 0 }, false],
@@ -35,7 +35,64 @@ test('still, zero movement and reduced motion freeze every scenic layer includin
     }
     return results;
   });
-  expect(result).toEqual(Array(8).fill(true));
+  expect(result).toEqual(Array(24).fill(true));
+});
+
+test('scene lighting changes the image and opacity applies to the whole composition', async ({ page }) => {
+  await openRenderer(page);
+  const result = await page.evaluate(() => {
+    const renderer = window.backgroundModule.createWinterBackgroundRenderer();
+    const canvas = document.createElement('canvas');
+    canvas.width = 480; canvas.height = 320;
+    const c = canvas.getContext('2d');
+    return ['living-room', 'log-cabin', 'night-city', 'frosted-window'].map((background) => {
+      const draw = (backgroundLighting, backgroundOpacity) => {
+        c.clearRect(0, 0, canvas.width, canvas.height);
+        renderer.draw(c, canvas.width, canvas.height, 12, { background, backgroundLighting, backgroundOpacity });
+        return c.getImageData(0, 0, canvas.width, canvas.height).data;
+      };
+      const dark = draw(0, 1);
+      const bright = draw(2, 1);
+      const transparent = draw(1, 0);
+      const quarter = draw(1, 0.25);
+      let lightChanged = false, maxTransparent = 0, minQuarter = 255, maxQuarter = 0;
+      for (let i = 0; i < dark.length; i += 4) {
+        if (dark[i] !== bright[i] || dark[i + 1] !== bright[i + 1] || dark[i + 2] !== bright[i + 2]) lightChanged = true;
+        maxTransparent = Math.max(maxTransparent, transparent[i + 3]);
+        minQuarter = Math.min(minQuarter, quarter[i + 3]);
+        maxQuarter = Math.max(maxQuarter, quarter[i + 3]);
+      }
+      return { lightChanged, maxTransparent, minQuarter, maxQuarter };
+    });
+  });
+  for (const scene of result) {
+    expect(scene.lightChanged).toBe(true);
+    expect(scene.maxTransparent).toBe(0);
+    expect(scene.minQuarter).toBeGreaterThanOrEqual(63);
+    expect(scene.maxQuarter).toBeLessThanOrEqual(64);
+  }
+});
+
+test('cinematic movement changes the framing and respects reduced motion', async ({ page }) => {
+  await openRenderer(page);
+  const result = await page.evaluate(() => {
+    const renderer = window.backgroundModule.createWinterBackgroundRenderer();
+    const canvas = document.createElement('canvas');
+    canvas.width = 480; canvas.height = 320;
+    const c = canvas.getContext('2d');
+    return ['living-room', 'log-cabin', 'night-city', 'frosted-window'].map((background) => {
+      const draw = (backgroundAnimation, reduced) => {
+        c.clearRect(0, 0, canvas.width, canvas.height);
+        renderer.draw(c, canvas.width, canvas.height, 20, { background, backgroundAnimation }, {}, reduced);
+        return canvas.toDataURL();
+      };
+      return {
+        zooms: draw('kenburns', false) !== draw('drift', false),
+        reduced: draw('kenburns', true) === draw('drift', true),
+      };
+    });
+  });
+  for (const scene of result) expect(scene).toEqual({ zooms: true, reduced: true });
 });
 
 test('the production overlay responds to a changed reduced-motion preference', async ({ page }) => {

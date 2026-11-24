@@ -405,7 +405,16 @@ function backgroundCard(cfg) {
     dropdown({
       id: 'background-mode', label: 'Décor de fond', value: cfg.background,
       options: [['none', 'Aucun (voir le bureau)'], ...Object.entries(ANIMATED_BACKGROUNDS).map(([id, b]) => [id, b.label]), ['image', 'Image personnelle']],
-      onChange: (v) => editScreen((s) => { s.background = v; }),
+      onChange: (v) => {
+        // En mode « Par-dessus tout » le fond n'est jamais dessiné : activer
+        // un fond doit réellement remplacer le fond d'écran.
+        if (v !== 'none' && settings.displayMode === 'front') {
+          settings.displayMode = 'wallpaper';
+          renderSystem();
+          setStatus('Mode « Fond d\'écran » activé pour afficher le décor');
+        }
+        editScreen((s) => { s.background = v; });
+      },
     }));
   if (settings.displayMode === 'front' && cfg.background !== 'none') {
     card.append(el('p', { class: 'hint', text: t('Le décor de fond n\'est pas affiché en mode « Par-dessus tout » : il masquerait vos fenêtres.') }));
@@ -513,6 +522,13 @@ function backgroundCard(cfg) {
         value: Math.round((cfg.backgroundMotion ?? 1) * 100), format: (v) => (v === 0 ? t('Immobile') : `${v}%`),
         onInput: (v) => editScreen((s) => { s.backgroundMotion = v / 100; }),
       })));
+  if (['living-room', 'log-cabin', 'night-city', 'frosted-window'].includes(cfg.background)) {
+    card.append(slider({
+      id: 'background-lighting', label: 'Lumière du décor', min: 0, max: 200, step: 10,
+      value: Math.round((cfg.backgroundLighting ?? 1) * 100), format: (v) => `${v}%`,
+      onInput: (v) => editScreen((s) => { s.backgroundLighting = v / 100; }),
+    }));
+  }
   if (['animated-forest', 'alpine-lake', 'village', 'sleigh-night'].includes(cfg.background)) {
     card.append(el('div', { class: 'grid-2' },
       slider({

@@ -23,6 +23,7 @@ import {
   drawSky, drawGlitter, drawIcicles, invalidateLights, invalidateAurora,
 } from './lights.js';
 import { QualityGovernor, debugEnabled } from '../shared/perf.js';
+import { ENCLOSED_BACKGROUNDS } from './interiors.js';
 import { createBackgroundImageLoader, createWinterBackgroundRenderer, drawImageBackground } from './background.js';
 
 function mulberry32(seed) {
@@ -698,7 +699,9 @@ function render(time) {
   // --- behind the trees --------------------------------------------------
   drawBackground(viewW, viewH, time);
 
-  if (sceneCfg.aurora || sceneCfg.stars) {
+  // Ni aurore ni étoiles au plafond d'une pièce : le ciel n'existe que dehors.
+  const indoors = !frontMode && ENCLOSED_BACKGROUNDS.has(sceneCfg.background);
+  if ((sceneCfg.aurora || sceneCfg.stars) && !indoors) {
     drawSky(ctx, viewW, viewH, time, {
       // The GL engine draws the aurora once adopted (see gl-trees.js /
       // NorthernLights) — this only draws it here when that hasn't

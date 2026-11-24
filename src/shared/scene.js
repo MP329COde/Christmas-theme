@@ -357,6 +357,7 @@ export function defaultScreen(overrides = {}) {
     backgroundOpacity: 1,
     backgroundAnimation: 'drift', // none | drift | kenburns
     backgroundMotion: 1,
+    backgroundLighting: 1,
     backgroundPalette: 'midnight',
     backgroundSky: '#06101f',
     backgroundHorizon: '#48677d',
@@ -507,6 +508,10 @@ export const ANIMATED_BACKGROUNDS = {
   'alpine-lake': { label: 'Lac alpin gelé' },
   village: { label: 'Village enneigé' },
   'sleigh-night': { label: 'Nuit du traîneau' },
+  'living-room': { label: 'Salon chaleureux (intérieur)' },
+  'log-cabin': { label: 'Chalet en rondins (intérieur)' },
+  'night-city': { label: 'Ville enneigée de nuit' },
+  'frosted-window': { label: 'Fenêtre givrée sur la ville' },
   bokeh: { label: 'Lumières de fête (moderne)' },
   'aurora-gradient': { label: 'Dégradé boréal (moderne)' },
 };

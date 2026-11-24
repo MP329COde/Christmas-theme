@@ -1,4 +1,5 @@
 import { BACKGROUND_PALETTES } from '../shared/scene.js';
+import { INTERIOR_BACKGROUNDS, createInteriorRenderer } from './interiors.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const number = (v, fallback, lo, hi) => clamp(Number.isFinite(Number(v)) ? Number(v) : fallback, lo, hi);
@@ -295,7 +296,37 @@ function bake(w, h, cfg, colors) {
     g.addColorStop(1, 'rgba(255,133,50,0)');
     c.fillStyle = g; c.fillRect(0, 0, 128, 128);
   });
-  return { sky, woods, ground, glow, houses, windows, chimneys, sleigh };
+  const rngStar = random(4242);
+  const stars = [];
+  const starCount = Math.round(60 + w * h / 9000);
+  for (let i = 0; i < Math.min(220, starCount); i++) {
+    const y = Math.pow(rngStar(), 1.6) * h * 0.5;
+    stars.push({ x: rngStar(), y: y / h, r: 0.35 + rngStar() * 1.1, phase: rngStar() * 40,
+      speed: 0.6 + rngStar() * 2.2, warm: rngStar() > 0.78 });
+  }
+  const skyStars = layer(w, h, (c) => {
+    for (const st of stars) {
+      c.fillStyle = rgba(st.warm ? '#ffe6b0' : colors.snow, 0.25 + st.r * 0.22);
+      c.beginPath(); c.arc(st.x * w, st.y * h, st.r * (unit / 700 + 0.5), 0, Math.PI * 2); c.fill();
+    }
+  });
+  const mist = layer(512, 96, (c) => {
+    const g = c.createRadialGradient(256, 256, 0, 256, 256, 256);
+    g.addColorStop(0, rgba(mix(colors.horizon, colors.snow, 0.35), 0.55));
+    g.addColorStop(0.5, rgba(colors.horizon, 0.18));
+    g.addColorStop(1, rgba(colors.horizon, 0));
+    c.scale(1, 96 / 512);
+    c.fillStyle = g; c.fillRect(0, 0, 512, 512);
+  });
+  const vignette = layer(256, 144, (c) => {
+    const g = c.createRadialGradient(128, 72, 40, 128, 72, 150);
+    g.addColorStop(0, 'rgba(0,4,12,0)'); g.addColorStop(1, 'rgba(0,4,12,0.5)');
+    c.fillStyle = g; c.fillRect(0, 0, 256, 144);
+  });
+  const glints = [];
+  const rngGlint = random(909);
+  for (let i = 0; i < 46; i++) glints.push({ x: rngGlint(), y: 0.88 + rngGlint() * 0.12, phase: rngGlint() * 30, speed: 0.8 + rngGlint() * 1.8 });
+  return { sky, woods, ground, glow, houses, windows, chimneys, sleigh, stars, skyStars, mist, vignette, glints };
 }
 
 function blob(color, size = 256) {
@@ -310,7 +341,7 @@ function disc(color, size = 96) {
   return layer(size, size, (c) => {
     const r = size / 2;
     const g = c.createRadialGradient(r, r, r * 0.55, r, r, r);
-    g.addColorStop(0, rgba(color, 0.42)); g.addColorStop(0.82, rgba(color, 0.55)); g.addColorStop(1, rgba(color, 0));
+    g.addColorStop(0, rgba(color, 0.34)); g.addColorStop(0.8, rgba(color, 0.5)); g.addColorStop(0.92, rgba(mix(color, '#ffffff', 0.45), 0.8)); g.addColorStop(1, rgba(color, 0));
     c.fillStyle = g; c.beginPath(); c.arc(r, r, r, 0, Math.PI * 2); c.fill();
   });
 }
@@ -322,18 +353,41 @@ const BOKEH_LIGHTS = ['#ffb347', '#ff5d5d', '#ffd75e', '#3ddc97', '#9fe8ff'];
 /// sprites sont cuits une fois ; une image = une trentaine de copies.
 function bakeModern(cfg, colors) {
   if (cfg.background === 'bokeh') {
-    return { discs: [...BOKEH_LIGHTS, colors.snow].map((color) => disc(color)) };
+    return { discs: [...BOKEH_LIGHTS, colors.snow].map((color) => disc(color)),
+      stars: Array.from({ length: 70 }, (_, i) => ({ x: (i * 0.618) % 1, y: (i * 0.377) % 1, r: 0.5 + (i % 4) * 0.35, phase: i * 3.1, speed: 0.6 + (i % 5) * 0.5 })) };
   }
-  return { blobs: [colors.horizon, mix(colors.horizon, '#5cffb0', 0.6), mix(colors.sky, '#b98cff', 0.55), colors.snow].map((color) => blob(color)) };
+  const rng = random(77);
+  const stars = Array.from({ length: 90 }, () => ({ x: rng(), y: rng() * 0.8, r: 0.4 + rng() * 1.1, phase: rng() * 30, speed: 0.5 + rng() * 2 }));
+  return { stars, blobs: [colors.horizon, mix(colors.horizon, '#5cffb0', 0.6), mix(colors.sky, '#b98cff', 0.55), colors.snow].map((color) => blob(color)) };
 }
 
 function drawModern(c, w, h, t, cfg, colors, baked, opacity, detail) {
   const g = c.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, colors.sky); g.addColorStop(1, mix(colors.sky, colors.horizon, 0.38));
+  g.addColorStop(0, colors.sky); g.addColorStop(1, mix(colors.sky, colors.horizon, cfg.background === 'bokeh' ? 0.62 : 0.38));
   c.globalAlpha = opacity; c.fillStyle = g; c.fillRect(0, 0, w, h);
   c.globalCompositeOperation = 'lighter';
   const unit = Math.max(w, h);
+  c.fillStyle = colors.snow;
+  for (const st of baked.stars) {
+    c.globalAlpha = opacity * (0.15 + 0.5 * Math.max(0, Math.sin(t * st.speed + st.phase)));
+    c.beginPath(); c.arc(st.x * w, st.y * h, st.r * (unit / 1200 + 0.5), 0, Math.PI * 2); c.fill();
+  }
   if (baked.blobs) {
+    // Rubans boréaux ondulants au-dessus des halos.
+    const tints = [mix(colors.horizon, '#5cffb0', 0.7), mix(colors.sky, '#b98cff', 0.6)];
+    tints.forEach((tint, ribbon) => {
+      const top = h * (0.12 + ribbon * 0.16), amp = h * 0.07;
+      c.globalAlpha = opacity * 0.13;
+      c.fillStyle = tint;
+      c.beginPath(); c.moveTo(0, top);
+      for (let x = 0; x <= w + 16; x += 16) {
+        c.lineTo(x, top + Math.sin(x / w * 5 + t * (0.12 + ribbon * 0.05) + ribbon) * amp);
+      }
+      for (let x = w; x >= -16; x -= 16) {
+        c.lineTo(x, top + h * 0.2 + Math.sin(x / w * 4 - t * 0.09 + ribbon * 2) * amp * 1.4);
+      }
+      c.closePath(); c.fill();
+    });
     baked.blobs.forEach((sprite, i) => {
       const size = unit * (0.75 + i * 0.12);
       const x = w * (0.5 + 0.38 * Math.sin(t * (0.021 + i * 0.006) + i * 1.9));
@@ -342,17 +396,20 @@ function drawModern(c, w, h, t, cfg, colors, baked, opacity, detail) {
       c.drawImage(sprite, x - size / 2, y - size / 2, size, size);
     });
   } else {
-    const count = Math.max(8, Math.round(Math.min(34, w * h / 60000) * detail));
+    const count = Math.max(12, Math.round(Math.min(46, w * h / 42000) * detail));
     for (let i = 0; i < count; i++) {
       const depth = (i * 0.618) % 1;
       const size = unit * (0.025 + depth * 0.075);
       const x = ((i * 0.3819 + t * 0.004 * (0.3 + depth)) % 1.2 - 0.1) * w;
       const y = h * ((i * 0.7548) % 1) + Math.sin(t * 0.13 + i) * h * 0.02;
-      c.globalAlpha = opacity * (0.22 + 0.3 * depth) * (0.72 + 0.28 * Math.sin(t * 0.5 + i * 2.3));
+      c.globalAlpha = opacity * (0.4 + 0.45 * depth) * (0.72 + 0.28 * Math.sin(t * 0.5 + i * 2.3));
       c.drawImage(baked.discs[i % baked.discs.length], x - size / 2, y - size / 2, size, size);
     }
   }
   c.globalCompositeOperation = 'source-over';
+  const edge = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.72);
+  edge.addColorStop(0, 'rgba(0,4,12,0)'); edge.addColorStop(1, 'rgba(0,4,12,0.45)');
+  c.globalAlpha = opacity; c.fillStyle = edge; c.fillRect(0, 0, w, h);
 }
 
 // A renderer owns ONE bake, replaced on appearance/viewport changes.
@@ -360,6 +417,7 @@ function drawModern(c, w, h, t, cfg, colors, baked, opacity, detail) {
 // paths/gradients each frame; animation is only blits and faint flakes.
 export function createWinterBackgroundRenderer() {
   let key = '', cached = null;
+  const interior = createInteriorRenderer();
   return {
     draw(c, w, h, time, cfg, decor = {}, reducedMotion = false) {
       if (!(w > 0 && h > 0)) return;
@@ -371,6 +429,11 @@ export function createWinterBackgroundRenderer() {
       } : preset;
       const opacityAll = number(cfg.backgroundOpacity ?? 1, 1, 0, 1);
       const detail = number(decor.detail ?? 1, 1, 0.2, 1);
+      if (INTERIOR_BACKGROUNDS.has(cfg.background)) {
+        const m = backgroundMotion(cfg, reducedMotion);
+        interior.draw(c, w, h, time * m, cfg, colors, m > 0, opacityAll);
+        return;
+      }
       if (cfg.background === 'bokeh' || cfg.background === 'aurora-gradient') {
         const modernKey = JSON.stringify(['modern', cfg.background, colors]);
         if (key !== modernKey) { cached = bakeModern(cfg, colors); key = modernKey; }
@@ -395,6 +458,35 @@ export function createWinterBackgroundRenderer() {
       c.save(); c.beginPath(); c.rect(0, 0, w, h); c.clip();
       c.globalAlpha = opacity;
       c.drawImage(cached.sky, 0, 0, w, h);
+      c.drawImage(cached.skyStars, 0, 0, w, h);
+      if (motion) {
+        c.globalCompositeOperation = 'lighter';
+        const arm = Math.max(2, Math.min(w, h) * 0.006);
+        c.strokeStyle = colors.snow; c.lineWidth = 0.8;
+        for (let i = 0; i < cached.stars.length; i += 3) {
+          const st = cached.stars[i];
+          const tw = Math.max(0, Math.sin(t * st.speed + st.phase));
+          if (tw < 0.55) continue;
+          const k = (tw - 0.55) / 0.45, x = st.x * w, y = st.y * h;
+          c.globalAlpha = opacity * 0.85 * k;
+          c.beginPath(); c.moveTo(x - arm * (0.4 + k), y); c.lineTo(x + arm * (0.4 + k), y);
+          c.moveTo(x, y - arm * (0.4 + k)); c.lineTo(x, y + arm * (0.4 + k)); c.stroke();
+        }
+        // Étoile filante : une traversée courte toutes les ~17 s.
+        const cycle = (t / 17) % 1;
+        if (cycle < 0.09) {
+          const q = cycle / 0.09, seed = Math.floor(t / 17);
+          const x0 = w * (0.12 + ((seed * 0.6180339) % 1) * 0.55), y0 = h * (0.05 + ((seed * 0.37) % 1) * 0.18);
+          const dx = w * 0.2 * q, dy = h * 0.09 * q;
+          const grad = c.createLinearGradient(x0 + dx, y0 + dy, x0 + dx - w * 0.07, y0 + dy - h * 0.03);
+          grad.addColorStop(0, rgba('#ffffff', 0.9)); grad.addColorStop(1, rgba('#ffffff', 0));
+          c.globalAlpha = opacity * Math.sin(q * Math.PI);
+          c.strokeStyle = grad; c.lineWidth = 1.6; c.lineCap = 'round';
+          c.beginPath(); c.moveTo(x0 + dx, y0 + dy); c.lineTo(x0 + dx - w * 0.07, y0 + dy - h * 0.03); c.stroke();
+        }
+        c.globalCompositeOperation = 'source-over';
+        c.globalAlpha = opacity;
+      }
       if (cached.sleigh && motion) {
         // Une traversée du ciel toutes les 50 s environ, sur un arc qui
         // passe devant la lune.
@@ -407,12 +499,36 @@ export function createWinterBackgroundRenderer() {
       }
       const pan = Math.sin(t * 0.045) * w * 0.008;
       const zoom = cfg.backgroundAnimation === 'kenburns' && motion ? 0.008 * (1 + Math.sin(t * 0.06)) : 0;
+      const fogLevel = number(cfg.backgroundFog ?? 0.45, 0.45, 0, 1);
       for (let i = 0; i < 2; i++) {
         const margin = w * (0.014 + zoom);
         c.drawImage(cached.woods[i], -margin + pan * (i + 1) * 0.5,
           -h * zoom, w + margin * 2, h * (1 + zoom));
+        if (fogLevel > 0) {
+          // Bancs de brume qui glissent lentement entre les plans de forêt.
+          const mw = w * 0.9, mh = h * 0.16, by = h * (0.62 + i * 0.13);
+          for (let k = 0; k < 3; k++) {
+            const drift = ((t * (0.004 + i * 0.003) + k / 3 + i * 0.17) % 1) * (w + mw) - mw;
+            c.globalAlpha = opacity * fogLevel * (i ? 0.5 : 0.36);
+            c.drawImage(cached.mist, drift, by + Math.sin(t * 0.07 + k * 2 + i) * h * 0.012, mw, mh);
+          }
+          c.globalAlpha = opacity;
+        }
       }
       c.drawImage(cached.ground, 0, 0, w, h);
+      if (motion) {
+        c.globalCompositeOperation = 'lighter';
+        c.fillStyle = '#ffffff';
+        for (const gl of cached.glints) {
+          const k = Math.max(0, Math.sin(t * gl.speed + gl.phase));
+          if (k < 0.82) continue;
+          c.globalAlpha = opacity * (k - 0.82) / 0.18 * 0.8;
+          const gx = gl.x * w, gy = gl.y * h, r = Math.max(0.8, Math.min(w, h) * 0.0028);
+          c.fillRect(gx - r * 2.5, gy - 0.4, r * 5, 0.8); c.fillRect(gx - 0.4, gy - r * 2.5, 0.8, r * 5);
+        }
+        c.globalCompositeOperation = 'source-over';
+        c.globalAlpha = opacity;
+      }
       if (cached.houses) {
         c.drawImage(cached.houses, 0, 0, w, h);
         for (const win of cached.windows) {
@@ -460,6 +576,8 @@ export function createWinterBackgroundRenderer() {
         c.globalAlpha = opacity * (0.12 + i % 4 * 0.08);
         c.beginPath(); c.arc(x, y, 0.5 + i % 3 * 0.3, 0, Math.PI * 2); c.fill();
       }
+      c.globalAlpha = opacity;
+      c.drawImage(cached.vignette, 0, 0, w, h);
       c.restore();
     },
   };
